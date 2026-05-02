@@ -1,0 +1,59 @@
+build:
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+processors:
+  active: true
+  exclude:
+    - "DetektProgressListener"
+
+console-reports:
+  active: true
+  exclude:
+    - "ProjectStatisticsReport"
+    - "ComplexityReport"
+    - "NotificationReport"
+
+complexity:
+  LongMethod:
+    threshold: 60
+    excludes: &test-excludes
+      - &src-test-exclude "**/src/test/**"
+  LongParameterList:
+    functionThreshold: 6
+    constructorThreshold: 7
+    excludes: *test-excludes
+  LargeClass:
+    threshold: 500
+    excludes: *test-excludes
+  TooManyFunctions:
+    thresholdInClasses: 12
+    thresholdInObjects: 12
+    excludes: *test-excludes
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated:
+      - "Composable"
+
+style:
+  MagicNumber:
+    ignoreNumbers:
+      - "-1"
+      - "0"
+      - "1"
+      - "2"
+    excludes:
+      - *src-test-exclude
+      - "**/ui/theme/**"
+  MaxLineLength:
+    active: false
+  ReturnCount:
+    max: 3
+  ThrowsCount:
+    max: 3
+  WildcardImport:
+    active: false

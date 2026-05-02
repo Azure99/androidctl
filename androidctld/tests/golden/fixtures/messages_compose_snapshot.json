@@ -1,0 +1,1167 @@
+{
+  "snapshotId": 95,
+  "capturedAt": "2026-03-19T07:31:16.866822Z",
+  "packageName": "com.google.android.apps.messaging",
+  "activityName": null,
+  "display": {
+    "widthPx": 1080,
+    "heightPx": 2400,
+    "densityDpi": 420,
+    "rotation": 0
+  },
+  "ime": {
+    "visible": false,
+    "windowId": null
+  },
+  "windows": [
+    {
+      "windowId": "w117",
+      "type": "application",
+      "layer": 0,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "rootRid": "w117:0"
+    }
+  ],
+  "nodes": [
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.0.2.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.0.2",
+      "childRids": [],
+      "className": "android.widget.TextView",
+      "resourceId": "message_text",
+      "text": "Texting with 10086 (SMS/MMS)",
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        316,
+        1874,
+        765,
+        1916
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_256",
+        "action_512",
+        "action_64",
+        "action_131072"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.0.2",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.0.2.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": "Texting with 10086 (SMS/MMS)",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        1874,
+        1080,
+        1916
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.0.2"
+      ],
+      "className": "android.view.View",
+      "resourceId": "message_list",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        63,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.1.1.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.1.1",
+      "childRids": [],
+      "className": "android.widget.EditText",
+      "resourceId": "com.google.android.apps.messaging:id/compose_message_text",
+      "text": "phase-d",
+      "contentDesc": null,
+      "hintText": "Text message",
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        147,
+        2169,
+        765,
+        2316
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": true,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_4",
+        "action_8",
+        "click",
+        "longClick",
+        "action_64",
+        "action_256",
+        "action_512",
+        "action_131072",
+        "setText",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.1.1",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.1",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.1.1.0"
+      ],
+      "className": "klr",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        147,
+        2169,
+        765,
+        2316
+      ],
+      "visibleToUser": false,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.1",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.1.1"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        21,
+        2169,
+        891,
+        2316
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.2.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.2.0",
+      "childRids": [],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": "Send SMS",
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        957,
+        2201,
+        1020,
+        2264
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_256",
+        "action_512",
+        "action_64",
+        "action_131072"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.2.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.2",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.2.0.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": "Compose:Draft:Send",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        912,
+        2169,
+        1059,
+        2316
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_64",
+        "click",
+        "longClick"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.2",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.2.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        912,
+        2169,
+        1059,
+        2316
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.0",
+      "childRids": [],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": "Back",
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        44,
+        116,
+        107,
+        179
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_256",
+        "action_512",
+        "action_64",
+        "action_131072"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.0.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        13,
+        85,
+        139,
+        211
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_64",
+        "click"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.1.1",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.1",
+      "childRids": [],
+      "className": "android.widget.TextView",
+      "resourceId": null,
+      "text": "10086",
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        296,
+        116,
+        426,
+        179
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_256",
+        "action_512",
+        "action_64",
+        "action_131072"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.1",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.1.1"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        159,
+        84,
+        426,
+        210
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_64",
+        "click"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.2.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.2",
+      "childRids": [],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": "Call",
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        849,
+        116,
+        912,
+        179
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_256",
+        "action_512",
+        "action_64",
+        "action_131072"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.2",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.2.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        818,
+        85,
+        944,
+        211
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_64",
+        "click"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.3.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.3",
+      "childRids": [],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": "More",
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        975,
+        116,
+        1038,
+        179
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_256",
+        "action_512",
+        "action_64",
+        "action_131072"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3.3",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0.3",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.3.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        944,
+        85,
+        1070,
+        211
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_64",
+        "click"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0.3",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.0",
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.1",
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.2",
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3.3"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        231
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0.0",
+        "w117:0.0.0.0.0.1.1.0.0.0.0.1",
+        "w117:0.0.0.0.0.1.1.0.0.0.0.2",
+        "w117:0.0.0.0.0.1.1.0.0.0.0.3"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0.0"
+      ],
+      "className": "android.view.View",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_64"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0.0"
+      ],
+      "className": "androidx.compose.ui.platform.ComposeView",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1.1",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0.0"
+      ],
+      "className": "android.view.ViewGroup",
+      "resourceId": "com.google.android.apps.messaging:id/fragment_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1.1",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0.1",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1.0"
+      ],
+      "className": "android.view.ViewGroup",
+      "resourceId": "com.google.android.apps.messaging:id/conversation_root_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0.1",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1.1"
+      ],
+      "className": "android.view.ViewGroup",
+      "resourceId": "com.google.android.apps.messaging:id/conversation_and_compose_container_full_view",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0.1"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "android:id/content",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0.0",
+      "childRids": [
+        "w117:0.0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.apps.messaging:id/action_bar_root",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0.0",
+      "childRids": [
+        "w117:0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0.0",
+      "windowId": "w117",
+      "parentRid": "w117:0",
+      "childRids": [
+        "w117:0.0.0"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w117:0",
+      "windowId": "w117",
+      "parentRid": null,
+      "childRids": [
+        "w117:0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.apps.messaging",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    }
+  ]
+}

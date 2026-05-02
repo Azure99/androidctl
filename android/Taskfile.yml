@@ -1,0 +1,96 @@
+version: '3'
+
+tasks:
+  python:
+    internal: true
+    requires:
+      vars: [PYTHON_ARGS]
+    cmds:
+      - cmd: python {{.PYTHON_ARGS}}
+        platforms: [windows]
+      - cmd: python {{.PYTHON_ARGS}}
+        platforms: [darwin, linux]
+
+  gradlew:
+    internal: true
+    requires:
+      vars: [GRADLE_ARGS]
+    cmds:
+      - cmd: '.\\gradlew {{.GRADLE_ARGS}}'
+        platforms: [windows]
+      - cmd: ./gradlew {{.GRADLE_ARGS}}
+        platforms: [darwin, linux]
+
+  test:
+    desc: Run Android unit tests
+    cmds:
+      - task: gradlew
+        vars:
+          GRADLE_ARGS: testDebugUnitTest
+
+  lint:
+    desc: Run Android lint and static analysis
+    cmds:
+      - task: gradlew
+        vars:
+          GRADLE_ARGS: ktlintCheck detektMain detektTest lintDebug
+
+  format:
+    desc: Format Android Kotlin sources
+    cmds:
+      - task: gradlew
+        vars:
+          GRADLE_ARGS: ktlintFormat
+
+  quality:
+    desc: Run Android quality gate
+    cmds:
+      - task: gradlew
+        vars:
+          GRADLE_ARGS: qualityCheck
+
+  release:build:
+    desc: Build the signed Android release APK
+    cmds:
+      - task: gradlew
+        vars:
+          GRADLE_ARGS: assembleRelease
+
+  release:stage:
+    desc: Stage the public Android release APK under dist/release
+    cmds:
+      - task: release:build
+      - task: python
+        vars:
+          PYTHON_ARGS: ../tools/release/android_release.py --repo-root .. stage
+
+  release:checksum:
+    desc: Generate SHA256SUMS against staged public Android asset names
+    cmds:
+      - task: release:stage
+      - task: python
+        vars:
+          PYTHON_ARGS: ../tools/release/android_release.py --repo-root .. checksum
+
+  release:verify:
+    desc: Verify staged Android release assets and write verification logs
+    cmds:
+      - task: python
+        vars:
+          PYTHON_ARGS: ../tools/release/android_release.py --repo-root .. verify
+
+  release:bundle:
+    desc: Create the optional offline Android release bundle zip
+    cmds:
+      - task: release:checksum
+      - task: release:verify
+      - task: python
+        vars:
+          PYTHON_ARGS: ../tools/release/android_release.py --repo-root .. bundle
+
+  release:upload:dry-run:
+    desc: Print manual GitHub Releases upload commands without uploading
+    cmds:
+      - task: python
+        vars:
+          PYTHON_ARGS: ../tools/release/android_release.py --repo-root .. upload-dry-run

@@ -1,0 +1,76 @@
+{
+  "hostRawCallableMethods": [
+    "meta.get",
+    "apps.list",
+    "snapshot.get",
+    "events.poll",
+    "screenshot.capture",
+    "action.perform"
+  ],
+  "daemonTypedMethods": [
+    "meta.get",
+    "snapshot.get",
+    "events.poll",
+    "action.perform",
+    "screenshot.capture"
+  ],
+  "daemonWrapperBackedMethods": [
+    "apps.list"
+  ],
+  "actionKinds": [
+    "tap",
+    "longTap",
+    "type",
+    "node",
+    "scroll",
+    "global",
+    "gesture",
+    "launchApp",
+    "openUrl"
+  ],
+  "targetKinds": [
+    "handle",
+    "coordinates",
+    "none"
+  ],
+  "nodeActions": [
+    "focus",
+    "submit",
+    "dismiss",
+    "showOnScreen"
+  ],
+  "globalActions": [
+    "back",
+    "home",
+    "recents",
+    "notifications"
+  ],
+  "scrollDirections": [
+    "backward",
+    "down",
+    "up",
+    "left",
+    "right"
+  ],
+  "gestureDirections": [
+    "down",
+    "up",
+    "left",
+    "right"
+  ],
+  "androidRpcErrorCodes": [
+    "INVALID_REQUEST",
+    "UNAUTHORIZED",
+    "RUNTIME_NOT_READY",
+    "ACCESSIBILITY_DISABLED",
+    "SNAPSHOT_UNAVAILABLE",
+    "NO_ACTIVE_WINDOW",
+    "STALE_TARGET",
+    "TARGET_NOT_FOUND",
+    "TARGET_NOT_ACTIONABLE",
+    "ACTION_FAILED",
+    "ACTION_TIMEOUT",
+    "SCREENSHOT_UNAVAILABLE",
+    "INTERNAL_ERROR"
+  ]
+}

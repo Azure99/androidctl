@@ -1,0 +1,34 @@
+<resources>
+    <string name="app_name">AndroidCtl</string>
+    <string name="accessibility_service_label">AndroidCtl Accessibility</string>
+    <string name="accessibility_service_description">Enables raw snapshot, action, and event capabilities for the local AndroidCtl device agent runtime.</string>
+    <string name="status_subtitle">Thin raw-capability provider for androidctld.</string>
+    <string name="status_server_running">RPC server running</string>
+    <string name="status_server_stopping">RPC server stopping</string>
+    <string name="status_server_stopped">RPC server stopped</string>
+    <string name="status_accessibility_enabled">Accessibility enabled</string>
+    <string name="status_accessibility_disabled">Accessibility disabled</string>
+    <string name="status_accessibility_connected">Accessibility runtime connected</string>
+    <string name="status_accessibility_disconnected">Accessibility runtime disconnected</string>
+    <string name="status_runtime_ready">Runtime ready</string>
+    <string name="status_runtime_not_ready">Runtime not ready</string>
+    <string name="server_address_format">Bind: %1$s:%2$d</string>
+    <string name="last_error_format">Last error: %1$s</string>
+    <string name="last_request_format">Last request: %1$s</string>
+    <string name="action_start_server">Start server</string>
+    <string name="action_stop_server">Stop server</string>
+    <string name="action_open_accessibility_settings">Open accessibility settings</string>
+    <string name="action_refresh_status">Refresh status</string>
+    <string name="section_runtime">Runtime</string>
+    <string name="section_security">Security</string>
+    <string name="section_next_steps">Next steps</string>
+    <string name="device_token_label">Device token</string>
+    <string name="action_regenerate_token">Regenerate token</string>
+    <string name="next_step_enable_accessibility">1. Enable the accessibility service for this app.</string>
+    <string name="next_step_start_server">2. Start the foreground RPC server.</string>
+    <string name="next_step_share_token">3. Share the current token with androidctld during connect.</string>
+    <string name="server_notification_channel_name">RPC server</string>
+    <string name="server_notification_channel_description">Keeps the AndroidCtl RPC server available for androidctld.</string>
+    <string name="server_notification_title">AndroidCtl server</string>
+    <string name="server_notification_text">The local raw RPC server is running in the foreground.</string>
+</resources>

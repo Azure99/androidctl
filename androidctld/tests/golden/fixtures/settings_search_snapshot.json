@@ -1,0 +1,966 @@
+{
+  "snapshotId": 92,
+  "capturedAt": "2026-03-19T07:31:14.862492Z",
+  "packageName": "com.google.android.settings.intelligence",
+  "activityName": null,
+  "display": {
+    "widthPx": 1080,
+    "heightPx": 2400,
+    "densityDpi": 420,
+    "rotation": 0
+  },
+  "ime": {
+    "visible": true,
+    "windowId": "w78"
+  },
+  "windows": [
+    {
+      "windowId": "w92",
+      "type": "application",
+      "layer": 0,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "rootRid": "w92:0"
+    }
+  ],
+  "nodes": [
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.1.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.1.0",
+      "childRids": [],
+      "className": "android.widget.ImageButton",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": "Back",
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        63,
+        126,
+        252
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_4",
+        "action_8",
+        "click",
+        "action_64",
+        "action_256",
+        "action_512",
+        "action_131072",
+        "action_16908342",
+        "action_16908356"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.1.0.1.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.1.0.1",
+      "childRids": [],
+      "className": "android.widget.EditText",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_edit_text",
+      "text": "Search settings",
+      "contentDesc": null,
+      "hintText": "Search settings",
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        126,
+        63,
+        1080,
+        252
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": true,
+      "enabled": true,
+      "editable": true,
+      "focusable": true,
+      "focused": true,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_2",
+        "action_4",
+        "action_8",
+        "click",
+        "longClick",
+        "action_64",
+        "action_32768",
+        "setText",
+        "action_16908342",
+        "action_999999"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.1.0.1",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.1.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.1.0.1.0"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_text_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        126,
+        63,
+        1080,
+        252
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.1.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.1",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.1.0.0",
+        "w92:0.0.0.0.0.0.0.0.1.0.1.0.1"
+      ],
+      "className": "android.view.ViewGroup",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_toolbar",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        63,
+        1080,
+        252
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.1",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.1.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_toolbar_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        63,
+        1080,
+        252
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0.1",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0",
+      "childRids": [],
+      "className": "android.widget.TextView",
+      "resourceId": "android:id/title",
+      "text": "No recent search results",
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        283,
+        1001,
+        797,
+        1069
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_256",
+        "action_512",
+        "action_131072",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0.1"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/zero_state_layout",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        1069
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/layout_results",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        1069
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        1069
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0.0"
+      ],
+      "className": "android.widget.ScrollView",
+      "resourceId": "com.google.android.settings.intelligence:id/main_content_scrollable_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        1069
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0.0.0"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_suggestion_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        1069
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0.3",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0.0"
+      ],
+      "className": "android.widget.ScrollView",
+      "resourceId": "com.google.android.settings.intelligence:id/search_scrollview",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": true,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "focus",
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0.3",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.3.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_content_container",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        255,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0.1",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0.1",
+        "w92:0.0.0.0.0.0.0.0.1.0.3"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_background",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0.1",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/open_search_view_root",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0.1"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/search_view",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/main_content",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": "android:id/content",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0.0",
+      "childRids": [
+        "w92:0.0.0.0.0"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": "com.google.android.settings.intelligence:id/action_bar_root",
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0.0",
+      "childRids": [
+        "w92:0.0.0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0.0",
+      "windowId": "w92",
+      "parentRid": "w92:0",
+      "childRids": [
+        "w92:0.0.0"
+      ],
+      "className": "android.widget.LinearLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": false,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    },
+    {
+      "rid": "w92:0",
+      "windowId": "w92",
+      "parentRid": null,
+      "childRids": [
+        "w92:0.0"
+      ],
+      "className": "android.widget.FrameLayout",
+      "resourceId": null,
+      "text": null,
+      "contentDesc": null,
+      "hintText": null,
+      "stateDescription": null,
+      "paneTitle": null,
+      "packageName": "com.google.android.settings.intelligence",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visibleToUser": true,
+      "importantForAccessibility": true,
+      "clickable": false,
+      "enabled": true,
+      "editable": false,
+      "focusable": false,
+      "focused": false,
+      "checkable": false,
+      "checked": false,
+      "selected": false,
+      "scrollable": false,
+      "password": false,
+      "actions": [
+        "action_4",
+        "action_8",
+        "action_64",
+        "action_16908342"
+      ]
+    }
+  ]
+}

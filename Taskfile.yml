@@ -1,0 +1,163 @@
+version: '3'
+
+includes:
+  android:
+    taskfile: ./android/Taskfile.yml
+    dir: ./android
+  androidctld:
+    taskfile: ./androidctld/Taskfile.yml
+    dir: ./androidctld
+  androidctl:
+    taskfile: ./androidctl/Taskfile.yml
+    dir: ./androidctl
+  contracts:
+    taskfile: ./contracts/Taskfile.yml
+    dir: ./contracts
+
+tasks:
+  python:
+    internal: true
+    requires:
+      vars: [PYTHON_ARGS]
+    cmds:
+      - cmd: python {{.PYTHON_ARGS}}
+        platforms: [windows]
+      - cmd: python {{.PYTHON_ARGS}}
+        platforms: [darwin, linux]
+
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  test:
+    desc: Run tests across all modules
+    deps:
+      - task: android:test
+      - task: androidctld:test
+      - task: androidctl:test
+      - task: contracts:test
+
+  test:extended:
+    desc: Run extended tests outside the normal local loop
+    deps:
+      - task: androidctl:e2e
+
+  lint:
+    desc: Run linters and static checks across all modules
+    deps:
+      - task: android:lint
+      - task: androidctld:lint
+      - task: androidctl:lint
+      - task: contracts:lint
+
+  format:
+    desc: Auto-format code across all modules
+    deps:
+      - task: android:format
+      - task: androidctld:format
+      - task: androidctl:format
+      - task: contracts:format
+
+  quality:
+    desc: Run full quality gates across all modules
+    deps:
+      - task: android:quality
+      - task: androidctld:quality
+      - task: androidctl:quality
+      - task: contracts:quality
+
+  release:version-check:
+    desc: Check release version lockstep across repo surfaces
+    cmds:
+      - task: python
+        vars:
+          PYTHON_ARGS: -m tools.release.check_version_lockstep
+
+  release:test:
+    desc: Run release tooling tests
+    cmds:
+      - task: python
+        vars:
+          PYTHON_ARGS: -m pytest tools/release/tests
+
+  release:lint:
+    desc: Run release tooling lint and formatting checks
+    cmds:
+      - task: python
+        vars:
+          PYTHON_ARGS: -m ruff check tools/release
+      - task: python
+        vars:
+          PYTHON_ARGS: -m black --check tools/release
+
+  release:format:
+    desc: Auto-format release tooling
+    cmds:
+      - task: python
+        vars:
+          PYTHON_ARGS: -m ruff check --fix tools/release
+      - task: python
+        vars:
+          PYTHON_ARGS: -m black tools/release
+
+  release:quality:
+    desc: Run release tooling quality gate
+    cmds:
+      - task: release:lint
+      - task: release:test
+      - task: release:version-check
+
+  release:android:prepare:
+    desc: Build, stage, checksum, verify, and print dry-run upload commands for Android release assets
+    cmds:
+      - task: release:version-check
+      - task: android:release:checksum
+      - task: android:release:verify
+      - task: android:release:upload:dry-run
+
+  release:android:verify:
+    desc: Re-run Android staged asset verification and regenerate verification logs
+    cmds:
+      - task: release:version-check
+      - task: android:release:verify
+
+  release:pypi:build:
+    desc: Build local PyPI sdists and wheels with the signed Android APK packaged into androidctl
+    cmds:
+      - task: release:version-check
+      - task: android:release:checksum
+      - task: python
+        vars:
+          PYTHON_ARGS: -m tools.release.pypi_release build
+
+  release:pypi:check:
+    desc: Run twine check and populate the local PyPI wheelhouse
+    cmds:
+      - task: release:pypi:build
+      - task: python
+        vars:
+          PYTHON_ARGS: -m tools.release.pypi_release check
+
+  release:pypi:install:
+    desc: Install staged androidctl entry wheel from the local wheelhouse into a throwaway venv
+    cmds:
+      - task: release:pypi:check
+      - task: python
+        vars:
+          PYTHON_ARGS: -m tools.release.pypi_release install
+
+  release:pypi:prepare:
+    desc: Build, check, install, and record dry-run publish evidence for the local PyPI candidate
+    cmds:
+      - task: release:version-check
+      - task: release:pypi:install
+      - task: release:pypi:publish:dry-run
+
+  release:pypi:publish:dry-run:
+    desc: Read the existing wheelhouse and record the intended PyPI publish order without uploading
+    cmds:
+      - task: release:version-check
+      - task: python
+        vars:
+          PYTHON_ARGS: -m tools.release.pypi_release publish-dry-run

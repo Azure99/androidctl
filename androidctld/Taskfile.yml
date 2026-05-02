@@ -1,0 +1,26 @@
+version: '3'
+
+tasks:
+  test:
+    desc: Run androidctld tests
+    cmds:
+      - python -m pytest
+
+  lint:
+    desc: Run androidctld lint and type checks
+    cmds:
+      - ruff check .
+      - black --check .
+      - mypy src
+
+  format:
+    desc: Auto-format androidctld sources
+    cmds:
+      - ruff check --fix .
+      - black .
+
+  quality:
+    desc: Run androidctld quality gate
+    cmds:
+      - task: lint
+      - task: test
