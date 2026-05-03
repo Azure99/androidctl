@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import textwrap
@@ -13,16 +14,21 @@ from tests.e2e.support import (
     run_androidctl,
     stop_daemon,
     workspace_active_record_path,
-    write_launcher_config,
 )
 
 from androidctl.daemon.client import DaemonApiError, DaemonClient
 
 
-def _write_barrier_launcher_script(tmp_path: Path) -> Path:
-    script_path = tmp_path / "barrier_launcher.py"
+def _write_barrier_daemon_shim(
+    tmp_path: Path,
+    editable_install_env,
+    barrier_dir: Path,
+) -> Path:
+    script_path = tmp_path / "barrier_daemon_shim.py"
+    barrier_dir_literal = repr(barrier_dir.as_posix())
+    python_executable_literal = repr(editable_install_env.python_executable.as_posix())
     script_path.write_text(
-        textwrap.dedent("""
+        textwrap.dedent(f"""
             from __future__ import annotations
 
             import os
@@ -35,17 +41,23 @@ def _write_barrier_launcher_script(tmp_path: Path) -> Path:
 
 
             def main() -> int:
-                if len(sys.argv) < 3:
-                    return 64
-                barrier_dir = Path(sys.argv[1])
-                command = sys.argv[2:]
+                barrier_dir = Path({barrier_dir_literal})
+                python_executable = {python_executable_literal}
                 barrier_dir.mkdir(parents=True, exist_ok=True)
-                ready_path = barrier_dir / f"ready-{os.getpid()}"
+                ready_path = barrier_dir / f"ready-{{os.getpid()}}"
                 ready_path.write_text(str(os.getpid()), encoding="utf-8")
                 deadline = time.monotonic() + TIMEOUT_SECONDS
                 while time.monotonic() < deadline:
                     if len(list(barrier_dir.glob("ready-*"))) >= 2:
-                        os.execv(sys.executable, [sys.executable, *command])
+                        os.execv(
+                            python_executable,
+                            [
+                                python_executable,
+                                "-m",
+                                "androidctld",
+                                *sys.argv[1:],
+                            ],
+                        )
                     time.sleep(POLL_SECONDS)
                 return 75
 
@@ -55,16 +67,22 @@ def _write_barrier_launcher_script(tmp_path: Path) -> Path:
             """).lstrip(),
         encoding="utf-8",
     )
-    return script_path
-
-
-def _configure_launcher(home_dir: Path, editable_install_env) -> None:
-    home_dir.mkdir(parents=True, exist_ok=True)
-    write_launcher_config(
-        home_dir=home_dir,
-        executable=editable_install_env.python_executable,
-        launcher_argv=["-m", "androidctld"],
+    if os.name == "nt":
+        wrapper_path = tmp_path / "androidctld.cmd"
+        wrapper_path.write_text(
+            f'@echo off\r\n"{editable_install_env.python_executable}" '
+            f'"{script_path}" %*\r\n',
+            encoding="utf-8",
+        )
+        return wrapper_path
+    wrapper_path = tmp_path / "androidctld-shim"
+    wrapper_path.write_text(
+        "#!/bin/sh\n"
+        f'exec "{editable_install_env.python_executable}" "{script_path}" "$@"\n',
+        encoding="utf-8",
     )
+    wrapper_path.chmod(0o755)
+    return wrapper_path
 
 
 def test_workspace_defaults_to_cwd_without_workspace_env(
@@ -73,7 +91,6 @@ def test_workspace_defaults_to_cwd_without_workspace_env(
 ) -> None:
     home_dir = tmp_path / "home"
     cwd = tmp_path / "standalone-workspace"
-    _configure_launcher(home_dir, editable_install_env)
 
     try:
         result = run_androidctl(
@@ -109,7 +126,6 @@ def test_workspace_defaults_to_git_subdirectory_cwd_without_workspace_env(
         text=True,
         check=True,
     )
-    _configure_launcher(home_dir, editable_install_env)
 
     try:
         result = run_androidctl(
@@ -139,7 +155,6 @@ def test_workspace_env_overrides_cwd_independently_from_owner(
     home_dir = tmp_path / "home"
     cwd = tmp_path / "command-cwd"
     workspace_env_root = tmp_path / "env-workspace"
-    _configure_launcher(home_dir, editable_install_env)
 
     try:
         result = run_androidctl(
@@ -166,12 +181,6 @@ def test_same_owner_reuses_workspace_daemon(
     editable_install_env,
 ) -> None:
     home_dir = tmp_path / "home"
-    home_dir.mkdir(parents=True, exist_ok=True)
-    write_launcher_config(
-        home_dir=home_dir,
-        executable=editable_install_env.python_executable,
-        launcher_argv=["-m", "androidctld"],
-    )
 
     try:
         first = run_androidctl(
@@ -201,18 +210,11 @@ def test_concurrent_same_owner_starts_resolve_winning_daemon(
     editable_install_env,
 ) -> None:
     home_dir = tmp_path / "home"
-    home_dir.mkdir(parents=True, exist_ok=True)
     barrier_dir = tmp_path / "launcher-barrier"
-    launcher_script = _write_barrier_launcher_script(tmp_path)
-    write_launcher_config(
-        home_dir=home_dir,
-        executable=editable_install_env.python_executable,
-        launcher_argv=[
-            launcher_script.as_posix(),
-            barrier_dir.as_posix(),
-            "-m",
-            "androidctld",
-        ],
+    launcher_shim = _write_barrier_daemon_shim(
+        tmp_path,
+        editable_install_env,
+        barrier_dir,
     )
     start_barrier = threading.Barrier(2)
     results = []
@@ -227,6 +229,7 @@ def test_concurrent_same_owner_starts_resolve_winning_daemon(
                     home_dir=home_dir,
                     editable_install_env=editable_install_env,
                     owner_id="shell:a",
+                    extra_env={"ANDROIDCTLD_BIN": launcher_shim.as_posix()},
                 )
             )
         except BaseException as error:  # pragma: no cover - surfaced after join
@@ -261,12 +264,6 @@ def test_different_owner_gets_workspace_busy_even_with_copied_token(
     editable_install_env,
 ) -> None:
     home_dir = tmp_path / "home"
-    home_dir.mkdir(parents=True, exist_ok=True)
-    write_launcher_config(
-        home_dir=home_dir,
-        executable=editable_install_env.python_executable,
-        launcher_argv=["-m", "androidctld"],
-    )
 
     try:
         first = run_androidctl(
@@ -297,12 +294,6 @@ def test_close_releases_ownership_for_later_owner(
     editable_install_env,
 ) -> None:
     home_dir = tmp_path / "home"
-    home_dir.mkdir(parents=True, exist_ok=True)
-    write_launcher_config(
-        home_dir=home_dir,
-        executable=editable_install_env.python_executable,
-        launcher_argv=["-m", "androidctld"],
-    )
 
     try:
         first = run_androidctl(

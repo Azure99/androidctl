@@ -21,8 +21,6 @@ from androidctl.daemon.client import (
 )
 from androidctl.daemon.launcher import resolve_launch_spec
 from androidctl.daemon.owner import derive_owner_id
-from androidctl.user_state.config import read_user_config
-from androidctl.user_state.paths import user_state_root
 
 
 def resolve_daemon_client(
@@ -141,8 +139,7 @@ def _launch_daemon_process(
     workspace_root: Path,
     owner_id: str,
 ) -> None:
-    config = read_user_config(user_state_root() / "config.json")
-    launch_spec = resolve_launch_spec(launcher=config.launcher, env=dict(env))
+    launch_spec = resolve_launch_spec(env=dict(env))
     process_env = dict(env)
     if launch_spec.env_overlay:
         process_env.update(launch_spec.env_overlay)

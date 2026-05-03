@@ -27,7 +27,6 @@ from androidctl.daemon.discovery import (
     resolve_daemon_client,
 )
 from androidctl.daemon.launcher import LaunchSpec, resolve_launch_spec
-from androidctl.user_state.config import LauncherConfig, UserConfig
 
 
 def _active_record(
@@ -92,12 +91,8 @@ def _patch_launch_spec(
     cwd: Path | None = None,
 ) -> None:
     monkeypatch.setattr(
-        "androidctl.daemon.discovery.read_user_config",
-        lambda _path: UserConfig(),
-    )
-    monkeypatch.setattr(
         "androidctl.daemon.discovery.resolve_launch_spec",
-        lambda *, launcher, env: LaunchSpec(
+        lambda *, env: LaunchSpec(
             executable="/bin/androidctld",
             argv=("--port", "0"),
             env_overlay=env_overlay,
@@ -216,56 +211,40 @@ def test_try_get_healthy_daemon_returns_none_on_structured_daemon_api_error() ->
     assert try_get_healthy_daemon(client, _active_record()) is None
 
 
-def test_resolve_launch_spec_uses_provided_path_for_which(monkeypatch) -> None:
-    captured: dict[str, str | None] = {}
+def test_resolve_launch_spec_uses_androidctld_bin_env() -> None:
+    spec = resolve_launch_spec(env={"ANDROIDCTLD_BIN": "/env/androidctld"})
 
-    def fake_which(cmd: str, path: str | None = None) -> str | None:
-        captured["cmd"] = cmd
-        captured["path"] = path
-        return "/custom/bin/androidctld"
-
-    monkeypatch.setattr("androidctl.daemon.launcher.shutil.which", fake_which)
-    spec = resolve_launch_spec(launcher=None, env={"PATH": "/custom/bin"})
-
-    assert captured == {"cmd": "androidctld", "path": "/custom/bin"}
-    assert spec.executable == "/custom/bin/androidctld"
+    assert spec.executable == "/env/androidctld"
     assert spec.argv == ()
+
+
+def test_resolve_launch_spec_ignores_path_lookup() -> None:
+    spec = resolve_launch_spec(env={"PATH": "/custom/bin"})
+
+    assert spec.executable == sys.executable
+    assert spec.argv == ("-m", "androidctld")
 
 
 def test_resolve_launch_spec_does_not_fallback_to_os_environ_when_env_is_empty(
     monkeypatch,
 ) -> None:
-    captured: dict[str, str | None] = {}
-
-    def fake_which(cmd: str, path: str | None = None) -> str | None:
-        captured["cmd"] = cmd
-        captured["path"] = path
-        return None
-
     monkeypatch.setenv("ANDROIDCTLD_BIN", "/os/env/androidctld")
-    monkeypatch.setattr("androidctl.daemon.launcher.shutil.which", fake_which)
 
-    spec = resolve_launch_spec(launcher=None, env={})
+    spec = resolve_launch_spec(env={})
 
-    assert captured == {"cmd": "androidctld", "path": ""}
     assert spec.executable == sys.executable
     assert spec.argv == ("-m", "androidctld")
 
 
-def test_resolve_launch_spec_launcher_config_has_highest_priority() -> None:
-    spec = resolve_launch_spec(
-        launcher=LauncherConfig(
-            executable="/cfg/androidctld",
-            argv=["--port", "0"],
-            env={"A": "B"},
-            cwd=".",
-        ),
-        env={"ANDROIDCTLD_BIN": "/env/androidctld", "PATH": "/x"},
-    )
+def test_resolve_launch_spec_uses_os_environ_when_env_is_not_explicit(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ANDROIDCTLD_BIN", "/os/env/androidctld")
 
-    assert spec.executable == "/cfg/androidctld"
-    assert spec.argv == ("--port", "0")
-    assert spec.env_overlay == {"A": "B"}
+    spec = resolve_launch_spec()
+
+    assert spec.executable == "/os/env/androidctld"
+    assert spec.argv == ()
 
 
 def test_try_get_healthy_daemon_raises_on_malformed_health_envelope() -> None:
@@ -678,6 +657,68 @@ def test_resolve_daemon_client_launches_when_active_record_missing(
 
     assert daemon is mock_client
     assert events == ["launch", "health"]
+
+
+def test_resolve_daemon_client_ignores_legacy_home_config_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    config_path = home_dir / ".androidctl" / "config.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "launcher": {
+                    "executable": "/bad/androidctld",
+                    "argv": ["--bad"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("USERPROFILE", str(home_dir))
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    record = _active_record(workspace_root=workspace_root.resolve().as_posix())
+    captured: dict[str, object] = {}
+    mock_client = object()
+
+    monkeypatch.setattr(
+        "androidctl.daemon.discovery.DaemonClient.from_active_record",
+        lambda _record, owner_id: mock_client,
+    )
+    monkeypatch.setattr(
+        "androidctl.daemon.discovery.try_get_healthy_daemon",
+        lambda _client, _record: _health_result(record),
+    )
+
+    def fake_popen(argv, **kwargs):  # noqa: ANN001
+        del kwargs
+        captured["argv"] = argv
+        _write_active_payload(workspace_root, record.model_dump())
+        return object()
+
+    monkeypatch.setattr("androidctl.daemon.discovery.subprocess.Popen", fake_popen)
+
+    daemon = resolve_daemon_client(
+        workspace_root=workspace_root,
+        cwd=tmp_path,
+        env={"ANDROIDCTL_OWNER_ID": "shell:self:1"},
+    )
+
+    assert daemon is mock_client
+    assert captured["argv"] == [
+        sys.executable,
+        "-m",
+        "androidctld",
+        "--workspace-root",
+        str(workspace_root.resolve()),
+        "--owner-id",
+        "shell:self:1",
+    ]
+    assert config_path.exists()
 
 
 def test_resolve_daemon_client_same_owner_version_mismatch_does_not_fallback_launch(

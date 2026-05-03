@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import signal
 import subprocess
@@ -16,27 +15,6 @@ if TYPE_CHECKING:
 
 ANDROIDCTL_COMMAND_TIMEOUT_SECONDS = 30
 DAEMON_STOP_TIMEOUT_SECONDS = 5.0
-
-
-def write_launcher_config(
-    *,
-    home_dir: Path,
-    executable: Path,
-    launcher_argv: list[str],
-) -> None:
-    config_dir = home_dir / ".androidctl"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_dir / "config.json"
-    payload = {
-        "launcher": {
-            "executable": executable.as_posix(),
-            "argv": launcher_argv,
-        }
-    }
-    config_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
 
 
 def workspace_dir(home_dir: Path) -> Path:
@@ -75,6 +53,7 @@ def run_androidctl(
     owner_id: str | None = None,
     cwd: Path | None = None,
     workspace_env_root: Path | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     workspace = workspace_dir(home_dir)
     command_cwd = cwd or workspace
@@ -91,7 +70,10 @@ def run_androidctl(
     else:
         workspace_env_root.mkdir(parents=True, exist_ok=True)
         env["ANDROIDCTL_WORKSPACE_ROOT"] = str(workspace_env_root)
+    env.pop("ANDROIDCTLD_BIN", None)
     env.pop("PYTHONPATH", None)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [editable_install_env.androidctl_executable.as_posix(), *argv],
         cwd=command_cwd,
