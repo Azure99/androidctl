@@ -2,42 +2,46 @@
 
 ## Project Structure & Module Organization
 
-This repository contains a host CLI, host daemon, shared contracts, and Android device agent.
+AndroidCtl is split into four surfaces:
 
-- `contracts/`: shared Python wire models and command catalog in `src/androidctl_contracts/`; tests in `contracts/tests/`.
-- `androidctl/`: Typer CLI in `src/androidctl/`; tests in `androidctl/tests/`.
-- `androidctld/`: host daemon, runtime, commands, snapshots, waits, and device RPC in `src/androidctld/`; tests in `androidctld/tests/`.
-- `android/`: Kotlin app, foreground RPC service, accessibility service, resources, and JVM tests.
-- `docs/`: architecture, RPC, and verification notes.
+- `contracts/`: shared Python wire models, command catalog, result schemas, and public screen contracts.
+- `androidctl/`: host CLI package. Source lives in `androidctl/src/androidctl`; tests live in `androidctl/tests`.
+- `androidctld/`: host daemon package. Source lives in `androidctld/src/androidctld`; tests live in `androidctld/tests`.
+- `android/`: Kotlin Android agent app. Source is under `android/app/src/main`; JVM tests are under `android/app/src/test`.
+
+Release tooling lives in `tools/`; version lockstep is anchored by root `VERSION`.
 
 ## Build, Test, and Development Commands
 
-Use `task` from the repository root.
+Use the root `Taskfile.yml` when possible:
 
-- `task test`: runs standard tests for Android unit tests, daemon, CLI, and contracts.
-- `task lint`: runs Python Ruff/Black/mypy and Android ktlint/detekt/lint.
-- `task format`: applies Ruff/Black fixes and Kotlin ktlint formatting.
-- `task quality`: runs each module quality gate.
-- `task test:extended`: runs extended `androidctl` process checks.
+- `task test`: run Python module tests and Android unit tests.
+- `task lint`: run Ruff, Black checks, mypy, ktlint, detekt, and Android lint.
+- `task format`: apply Python and Kotlin formatting fixes.
+- `task quality`: run the full local quality gate.
+- `task test:extended`: run process-level CLI e2e tests.
+- `task release:version-check`: verify all package and Android versions match `VERSION`.
 
-For focused work, run module tasks such as `task androidctld:test` or `task contracts:lint`.
+Python requires 3.10. If no environment is active, create one with `conda create -p ./.conda python=3.10` and install `contracts/`, `androidctld/`, and `androidctl/` editable.
 
 ## Coding Style & Naming Conventions
 
-Python targets 3.10, uses 4-space indentation, Black line length 88, Ruff import sorting, and strict mypy. Keep public wire fields aligned with `contracts/src/androidctl_contracts/command_catalog.py` and daemon API models. Kotlin follows ktlint and detekt; keep Android package paths under `com.rainng.androidctl`.
+Python uses Black and Ruff with line length 88 and strict mypy. Prefer typed functions and snake_case identifiers. Wire models expose camelCase aliases; construct them with snake_case fields.
+
+Kotlin uses ktlint, detekt, and Android lint. Keep RPC/action/snapshot tokens aligned with shared conformance fixtures.
 
 ## Testing Guidelines
 
-Python tests use pytest. Name files `test_*.py` and keep unit and integration scope separated. Android JVM tests run via `testDebugUnitTest`. Add or update contract tests whenever command names, result shapes, RPC tokens, or public screen models change.
+Python tests use pytest and `test_*.py` names. Android tests use JVM classes named `*Test.kt`. Add contract tests when changing shared models, command catalog entries, result shapes, public screen fields, or Android RPC tokens.
 
-## Documentation Updates
-
-When changing code behavior, update matching documentation in the same change. This includes CLI commands or XML output, daemon API/result shapes, Android RPC methods or tokens, runtime state behavior, and verification procedures under `docs/`.
+Run the narrow module test first, then `task quality` before submitting broad changes.
 
 ## Commit & Pull Request Guidelines
 
-Use `<type>(<scope>): <subject>` for commits; `scope` is required. Example: `fix(androidctld): handle stale runtime state`. Keep commits focused and explain contract or behavior changes in the body. PRs should include a summary, tests run, issue or motivation, and screenshots/log snippets for CLI XML or Android UI-visible changes.
+Recent history uses concise Conventional Commit style, for example `fix(androidctl): derive Windows owner identity` and `chore(repo): initial public release`. Use `type(scope): imperative summary` with a scope, keep commits focused, and explain contract or behavior changes in the commit body.
+
+Pull requests should include behavior changes, affected modules, test commands, and any device/ADB assumptions. Include screenshots or XML/result samples for CLI output, setup UI, or screen rendering changes.
 
 ## Security & Configuration Tips
 
-Do not commit device tokens, daemon secrets, `.androidctl/` runtime state, or generated screenshots unless they are intentional sanitized fixtures. Treat Android RPC auth, owner IDs, and workspace paths as compatibility-sensitive boundaries.
+Daemon state and tokens are workspace-local under `.androidctl/`. Do not commit generated runtime state, screenshots, staged release artifacts, keystores, or device tokens. Android release signing requires environment variables such as `ANDROIDCTL_RELEASE_STORE_FILE`; keep them out of source control.
