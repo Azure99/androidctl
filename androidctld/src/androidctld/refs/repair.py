@@ -113,7 +113,8 @@ def resolve_ref_decision(
     if source_screen_id == session.current_screen_id:
         return source_decision
     source_signature = source_decision.source_signature
-    assert source_signature is not None
+    if source_signature is None:
+        raise RuntimeError("resolved source binding is missing its signature")
     return repair_source_signature_decision(
         session,
         source_signature,

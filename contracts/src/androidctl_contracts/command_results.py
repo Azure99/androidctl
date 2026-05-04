@@ -619,8 +619,8 @@ def dump_canonical_command_result(
 
 
 __all__ = [
-    "ArtifactPayload",
     "ActionTargetPayload",
+    "ArtifactPayload",
     "CommandResultCore",
     "ListAppEntry",
     "ListAppsResult",

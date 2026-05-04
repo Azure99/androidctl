@@ -332,7 +332,10 @@ def test_command_service_rejects_wire_wait_payload_passthrough(
 
     dispatch = _build_dispatch(wait_handler=_WaitHandler())
 
-    try:
+    with pytest.raises(
+        TypeError,
+        match="wait handler received 'wait' command",
+    ):
         dispatch.execute_wait(
             command=wire_api.WaitCommandPayload.model_validate(
                 {
@@ -341,10 +344,6 @@ def test_command_service_rejects_wire_wait_payload_passthrough(
                 }
             )
         )
-    except TypeError as error:
-        assert str(error) == "wait handler received 'wait' command"
-    else:
-        raise AssertionError("shared service wait should be rejected")
 
     assert seen == {}
 

@@ -188,10 +188,7 @@ def _project_retained_payload(result: ProjectionDict) -> XmlRetainedProjection:
         "kind": "retained",
         "attrs": attrs,
         "message": message if isinstance(message, str) and message else None,
-        "details": _project_retained_details_attrs(
-            _mapping(result.get("details")),
-            command=attrs.get("command"),
-        ),
+        "details": _project_retained_details_attrs(_mapping(result.get("details"))),
         "artifacts": _project_non_empty_string_attrs(
             _mapping(result.get("artifacts")),
             _RETAINED_ARTIFACT_ATTRS,
@@ -505,14 +502,10 @@ def _project_non_empty_string_attrs(
     return attrs
 
 
-def _project_retained_details_attrs(
-    value: Mapping[str, object],
-    *,
-    command: str | None,
-) -> XmlScalarAttrs:
+def _project_retained_details_attrs(value: Mapping[str, object]) -> XmlScalarAttrs:
     attrs: XmlScalarAttrs = {}
     for key in _RETAINED_DETAILS_ATTRS:
-        projected = _retained_detail_attr(key, value.get(key), command=command)
+        projected = _retained_detail_attr(key, value.get(key))
         if projected is not None:
             attrs[key] = projected
     return attrs
@@ -568,12 +561,7 @@ def _non_empty_sequence_attr(value: object) -> str | None:
     return None
 
 
-def _retained_detail_attr(
-    key: str,
-    value: object,
-    *,
-    command: str | None,
-) -> str | None:
+def _retained_detail_attr(key: str, value: object) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip()
@@ -582,11 +570,7 @@ def _retained_detail_attr(
     if key == "sourceCode":
         return normalized if _safe_retained_source_code(normalized) else None
     if key in {"sourceKind", "operation", "reason"}:
-        return (
-            normalized
-            if _safe_retained_detail_slug(normalized, key=key, command=command)
-            else None
-        )
+        return normalized if _safe_retained_detail_slug(normalized) else None
     if key in {"expectedReleaseVersion", "actualReleaseVersion"}:
         return normalized if _safe_retained_release_version(normalized) else None
     return None
@@ -602,12 +586,7 @@ def _safe_retained_source_code(value: str) -> bool:
     return _RETAINED_SOURCE_CODE_RE.fullmatch(value) is not None
 
 
-def _safe_retained_detail_slug(
-    value: str,
-    *,
-    key: str,
-    command: str | None,
-) -> bool:
+def _safe_retained_detail_slug(value: str) -> bool:
     if not _RETAINED_DETAIL_SLUG_RE.fullmatch(value):
         return False
     lower = value.lower()

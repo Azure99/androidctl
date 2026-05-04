@@ -89,7 +89,8 @@ class LateBoundActionCommand:
     def bind(self, source_screen_id: str) -> LiveScreenBoundCommandPayload:
         resolved_source_screen_id = _required_source_screen_id(source_screen_id)
         if self.kind == "type":
-            assert self.text is not None
+            if self.text is None:
+                raise RuntimeError("prepared type command is missing text")
             return TypeCommandPayload(
                 kind="type",
                 ref=self.ref,
@@ -97,7 +98,8 @@ class LateBoundActionCommand:
                 source_screen_id=resolved_source_screen_id,
             )
         if self.kind == "scroll":
-            assert self.direction is not None
+            if self.direction is None:
+                raise RuntimeError("prepared scroll command is missing direction")
             return ScrollCommandPayload(
                 kind="scroll",
                 ref=self.ref,
@@ -130,7 +132,8 @@ class LateBoundScreenRelativePredicate:
                 kind="screen-change",
                 source_screen_id=resolved_source_screen_id,
             )
-        assert self.ref is not None
+        if self.ref is None:
+            raise RuntimeError("prepared gone predicate is missing ref")
         return GonePredicatePayload(
             kind="gone",
             ref=self.ref,

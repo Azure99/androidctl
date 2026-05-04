@@ -251,7 +251,8 @@ def forward_agent_port(
 ) -> int:
     dynamic_local_port = local_port is None or local_port == 0
     if not dynamic_local_port:
-        assert local_port is not None
+        if local_port is None:
+            raise SetupAdbError("ADB_INVALID_PORT", "local port must be provided")
         _validate_tcp_port(local_port, label="local port")
     _validate_tcp_port(remote_port, label="remote port")
 
@@ -265,7 +266,8 @@ def forward_agent_port(
         failure_code="ADB_FORWARD_FAILED",
     )
     if not dynamic_local_port:
-        assert local_port is not None
+        if local_port is None:
+            raise SetupAdbError("ADB_INVALID_PORT", "local port must be provided")
         return local_port
 
     allocated_port = result.stdout.strip().splitlines()[0] if result.stdout else ""
@@ -393,7 +395,8 @@ def pair_wireless_device(
         adb_error = SetupAdbError(error.code, error.message)
     if adb_error is not None:
         raise adb_error
-    assert result is not None
+    if result is None:
+        raise SetupAdbError("ADB_PAIR_FAILED", "adb pair did not return a result")
     if not parse_adb_pair_success(_combined_output_result(result)):
         raise SetupAdbError("ADB_PAIR_FAILED", "adb pair did not report success")
     return result

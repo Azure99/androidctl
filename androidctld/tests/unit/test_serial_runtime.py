@@ -244,7 +244,7 @@ def test_runtime_close_success_holds_public_serial_lane_until_side_effects_finis
         close_entered.set()
         assert release_close.wait(timeout=2.0), "close side effect did not unblock"
 
-    service._runtime_kernel.close_runtime = close_runtime  # type: ignore[method-assign]  # noqa: SLF001
+    service._runtime_kernel.close_runtime = close_runtime  # type: ignore[method-assign]
 
     def run_close() -> None:
         try:

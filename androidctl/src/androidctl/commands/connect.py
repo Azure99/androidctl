@@ -47,8 +47,8 @@ def register(app: typer.Typer) -> None:
                     serial=serial,
                 )
             else:
-                assert host is not None
-                assert port is not None
+                if host is None or port is None:
+                    emit_usage_error("choose --adb or provide --host and --port")
                 connection = ConnectionPayload(
                     mode="lan",
                     token=normalized_token,

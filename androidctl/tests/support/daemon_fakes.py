@@ -106,7 +106,7 @@ TFakeDaemon = TypeVar("TFakeDaemon", bound=BaseFakeDaemon)
 
 
 def patch_cli_context(
-    monkeypatch,  # noqa: ANN001
+    monkeypatch,
     *,
     tmp_path: Path,
     daemon: TFakeDaemon,

@@ -69,7 +69,8 @@ class ActionCommandRepairer:
                 artifacts=current_artifacts(session),
             )
         source_signature = source_decision.source_signature
-        assert source_signature is not None
+        if source_signature is None:
+            raise RuntimeError("resolved source binding is missing its signature")
 
         snapshot = self._snapshot_service.fetch(
             session,
@@ -95,5 +96,6 @@ class ActionCommandRepairer:
                 artifacts=artifacts or current_artifacts(session),
             )
         repaired_binding = repair_decision.binding
-        assert repaired_binding is not None
+        if repaired_binding is None:
+            raise RuntimeError("resolved repair decision is missing its binding")
         return repaired_binding.handle

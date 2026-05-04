@@ -12,10 +12,10 @@ from androidctld.runtime.store import RuntimeSerialCommandBusyError, RuntimeStor
 __all__ = [
     "RuntimeKernel",
     "RuntimeLifecycleLease",
+    "RuntimeSerialCommandBusyError",
     "RuntimeStateRepository",
     "RuntimeStore",
     "ScreenState",
-    "RuntimeSerialCommandBusyError",
     "WorkspaceRuntime",
     "capture_lifecycle_lease",
 ]

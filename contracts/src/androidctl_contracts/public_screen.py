@@ -473,10 +473,13 @@ class PublicScreen(PublicScreenWireModel):
         if blocking_group is None:
             expected_order = PUBLIC_GROUP_NAMES
         else:
-            expected_order = (blocking_group,) + tuple(
-                group_name
-                for group_name in PUBLIC_GROUP_NAMES
-                if group_name != blocking_group
+            expected_order = (
+                blocking_group,
+                *(
+                    group_name
+                    for group_name in PUBLIC_GROUP_NAMES
+                    if group_name != blocking_group
+                ),
             )
         if group_names != expected_order:
             raise ValueError("groups order must match canonical public order")
@@ -545,9 +548,6 @@ class PublicScreen(PublicScreenWireModel):
 
 __all__ = [
     "BLOCKING_GROUP_NAMES",
-    "BlockingGroupName",
-    "OmittedEntry",
-    "OmittedReason",
     "OMITTED_REASON_VALUES",
     "PUBLIC_GROUP_NAMES",
     "PUBLIC_NODE_ACTION_VALUES",
@@ -556,6 +556,11 @@ __all__ = [
     "PUBLIC_NODE_ROLE_VALUES",
     "PUBLIC_NODE_STATE_VALUES",
     "PUBLIC_REF_RE",
+    "SCROLL_DIRECTION_VALUES",
+    "TRANSIENT_KIND_VALUES",
+    "BlockingGroupName",
+    "OmittedEntry",
+    "OmittedReason",
     "PublicApp",
     "PublicFocus",
     "PublicGroup",
@@ -567,10 +572,8 @@ __all__ = [
     "PublicScreen",
     "PublicSemanticMeta",
     "PublicSurface",
-    "SCROLL_DIRECTION_VALUES",
     "ScrollDirection",
     "TransientItem",
     "TransientKind",
-    "TRANSIENT_KIND_VALUES",
     "VisibleWindow",
 ]

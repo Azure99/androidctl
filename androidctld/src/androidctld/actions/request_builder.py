@@ -152,7 +152,8 @@ def build_submit_action_request_for_route(
 
 
 def build_open_action_request(command: ActionCommand) -> BuiltDeviceActionRequest:
-    assert isinstance(command, OpenCommand)
+    if not isinstance(command, OpenCommand):
+        raise bad_request("open action request requires an open command")
     target = validate_open_target(command.target)
     if isinstance(target, OpenAppTarget):
         return BuiltDeviceActionRequest(
@@ -187,7 +188,8 @@ def resolve_ref_target(
             artifacts=current_artifacts(session),
         )
     binding = decision.binding
-    assert binding is not None
+    if binding is None:
+        raise RuntimeError("resolved ref decision is missing its binding")
     return binding.handle
 
 

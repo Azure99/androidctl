@@ -59,7 +59,10 @@ def test_submit_exposed_for_focused_input_with_raw_submit_action() -> None:
     assert "submit" in target.actions
 
 
-@pytest.mark.parametrize("raw_action", ("action_321", "action_999999", "action_888888"))
+@pytest.mark.parametrize(
+    "raw_action",
+    [("action_321",), ("action_999999",), ("action_888888",)],
+)
 def test_submit_omitted_for_focused_input_with_unknown_raw_action(
     raw_action: str,
 ) -> None:
@@ -111,10 +114,10 @@ def test_submit_omitted_for_focused_input_without_submit_capability() -> None:
 
 @pytest.mark.parametrize(
     ("fixture_name", "label"),
-    (
+    [
         ("messages_compose_snapshot.json", "phase-d"),
         ("chrome_scroll_snapshot.json", "baidu.com/s?wd=openai"),
-    ),
+    ],
 )
 def test_compiler_omits_submit_for_unfocused_inputs(
     fixture_name: str,

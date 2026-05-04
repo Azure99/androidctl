@@ -291,7 +291,7 @@ def test_drop_current_screen_authority_keeps_connection_and_artifacts(
     assert "currentScreenId" not in persisted
 
 
-def test_drop_current_screen_authority_preserves_rebootstrap_credentials_without_transport(  # noqa: E501
+def test_drop_current_screen_authority_preserves_rebootstrap_credentials_no_transport(
     tmp_path: Path,
 ) -> None:
     store = runtime_store_for_workspace(tmp_path)

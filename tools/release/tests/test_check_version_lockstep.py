@@ -54,7 +54,7 @@ def test_derive_android_version_code_accepts_valid_values(
     ],
 )
 def test_derive_android_version_code_rejects_invalid_values(version_text: str) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must"):
         derive_android_version_code(version_text)
 
 

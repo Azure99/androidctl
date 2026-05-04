@@ -59,6 +59,7 @@ def secondary_public_actions_for(
     role: str,
     primary_actions: list[str],
 ) -> list[str]:
+    del primary_actions
     anchor_actions = {normalize_action_name(action) for action in anchor_node.actions}
     if role != "input" or not anchor_node.editable:
         return []

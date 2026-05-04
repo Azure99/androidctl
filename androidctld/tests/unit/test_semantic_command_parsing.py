@@ -76,8 +76,6 @@ from .support.doubles import (
     StaticScreenRefresh,
     StaticSnapshotService,
 )
-
-REMOVED_COMMAND_KIND = "ra" + "w"
 from .support.retained import assert_retained_omits_semantic_fields
 from .support.runtime import (
     build_artifact_path,
@@ -94,6 +92,8 @@ from .support.semantic_screen import (
 from .support.semantic_screen import (
     make_snapshot as _make_snapshot,
 )
+
+REMOVED_COMMAND_KIND = "ra" + "w"
 
 _VALID_PNG_1X1 = (
     b"\x89PNG\r\n\x1a\n"

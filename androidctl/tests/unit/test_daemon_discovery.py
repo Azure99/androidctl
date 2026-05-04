@@ -108,7 +108,7 @@ def _loopback_daemon_server(
     owner_id: str = "shell:self:1",
 ):
     class Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             length = int(self.headers.get("content-length", "0"))
             self.rfile.read(length)
             body = json.dumps(
@@ -632,7 +632,7 @@ def test_resolve_daemon_client_launches_when_active_record_missing(
         lambda _record, owner_id: mock_client,
     )
 
-    def fake_try_get_healthy_daemon(_client, _record):  # noqa: ANN001
+    def fake_try_get_healthy_daemon(_client, _record):
         events.append("health")
         return _health_result(record)
 
@@ -641,7 +641,7 @@ def test_resolve_daemon_client_launches_when_active_record_missing(
         fake_try_get_healthy_daemon,
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         del argv, kwargs
         events.append("launch")
         _write_active_payload(workspace_root, record.model_dump())
@@ -694,7 +694,7 @@ def test_resolve_daemon_client_ignores_legacy_home_config_json(
         lambda _client, _record: _health_result(record),
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         del kwargs
         captured["argv"] = argv
         _write_active_payload(workspace_root, record.model_dump())
@@ -818,7 +818,7 @@ def test_resolve_daemon_client_recovers_from_unhealthy_stale_active_record(
         lambda record, owner_id: f"client:{record.pid}:{record.started_at}:{owner_id}",
     )
 
-    def fake_try_get_healthy_daemon(client, record):  # noqa: ANN001
+    def fake_try_get_healthy_daemon(client, record):
         del client
         events.append(f"health:{record.pid}:{record.started_at}")
         if record.identity == stale_record.identity:
@@ -830,7 +830,7 @@ def test_resolve_daemon_client_recovers_from_unhealthy_stale_active_record(
         fake_try_get_healthy_daemon,
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         del argv, kwargs
         events.append("launch")
         _write_active_payload(workspace_root, fresh_record.model_dump())
@@ -874,7 +874,7 @@ def test_resolve_daemon_client_recovers_when_stale_record_points_to_other_live_d
         lambda record, owner_id: f"client:{record.pid}:{record.started_at}:{owner_id}",
     )
 
-    def fake_try_get_healthy_daemon(client, record):  # noqa: ANN001
+    def fake_try_get_healthy_daemon(client, record):
         del client
         events.append(f"health:{record.pid}:{record.started_at}")
         if record.identity == stale_record.identity:
@@ -886,7 +886,7 @@ def test_resolve_daemon_client_recovers_when_stale_record_points_to_other_live_d
         fake_try_get_healthy_daemon,
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         del argv, kwargs
         events.append("launch")
         _write_active_payload(workspace_root, fresh_record.model_dump())
@@ -932,7 +932,7 @@ def test_resolve_daemon_client_launched_version_mismatch_hard_fails(
         ),
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         nonlocal launches
         del argv, kwargs
         launches += 1
@@ -981,7 +981,7 @@ def test_resolve_daemon_client_treats_malformed_active_payload_as_missing_hint(
         lambda _client, _record: _health_result(record),
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         nonlocal launches
         del argv, kwargs
         launches += 1
@@ -1022,7 +1022,7 @@ def test_resolve_daemon_client_redirects_launch_output_to_workspace_logs(
         lambda _client, _record: _health_result(record),
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         captured["argv"] = argv
         captured["stdout_name"] = kwargs["stdout"].name
         captured["stderr_name"] = kwargs["stderr"].name
@@ -1091,7 +1091,7 @@ def test_resolve_daemon_client_polls_after_launched_daemon_loses_owner_race(
             return winner_record
         return None
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         del argv, kwargs
         events.append("launch-loser")
         return object()
@@ -1145,7 +1145,7 @@ def test_resolve_daemon_client_concurrent_same_owner_launches_return_winner(
         lambda _client, record: _health_result(record),
     )
 
-    def fake_popen(argv, **kwargs):  # noqa: ANN001
+    def fake_popen(argv, **kwargs):
         nonlocal launches
         del argv, kwargs
         with write_lock:
@@ -1195,7 +1195,7 @@ def test_resolve_daemon_client_fails_workspace_busy_for_mismatched_owner(
     _write_active_record(workspace_root, owner_id="shell:other:1")
 
     class BusyClient:
-        def health(self, record):  # noqa: ANN001
+        def health(self, record):
             from androidctl.daemon.client import DaemonApiError
 
             raise DaemonApiError(
@@ -1228,7 +1228,7 @@ def test_resolve_daemon_client_owner_mismatch_version_mismatch_stays_workspace_b
     _write_active_record(workspace_root, owner_id="shell:other:1")
 
     class VersionMismatchClient:
-        def health(self, record):  # noqa: ANN001
+        def health(self, record):
             raise IncompatibleDaemonVersionError(
                 expected_version="0.1.0",
                 actual_version="0.1.1",
@@ -1266,7 +1266,7 @@ def test_discover_existing_daemon_client_fails_workspace_busy_for_mismatched_own
     _write_active_record(workspace_root, owner_id="shell:other:1")
 
     class BusyClient:
-        def health(self, record):  # noqa: ANN001
+        def health(self, record):
             raise DaemonApiError(
                 code="WORKSPACE_BUSY",
                 message="workspace daemon is owned by a different shell or agent",

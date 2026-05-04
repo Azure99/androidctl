@@ -445,14 +445,14 @@ def test_command_orchestrator_marks_context_record_failed_on_validation_error(
 
 def test_close_runtime_uses_orchestrator_finalizer(tmp_path: Path) -> None:
     service = CommandService(runtime_store_for_workspace(tmp_path))
-    original = service._orchestrator._finalize_result  # noqa: SLF001
+    original = service._orchestrator._finalize_result
     expected_commands: list[str] = []
 
     def finalize(payload: Any, *, expected_result_command: str) -> dict[str, Any]:
         expected_commands.append(expected_result_command)
         return original(payload, expected_result_command=expected_result_command)
 
-    service._orchestrator._finalize_result = finalize  # type: ignore[method-assign]  # noqa: SLF001
+    service._orchestrator._finalize_result = finalize  # type: ignore[method-assign]
 
     payload = service.close_runtime()
 

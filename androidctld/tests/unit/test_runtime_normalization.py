@@ -81,7 +81,7 @@ def test_runtime_get_stale_ready_state_with_connection_downgrades_to_connected(
     assert "currentScreenId" not in persisted
 
 
-def test_runtime_get_stale_ready_state_without_live_transport_downgrades_to_broken(
+def test_runtime_get_stale_ready_consistent_screen_no_transport_downgrades_to_broken(
     tmp_path,
 ) -> None:
     runtime_store = runtime_store_for_workspace(tmp_path)
@@ -186,7 +186,7 @@ def test_runtime_get_zero_ref_live_screen_remains_ready(tmp_path) -> None:
     assert runtime.current_screen_id == "screen-00003"
 
 
-def test_runtime_get_stale_ready_state_with_consistent_screen_but_without_live_transport_downgrades_to_broken(  # noqa: E501
+def test_runtime_get_stale_ready_state_without_live_transport_downgrades_to_broken(
     tmp_path,
 ) -> None:
     runtime_store = runtime_store_for_workspace(tmp_path)

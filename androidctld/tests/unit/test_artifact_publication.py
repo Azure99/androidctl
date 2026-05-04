@@ -355,13 +355,16 @@ def test_xml_commit_failure_rolls_back_previously_committed_json(
     )
     xml_update.staged_path.unlink()
 
-    with pytest.raises(FileNotFoundError):
+    def commit_with_cleanup() -> None:
         try:
             staged.commit()
         except Exception:
             staged.rollback()
             staged.discard()
             raise
+
+    with pytest.raises(FileNotFoundError):
+        commit_with_cleanup()
 
     assert not Path(staged.artifacts.screen_json).exists()
     assert not Path(staged.artifacts.screen_xml).exists()

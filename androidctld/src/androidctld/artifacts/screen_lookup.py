@@ -137,7 +137,8 @@ def lookup_source_screen_artifact(
             path=selected.path,
             scanned=scanned,
         )
-    assert selected.payload is not None
+    if selected.payload is None:
+        raise RuntimeError("valid source screen artifact is missing payload")
     return SourceScreenArtifactLookup(
         status="found",
         source_screen_id=source_screen_id,

@@ -143,7 +143,7 @@ def test_submit_confirmation_accepts_foreground_package_change() -> None:
     assert outcome.status == "unconfirmed"
 
 
-def test_submit_confirmation_accepts_structural_public_screen_change_on_command_target_line() -> (  # noqa: E501
+def test_submit_confirmation_accepts_public_screen_change_on_command_target_line() -> (
     None
 ):
     outcome = validate_submit_confirmation(
@@ -239,7 +239,7 @@ def test_submit_public_change_ignores_focus_actions_and_submit_refs_only() -> No
     assert not submit_public_change_is_attributable(previous_screen, current_screen)
 
 
-def test_submit_confirmation_prefers_confirmed_command_target_handle_over_request_context() -> (  # noqa: E501
+def test_submit_confirmation_prefers_confirmed_target_handle_over_request_context() -> (
     None
 ):
     validate_submit_confirmation(
@@ -266,7 +266,7 @@ def test_submit_confirmation_prefers_confirmed_command_target_handle_over_reques
     )
 
 
-def test_submit_confirmation_does_not_reanchor_disappeared_confirmed_handle_to_request_context(  # noqa: E501
+def test_submit_confirmation_does_not_reanchor_disappeared_handle_to_request_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -300,9 +300,7 @@ def test_submit_confirmation_does_not_reanchor_disappeared_confirmed_handle_to_r
     )
 
 
-def test_submit_confirmation_accepts_target_disappearance_without_extra_diff_proof() -> (  # noqa: E501
-    None
-):
+def test_submit_confirmation_accepts_target_disappearance_without_diff_proof() -> None:
     outcome = validate_submit_confirmation(
         route_kind="direct",
         action_result=ActionPerformResult(

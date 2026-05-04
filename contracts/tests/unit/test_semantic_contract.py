@@ -434,17 +434,17 @@ def test_command_catalog_uniqueness_guards_reject_duplicate_values() -> None:
 
     with pytest.raises(RuntimeError, match="public_name"):
         command_catalog._build_unique_entry_index(
-            _EXPECTED_COMMAND_CATALOG + (duplicate_public,),
+            (*_EXPECTED_COMMAND_CATALOG, duplicate_public),
             field_name="public_name",
         )
     with pytest.raises(RuntimeError, match="daemon_kind"):
         command_catalog._build_unique_entry_index(
-            _EXPECTED_COMMAND_CATALOG + (duplicate_daemon,),
+            (*_EXPECTED_COMMAND_CATALOG, duplicate_daemon),
             field_name="daemon_kind",
         )
     with pytest.raises(RuntimeError, match="result_command"):
         command_catalog._build_unique_entry_index(
-            _EXPECTED_COMMAND_CATALOG + (duplicate_result,),
+            (*_EXPECTED_COMMAND_CATALOG, duplicate_result),
             field_name="result_command",
         )
 

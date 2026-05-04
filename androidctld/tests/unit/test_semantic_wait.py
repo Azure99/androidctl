@@ -934,7 +934,7 @@ def test_screen_change_wait_handle_timeout_stays_failure(
 
 
 @pytest.mark.parametrize(
-    "basis_case,predicate",
+    ("basis_case", "predicate"),
     [
         (
             "missing",

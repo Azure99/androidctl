@@ -145,10 +145,10 @@ __all__ = [
     "NodeActionRequest",
     "NoneTarget",
     "OpenUrlActionRequest",
-    "required_action_kind_for_request",
     "ScrollActionRequest",
     "SwipeActionRequest",
     "TapActionRequest",
     "TapTarget",
     "TypeActionRequest",
+    "required_action_kind_for_request",
 ]

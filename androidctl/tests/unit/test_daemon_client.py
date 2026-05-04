@@ -909,7 +909,7 @@ def test_run_command_uses_wait_timeout_ms_for_read_timeout_budget() -> None:
     seen_timeouts: list[httpx.Timeout] = []
 
     class FakeHttpClient:
-        def post(self, path, *, headers, json, timeout):  # noqa: ANN001
+        def post(self, path, *, headers, json, timeout):
             del path, headers, json
             assert isinstance(timeout, httpx.Timeout)
             seen_timeouts.append(timeout)

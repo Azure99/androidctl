@@ -89,6 +89,15 @@ src = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "SIM", "C4", "RUF009", "UP"]
+extend-select = [
+    "ARG001",
+    "PT",
+    "RUF005",
+    "RUF012",
+    "RUF022",
+    "RUF100",
+    "S101",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = [
@@ -101,10 +110,10 @@ known-first-party = [
 extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["E402"]
-"contracts/tests/**/*.py" = ["E402"]
-"androidctld/tests/**/*.py" = ["E402"]
-"androidctl/tests/**/*.py" = ["E402"]
+"contracts/tests/**/*.py" = ["ARG001", "S101"]
+"androidctld/tests/**/*.py" = ["ARG001", "S101"]
+"androidctl/tests/**/*.py" = ["ARG001", "S101"]
+"tools/release/tests/**/*.py" = ["ARG001", "S101"]
 
 [tool.mypy]
 python_version = "3.10"

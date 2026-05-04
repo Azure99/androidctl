@@ -113,7 +113,7 @@ def test_secret_state_files_are_written_with_restrictive_mode(
     DaemonTokenStore(config).current_token()
     record = registry.build_record(host="127.0.0.1", port=17631, token="secret")
     registry.publish(record)
-    active_slot._publish_owner_lock_record(record)  # noqa: SLF001
+    active_slot._publish_owner_lock_record(record)
 
     _assert_posix_file_mode(config.token_file_path, 0o600)
     _assert_posix_file_mode(config.active_file_path, 0o600)
@@ -142,10 +142,10 @@ def test_secret_state_rewrites_existing_broad_files_with_restrictive_mode(
         path.write_text(json.dumps(payload), encoding="utf-8")
         _chmod_posix(path, 0o644)
 
-    DaemonTokenStore._persist_token(config.token_file_path, "new")  # noqa: SLF001
+    DaemonTokenStore._persist_token(config.token_file_path, "new")
     record = registry.build_record(host="127.0.0.1", port=17631, token="secret")
     registry.restore(record)
-    active_slot._publish_owner_lock_record(record)  # noqa: SLF001
+    active_slot._publish_owner_lock_record(record)
 
     _assert_posix_file_mode(config.token_file_path, 0o600)
     _assert_posix_file_mode(config.active_file_path, 0o600)
@@ -164,7 +164,7 @@ def test_secret_state_writer_creates_state_dir_with_restrictive_mode(
         port=0,
     )
 
-    DaemonTokenStore._persist_token(config.token_file_path, "new")  # noqa: SLF001
+    DaemonTokenStore._persist_token(config.token_file_path, "new")
 
     _assert_posix_file_mode(config.state_dir, 0o700)
 
@@ -183,7 +183,7 @@ def test_secret_state_writer_repairs_existing_broad_state_dir_mode(
     config.state_dir.mkdir(parents=True, exist_ok=True)
     _chmod_posix(config.state_dir, 0o755)
 
-    DaemonTokenStore._persist_token(config.token_file_path, "new")  # noqa: SLF001
+    DaemonTokenStore._persist_token(config.token_file_path, "new")
 
     _assert_posix_file_mode(config.state_dir, 0o700)
 
@@ -221,7 +221,7 @@ def test_secret_state_temp_sidecars_are_restrictive_and_atomic(
     token = DaemonTokenStore(config).current_token()
     record = registry.build_record(host="127.0.0.1", port=17631, token="secret")
     registry.publish(record)
-    active_slot._publish_owner_lock_record(record)  # noqa: SLF001
+    active_slot._publish_owner_lock_record(record)
 
     if os.name == "posix":
         assert captured["token.json"][0] == 0o600
@@ -262,7 +262,7 @@ def test_secret_state_temp_sidecar_cleanup_on_replace_failure(
     monkeypatch.setattr("androidctld.auth.secret_files.os.replace", fail_replace)
 
     with pytest.raises(OSError, match="replace failed"):
-        DaemonTokenStore._persist_token(config.token_file_path, "new")  # noqa: SLF001
+        DaemonTokenStore._persist_token(config.token_file_path, "new")
 
     assert config.token_file_path.read_text(encoding="utf-8") == (
         json.dumps({"token": "existing"})
@@ -293,8 +293,8 @@ def test_token_store_repeated_writes_use_unique_temp_paths(
 
     monkeypatch.setattr("androidctld.auth.secret_files.os.replace", capture_replace)
 
-    DaemonTokenStore._persist_token(config.token_file_path, "one")  # noqa: SLF001
-    DaemonTokenStore._persist_token(config.token_file_path, "two")  # noqa: SLF001
+    DaemonTokenStore._persist_token(config.token_file_path, "one")
+    DaemonTokenStore._persist_token(config.token_file_path, "two")
 
     assert len(temp_names) == 2
     assert len(set(temp_names)) == 2
@@ -743,7 +743,7 @@ def test_active_slot_owner_lock_temp_sidecar_is_tokenless(
 
     monkeypatch.setattr("androidctld.auth.secret_files.os.replace", capture_replace)
 
-    active_slot._publish_owner_lock_record(record)  # noqa: SLF001
+    active_slot._publish_owner_lock_record(record)
 
     payload = captured["payload"]
     assert isinstance(payload, dict)
@@ -1070,9 +1070,7 @@ def test_active_slot_old_unreachable_owner_lock_with_live_pid_recovers(
         ),
         encoding="utf-8",
     )
-    old_mtime = time.time() - (
-        active_slot._OWNER_LOCK_STALE_SECONDS + 1.0
-    )  # noqa: SLF001
+    old_mtime = time.time() - (active_slot._OWNER_LOCK_STALE_SECONDS + 1.0)
     os.utime(config.owner_lock_path, (old_mtime, old_mtime))
     monkeypatch.setattr(
         ActiveDaemonRegistry,
@@ -1175,9 +1173,7 @@ def test_active_slot_healthy_mismatched_owner_lock_fails_closed_after_grace(
     owner_payload.update(owner_update)
     config.owner_lock_path.parent.mkdir(parents=True, exist_ok=True)
     config.owner_lock_path.write_text(json.dumps(owner_payload), encoding="utf-8")
-    old_mtime = time.time() - (
-        active_slot._OWNER_LOCK_STALE_SECONDS + 1.0
-    )  # noqa: SLF001
+    old_mtime = time.time() - (active_slot._OWNER_LOCK_STALE_SECONDS + 1.0)
     os.utime(config.owner_lock_path, (old_mtime, old_mtime))
 
     with pytest.raises(RuntimeError, match="live daemon already owns active slot"):
@@ -1218,9 +1214,7 @@ def test_active_slot_old_unprobeable_non_loopback_owner_lock_recovers(
         ),
         encoding="utf-8",
     )
-    old_mtime = time.time() - (
-        active_slot._OWNER_LOCK_STALE_SECONDS + 1.0
-    )  # noqa: SLF001
+    old_mtime = time.time() - (active_slot._OWNER_LOCK_STALE_SECONDS + 1.0)
     os.utime(config.owner_lock_path, (old_mtime, old_mtime))
     monkeypatch.setattr(
         ActiveDaemonRegistry,
@@ -1264,9 +1258,7 @@ def test_active_slot_plain_pid_owner_lock_live_and_stale_behavior(
 
     assert config.owner_lock_path.read_text(encoding="utf-8") == "4242"
     assert config.active_file_path.exists() is False
-    old_mtime = time.time() - (
-        active_slot._OWNER_LOCK_STALE_SECONDS + 1.0
-    )  # noqa: SLF001
+    old_mtime = time.time() - (active_slot._OWNER_LOCK_STALE_SECONDS + 1.0)
     os.utime(config.owner_lock_path, (old_mtime, old_mtime))
 
     active_slot.acquire()
@@ -1696,8 +1688,8 @@ def test_server_stop_stops_listener_before_releasing_active_ownership(
         def release_owner(self) -> None:
             events.append("owner-release")
 
-    server._http_host = FakeHttpHost()  # type: ignore[assignment]  # noqa: SLF001
-    server._active_slot = FakeActiveSlot()  # type: ignore[assignment]  # noqa: SLF001
+    server._http_host = FakeHttpHost()  # type: ignore[assignment]
+    server._active_slot = FakeActiveSlot()  # type: ignore[assignment]
 
     first_stop = threading.Thread(target=server.stop)
     second_stop = threading.Thread(target=server.stop)
@@ -1732,7 +1724,7 @@ def test_server_start_resets_closing_gate_for_reused_server(tmp_path: Path) -> N
     )
     registry = ActiveDaemonRegistry(config)
     server = AndroidctldHttpServer(config=config)
-    server._closing = True  # noqa: SLF001
+    server._closing = True
     events: list[tuple[str, object]] = []
 
     class FakeHttpHost:
@@ -1757,7 +1749,7 @@ def test_server_start_resets_closing_gate_for_reused_server(tmp_path: Path) -> N
                 body=b"{}",
             )
             events.append(("readiness", status))
-            events.append(("closing", server._closing))  # noqa: SLF001
+            events.append(("closing", server._closing))
             events.append(("service", payload["service"]))
 
         def stop(self) -> None:
@@ -1784,12 +1776,12 @@ def test_server_start_resets_closing_gate_for_reused_server(tmp_path: Path) -> N
         def release_owner(self) -> None:
             events.append(("active", "release"))
 
-    server._http_host = FakeHttpHost()  # type: ignore[assignment]  # noqa: SLF001
-    server._active_slot = FakeActiveSlot()  # type: ignore[assignment]  # noqa: SLF001
+    server._http_host = FakeHttpHost()  # type: ignore[assignment]
+    server._active_slot = FakeActiveSlot()  # type: ignore[assignment]
 
     server.start()
 
-    assert server._closing is False  # noqa: SLF001
+    assert server._closing is False
     assert events == [
         ("active", "acquire"),
         ("readiness", 200),
@@ -1826,7 +1818,7 @@ def test_daemon_config_normalizes_owner_id(tmp_path: Path) -> None:
 
 
 def test_daemon_config_rejects_empty_workspace_root(tmp_path: Path) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="workspace_root must not be empty"):
         DaemonConfig(
             workspace_root="  ",
             owner_id="owner-7",

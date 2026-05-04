@@ -235,7 +235,8 @@ class DaemonClient:
 
         if envelope is None:
             response.raise_for_status()
-            assert envelope_error is not None
+            if envelope_error is None:
+                raise DaemonProtocolError("invalid daemon response envelope")
             raise envelope_error
 
         ok = envelope.get("ok")

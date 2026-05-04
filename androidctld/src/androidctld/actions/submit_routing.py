@@ -275,7 +275,11 @@ def _semantic_node_for_handle(
 
 
 def _current_handle(session: WorkspaceRuntime, node: SemanticNode) -> NodeHandle:
-    assert session.latest_snapshot is not None
+    if session.latest_snapshot is None:
+        raise DaemonError(
+            code=DaemonErrorCode.SCREEN_NOT_READY,
+            message="screen is not ready yet",
+        )
     return NodeHandle(snapshot_id=session.latest_snapshot.snapshot_id, rid=node.raw_rid)
 
 

@@ -111,7 +111,11 @@ def _run_adb_connect(*, endpoint: str) -> None:
         wireless_error = _wireless_error_from_adb(error)
     if wireless_error is not None:
         raise wireless_error
-    assert connect_endpoint is not None
+    if connect_endpoint is None:
+        raise WirelessAdbCommandError(
+            "ADB_CONNECT_FAILED",
+            "adb connect endpoint was not validated",
+        )
     _emit_progress("wireless ADB: connected device")
     _emit_progress(f"wireless ADB: run setup with --serial {connect_endpoint}")
 

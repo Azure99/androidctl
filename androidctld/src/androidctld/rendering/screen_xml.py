@@ -197,8 +197,13 @@ def _group_order(
 ) -> tuple[PublicGroupName, ...]:
     if blocking_group not in _BLOCKING_GROUPS:
         return PUBLIC_GROUP_NAMES
-    return (blocking_group,) + tuple(
-        group_name for group_name in PUBLIC_GROUP_NAMES if group_name != blocking_group
+    return (
+        blocking_group,
+        *(
+            group_name
+            for group_name in PUBLIC_GROUP_NAMES
+            if group_name != blocking_group
+        ),
     )
 
 

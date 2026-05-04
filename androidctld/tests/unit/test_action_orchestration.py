@@ -1265,7 +1265,7 @@ def test_action_executor_scroll_stale_target_retry_uses_retry_baseline(
 
 
 @pytest.mark.parametrize(
-    "direction,previous_directions,current_directions",
+    ("direction", "previous_directions", "current_directions"),
     [
         ("down", ("down",), ("up", "backward")),
         ("up", ("up", "backward"), ("down",)),
@@ -1387,7 +1387,7 @@ def test_scroll_postcondition_rejects_missing_resolved_target_after_refresh() ->
 
 
 @pytest.mark.parametrize(
-    "current_screen_updates,target_updates",
+    ("current_screen_updates", "target_updates"),
     [
         ({"package_name": "com.example.other", "activity_name": "OtherActivity"}, {}),
         ({"keyboard_visible": True}, {}),
@@ -5019,7 +5019,7 @@ def _assert_unrepaired_refresh_outcome(
         "expected_next_ref",
         "expected_evidence",
     ),
-    (
+    [
         pytest.param(
             "cmd-00010",
             CommandKind.FOCUS,
@@ -5070,7 +5070,7 @@ def _assert_unrepaired_refresh_outcome(
             ("liveRef", "submitConfirmation", "publicChange"),
             id="submit-public-change",
         ),
-    ),
+    ],
 )
 def test_action_executor_emits_unrepaired_action_target_after_real_refresh(
     tmp_path,

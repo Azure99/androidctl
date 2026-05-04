@@ -6,7 +6,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -296,7 +296,7 @@ def test_health_supports_snake_case_contract_constructor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeHealthResult:
-        model_fields = {
+        model_fields: ClassVar[dict[str, object]] = {
             "workspaceRoot": object(),
             "ownerId": object(),
         }
@@ -680,13 +680,13 @@ def test_runtime_close_requests_shutdown_after_response_write_before_owner_relea
         command_service=BusyCommandService(runtime),
         shutdown_callback=request_shutdown,
     )
-    server._active_slot.acquire()  # noqa: SLF001
-    active_record = server._active_slot.prepare(  # noqa: SLF001
+    server._active_slot.acquire()
+    active_record = server._active_slot.prepare(
         host=config.host,
         port=17171,
         token=token,
     )
-    server._active_slot.publish(active_record)  # noqa: SLF001
+    server._active_slot.publish(active_record)
 
     class RecordingWriter:
         def __init__(self) -> None:
@@ -729,7 +729,7 @@ def test_runtime_close_requests_shutdown_after_response_write_before_owner_relea
 
     handler = FakeHandler()
 
-    server._handle(handler)  # noqa: SLF001
+    server._handle(handler)
 
     payload = json.loads(handler.wfile.body.decode("utf-8"))
     assert payload["ok"] is True
@@ -807,7 +807,7 @@ def test_http_runtime_close_busy_returns_retained_no_close_without_shutdown(
     handler = FakeHandler()
 
     with runtime_store.begin_serial_command("observe"):
-        server._handle(handler)  # noqa: SLF001
+        server._handle(handler)
 
     payload = json.loads(handler.wfile.body.decode("utf-8"))
     assert handler.status_code == 200
@@ -820,8 +820,8 @@ def test_http_runtime_close_busy_returns_retained_no_close_without_shutdown(
     assert_retained_omits_semantic_fields(payload["result"])
     assert runtime.status is RuntimeStatus.CONNECTED
     assert runtime.current_screen_id == "screen-before-close"
-    assert server._closing is False  # noqa: SLF001
-    assert server._shutdown_after_close_requested is False  # noqa: SLF001
+    assert server._closing is False
+    assert server._shutdown_after_close_requested is False
     assert shutdown_events == []
 
 
@@ -902,10 +902,10 @@ def test_runtime_close_gate_rejects_followup_work_without_dispatch(
             pass
 
     close_handler = FakeHandler("/runtime/close", {})
-    server._handle(close_handler)  # noqa: SLF001
+    server._handle(close_handler)
 
     health_handler = FakeHandler("/health", {})
-    server._handle(health_handler)  # noqa: SLF001
+    server._handle(health_handler)
 
     health_payload = json.loads(health_handler.wfile.body.decode("utf-8"))
     assert health_payload["ok"] is True
@@ -916,7 +916,7 @@ def test_runtime_close_gate_rejects_followup_work_without_dispatch(
         "/commands/run",
         {"command": {"kind": "screenshot"}},
     )
-    server._handle(followup_handler)  # noqa: SLF001
+    server._handle(followup_handler)
 
     followup_payload = json.loads(followup_handler.wfile.body.decode("utf-8"))
     assert followup_payload["ok"] is False
@@ -928,7 +928,7 @@ def test_runtime_close_gate_rejects_followup_work_without_dispatch(
         "/v1/commands/run",
         {"command": {"kind": "screenshot"}},
     )
-    server._handle(rejected_followup_handler)  # noqa: SLF001
+    server._handle(rejected_followup_handler)
 
     rejected_followup_payload = json.loads(
         rejected_followup_handler.wfile.body.decode("utf-8")
@@ -946,7 +946,7 @@ def test_runtime_close_gate_rejects_followup_work_without_dispatch(
     assert command_service.run_calls == 0
 
     non_post_handler = FakeHandler("/runtime/get", {}, method="GET")
-    server._handle(non_post_handler)  # noqa: SLF001
+    server._handle(non_post_handler)
 
     non_post_payload = json.loads(non_post_handler.wfile.body.decode("utf-8"))
     assert non_post_handler.status_code == 400
@@ -954,7 +954,7 @@ def test_runtime_close_gate_rejects_followup_work_without_dispatch(
     assert non_post_payload["error"]["code"] == "DAEMON_BAD_REQUEST"
 
     bad_path_handler = FakeHandler("/not-found", {})
-    server._handle(bad_path_handler)  # noqa: SLF001
+    server._handle(bad_path_handler)
 
     bad_path_payload = json.loads(bad_path_handler.wfile.body.decode("utf-8"))
     assert bad_path_handler.status_code == 400
@@ -1058,7 +1058,7 @@ def test_runtime_close_gate_rejects_followup_while_response_write_is_blocked(
 
     def close_request() -> None:
         try:
-            server._handle(close_handler)  # noqa: SLF001
+            server._handle(close_handler)
         except BaseException as error:  # pragma: no cover - thread assertion aid
             close_errors.append(error)
 
@@ -1066,14 +1066,14 @@ def test_runtime_close_gate_rejects_followup_while_response_write_is_blocked(
     close_thread.start()
 
     assert write_started.wait(timeout=2.0)
-    assert server._closing is True  # noqa: SLF001
+    assert server._closing is True
     assert shutdown_called.is_set() is False
 
     followup_handler = FakeHandler(
         "/commands/run",
         {"command": {"kind": "screenshot"}},
     )
-    server._handle(followup_handler)  # noqa: SLF001
+    server._handle(followup_handler)
 
     followup_payload = json.loads(followup_handler.wfile.body.decode("utf-8"))
     assert followup_payload["ok"] is False
@@ -1083,7 +1083,7 @@ def test_runtime_close_gate_rejects_followup_while_response_write_is_blocked(
     assert shutdown_called.is_set() is False
 
     rejected_followup_handler = FakeHandler("/v1/runtime/get", {})
-    server._handle(rejected_followup_handler)  # noqa: SLF001
+    server._handle(rejected_followup_handler)
 
     rejected_followup_payload = json.loads(
         rejected_followup_handler.wfile.body.decode("utf-8")
@@ -1180,14 +1180,14 @@ def test_runtime_close_failure_does_not_enter_closing_gate(tmp_path: Path) -> No
             pass
 
     handler = FakeHandler()
-    server._handle(handler)  # noqa: SLF001
+    server._handle(handler)
 
     payload = json.loads(handler.wfile.body.decode("utf-8"))
     assert handler.status_code == 400
     assert payload["ok"] is False
     assert payload["error"]["code"] == "DAEMON_BAD_REQUEST"
     assert payload["error"]["details"] == {"reason": "close_failed"}
-    assert server._closing is False  # noqa: SLF001
+    assert server._closing is False
     assert shutdown_events == []
 
     status, followup_payload = server.handle(
@@ -1258,11 +1258,11 @@ def test_runtime_close_write_failure_still_gates_and_requests_shutdown(
         def end_headers(self) -> None:
             pass
 
-    server._handle(FakeHandler())  # noqa: SLF001
+    server._handle(FakeHandler())
 
     assert runtime.status == RuntimeStatus.CLOSED
     assert shutdown_events == ["shutdown"]
-    assert server._closing is True  # noqa: SLF001
+    assert server._closing is True
 
     with pytest.raises(DaemonError) as error:
         server.handle(
@@ -1349,7 +1349,7 @@ def test_server_active_slot_restore_reads_current_workspace_token(
     )
 
     with pytest.raises(RuntimeError, match="live daemon already owns active slot"):
-        server._active_slot.acquire()  # noqa: SLF001
+        server._active_slot.acquire()
 
     restored = registry.read()
     assert restored is not None
@@ -1455,7 +1455,7 @@ def test_http_server_unknown_exception_uses_internal_command_failure(
         del kwargs
         raise RuntimeError("boom")
 
-    server._ingress.handle = _boom  # type: ignore[method-assign]  # noqa: SLF001
+    server._ingress.handle = _boom  # type: ignore[method-assign]
 
     class _Writer:
         def __init__(self) -> None:
@@ -1489,7 +1489,7 @@ def test_http_server_unknown_exception_uses_internal_command_failure(
 
     handler = _Handler()
 
-    server._handle(handler)  # noqa: SLF001
+    server._handle(handler)
 
     payload = json.loads(handler.wfile.body.decode("utf-8"))
     assert handler.status_code == 500

@@ -412,7 +412,8 @@ class ActionExecutor:
                 ref_context=ref_postcondition_context,
             )
             if type_command is not None:
-                assert type_confirmation_context is not None
+                if type_confirmation_context is None:
+                    raise RuntimeError("type confirmation context was not prepared")
                 confirmed_candidate = validate_type_confirmation(
                     session=session,
                     command=type_command,
@@ -425,7 +426,8 @@ class ActionExecutor:
                     type_confirmation.target_handle or command_target_handle
                 )
             if submit_command is not None:
-                assert submit_route is not None
+                if submit_route is None:
+                    raise RuntimeError("submit route was not resolved")
                 submit_confirmation = validate_submit_confirmation(
                     session=session,
                     route_kind=submit_route.route,

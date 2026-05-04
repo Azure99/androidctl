@@ -626,8 +626,8 @@ def test_command_run_request_rejects_unknown_root_fields() -> None:
 
 
 def test_command_run_request_rejects_removed_raw_kind() -> None:
+    removed_kind = "ra" + "w"
     with pytest.raises(ValidationError):
-        removed_kind = "ra" + "w"
         CommandRunRequest.model_validate(
             {"command": {"kind": removed_kind, "subcommand": "rpc"}},
             strict=True,

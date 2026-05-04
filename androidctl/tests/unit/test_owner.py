@@ -6,10 +6,10 @@ import androidctl.daemon.owner as owner
 
 
 class _FakeWinFunction:
-    def __init__(self, implementation):  # noqa: ANN001
+    def __init__(self, implementation):
         self._implementation = implementation
 
-    def __call__(self, *args):  # noqa: ANN002, ANN003
+    def __call__(self, *args):
         return self._implementation(*args)
 
 
@@ -17,7 +17,7 @@ class _FakeKernel32:
     def __init__(
         self,
         *,
-        process_entries=None,  # noqa: ANN001
+        process_entries=None,
         snapshot_handle: int = 100,
         process_handle: int = 200,
         next_error: int = owner._ERROR_NO_MORE_FILES,
@@ -51,14 +51,14 @@ class _FakeKernel32:
     def _create_toolhelp32_snapshot(self, _flags: int, _pid: int) -> int:
         return self.snapshot_handle
 
-    def _process32_first(self, _snapshot: int, entry_ptr) -> bool:  # noqa: ANN001
+    def _process32_first(self, _snapshot: int, entry_ptr) -> bool:
         if not self._process_entries:
             return False
         self._snapshot_index = 0
         self._write_process_entry(entry_ptr, self._process_entries[0])
         return True
 
-    def _process32_next(self, _snapshot: int, entry_ptr) -> bool:  # noqa: ANN001
+    def _process32_next(self, _snapshot: int, entry_ptr) -> bool:
         next_index = self._snapshot_index + 1
         if next_index >= len(self._process_entries):
             self.last_error = self.next_error
@@ -74,10 +74,10 @@ class _FakeKernel32:
     def _get_process_times(
         self,
         _process: int,
-        creation_time_ptr,  # noqa: ANN001
-        _exit_time_ptr,  # noqa: ANN001
-        _kernel_time_ptr,  # noqa: ANN001
-        _user_time_ptr,  # noqa: ANN001
+        creation_time_ptr,
+        _exit_time_ptr,
+        _kernel_time_ptr,
+        _user_time_ptr,
     ) -> bool:
         if not self.get_process_times_ok:
             return False
@@ -90,7 +90,7 @@ class _FakeKernel32:
         self.closed_handles.append(handle)
         return True
 
-    def _write_process_entry(self, entry_ptr, entry) -> None:  # noqa: ANN001
+    def _write_process_entry(self, entry_ptr, entry) -> None:
         process_entry = entry_ptr._obj
         pid, parent_pid, process_name = entry
         process_entry.th32ProcessID = pid

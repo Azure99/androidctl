@@ -345,7 +345,8 @@ class RuntimeKernel:
             ):
                 return
             busy_error = _runtime_busy_error_locked(runtime)
-        assert busy_error is not None
+        if busy_error is None:
+            raise RuntimeError("runtime busy error was not available")
         raise busy_error
 
     def acquire_query_lane(self, runtime: WorkspaceRuntime) -> None:

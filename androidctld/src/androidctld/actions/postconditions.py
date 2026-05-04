@@ -58,7 +58,8 @@ def validate_postcondition(
     ref_context: RefActionPostconditionContext | None = None,
 ) -> PostconditionOutcome:
     if isinstance(command, FocusCommand):
-        assert focus_context is not None
+        if focus_context is None:
+            raise RuntimeError("focus confirmation context was not prepared")
         focus_confirmation = validate_focus_confirmation(
             session=session,
             previous_snapshot=previous_snapshot,
@@ -116,7 +117,12 @@ def validate_postcondition(
             snapshot.package_name,
         )
         return PostconditionOutcome(app_match=match)
-    assert isinstance(command.target, OpenUrlTarget)
+    if not isinstance(command.target, OpenUrlTarget):
+        raise DaemonError(
+            code=DaemonErrorCode.DAEMON_BAD_REQUEST,
+            message="open requires target.kind app|url and target.value",
+            http_status=400,
+        )
     _validate_open_url_navigation(
         command.target,
         previous_snapshot=previous_snapshot,

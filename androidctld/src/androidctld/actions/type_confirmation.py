@@ -51,7 +51,8 @@ def validate_type_confirmation(
         action_result,
     )
     for candidate in candidates:
-        assert candidate.node is not None
+        if candidate.node is None:
+            raise RuntimeError("type confirmation candidate is missing node")
         if matches_typed_value(command, observed_input_value(candidate.node)):
             return candidate
     raise DaemonError(

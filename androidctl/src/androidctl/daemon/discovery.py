@@ -148,7 +148,7 @@ def _launch_daemon_process(
     timestamp = int(time.time() * 1000)
     log_path = log_dir / f"androidctld-{timestamp}.log"
     log_file = log_path.open("a", buffering=1)
-    subprocess.Popen(  # noqa: S603
+    subprocess.Popen(
         [
             launch_spec.executable,
             *launch_spec.argv,

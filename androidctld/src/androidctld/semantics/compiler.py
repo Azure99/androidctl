@@ -174,10 +174,13 @@ class CompiledScreen:
     def group_order(self) -> tuple[PublicGroupName, ...]:
         if self.blocking_group is None:
             return cast(tuple[PublicGroupName, ...], GROUP_ORDER)
-        return (self.blocking_group,) + tuple(
-            cast(PublicGroupName, name)
-            for name in GROUP_ORDER
-            if name != self.blocking_group
+        return (
+            self.blocking_group,
+            *(
+                cast(PublicGroupName, name)
+                for name in GROUP_ORDER
+                if name != self.blocking_group
+            ),
         )
 
     def focused_input_ref(self) -> str | None:
@@ -367,7 +370,6 @@ class SemanticCompiler:
 
 __all__ = [
     "CLICK_ACTIONS",
-    "CompiledScreen",
     "GENERIC_SEMANTIC_ROLES",
     "LABEL_QUALITY_CONTENT_DESC",
     "LABEL_QUALITY_HINT",
@@ -376,11 +378,12 @@ __all__ = [
     "LABEL_QUALITY_STATE_DESCRIPTION",
     "LABEL_QUALITY_TEXT",
     "LONG_CLICK_ACTIONS",
-    "LabelInfo",
     "SCROLL_ACTIONS",
+    "TYPE_ACTIONS",
+    "CompiledScreen",
+    "LabelInfo",
     "SemanticCompiler",
     "SemanticNode",
-    "TYPE_ACTIONS",
     "actionable_anchor_for",
     "ancestor_distance",
     "apply_blocking_policy",

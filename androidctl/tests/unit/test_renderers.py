@@ -449,7 +449,7 @@ def test_xml_always_renders_uncertainty_and_warnings_containers() -> None:
 
 
 def test_xml_rejects_changed_without_source_screen_id() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="sourceScreenId"):
         render_xml(
             semantic_result(
                 sourceScreenId=None,
@@ -514,7 +514,7 @@ def test_open_xml_renders_changed_with_none_continuity(
 
 
 def test_xml_requires_screen_id_to_match_next_screen_id() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="nextScreenId must match"):
         render_xml(
             semantic_result(
                 nextScreenId="screen-00014",

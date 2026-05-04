@@ -87,5 +87,5 @@ def test_parse_open_target_accepts_documented_shapes(
     ],
 )
 def test_parse_open_target_rejects_non_contract_shapes(raw_target: str) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="target"):
         parse_open_target(raw_target)

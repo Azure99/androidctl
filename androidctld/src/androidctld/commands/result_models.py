@@ -258,7 +258,6 @@ def build_projected_retained_failure_result(
         ),
         artifacts=artifacts,
         details=_project_retained_failure_details(
-            command=command,
             source_code=source_code,
             public_code=public_code,
             source_kind=projected_source_kind,
@@ -310,14 +309,13 @@ def _project_retained_failure_message(
 
 def _project_retained_failure_details(
     *,
-    command: str,
     source_code: str,
     public_code: str,
     source_kind: str | None,
     operation: str | None,
     details: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    projected = _sanitize_retained_failure_details(details, command=command)
+    projected = _sanitize_retained_failure_details(details)
     normalized_operation = _stable_detail_scalar(operation)
     if normalized_operation is not None:
         projected["operation"] = normalized_operation
@@ -331,13 +329,11 @@ def _project_retained_failure_details(
 
 def _sanitize_retained_failure_details(
     details: dict[str, Any] | None,
-    *,
-    command: str,
 ) -> dict[str, Any]:
     if not details:
         return {}
     projected: dict[str, Any] = {}
-    reason = _stable_reason_detail(details.get("reason"), command=command)
+    reason = _stable_reason_detail(details.get("reason"))
     if reason is not None:
         projected["reason"] = reason
     expected_release_version = _stable_release_version_detail(
@@ -353,7 +349,7 @@ def _sanitize_retained_failure_details(
     return projected
 
 
-def _stable_reason_detail(value: object, *, command: str) -> str | None:
+def _stable_reason_detail(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip()
