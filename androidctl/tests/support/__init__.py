@@ -1,7 +1,6 @@
 from tests.support.daemon_fakes import patch_cli_context
 from tests.support.semantic_contract import (
     SOURCE_SCREEN_ABSENT,
-    SOURCE_SCREEN_OPTIONAL,
     SOURCE_SCREEN_REQUIRED,
     assert_error_result_spine,
     assert_public_result_spine,
@@ -15,7 +14,6 @@ from tests.support.semantic_contract import (
 
 __all__ = [
     "SOURCE_SCREEN_ABSENT",
-    "SOURCE_SCREEN_OPTIONAL",
     "SOURCE_SCREEN_REQUIRED",
     "assert_error_result_spine",
     "assert_public_result_spine",

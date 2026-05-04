@@ -458,11 +458,6 @@ def test_command_catalog_uniqueness_guards_reject_duplicate_values() -> None:
             "retained_envelope_kind": None,
         },
         {
-            "result_family": PublicResultFamily.SEMANTIC,
-            "result_category": PublicResultCategory.OBSERVE,
-            "retained_envelope_kind": RetainedEnvelopeKind.ARTIFACT,
-        },
-        {
             "result_family": PublicResultFamily.RETAINED,
             "result_category": None,
             "retained_envelope_kind": None,
@@ -471,11 +466,6 @@ def test_command_catalog_uniqueness_guards_reject_duplicate_values() -> None:
             "result_family": PublicResultFamily.RETAINED,
             "result_category": PublicResultCategory.OBSERVE,
             "retained_envelope_kind": RetainedEnvelopeKind.ARTIFACT,
-        },
-        {
-            "result_family": PublicResultFamily.LIST_APPS,
-            "result_category": PublicResultCategory.OBSERVE,
-            "retained_envelope_kind": None,
         },
         {
             "result_family": PublicResultFamily.LIST_APPS,

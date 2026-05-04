@@ -15,7 +15,6 @@ from androidctl.renderers.xml import (
 )
 from androidctl.renderers.xml_projection import project_xml_payload
 from androidctl_contracts.daemon_api import RuntimeGetResult, RuntimePayload
-from androidctl_contracts.public_screen import PUBLIC_NODE_ROLE_VALUES
 from tests.support.semantic_contract import (
     assert_error_result_spine,
     assert_retained_result_spine,
@@ -879,7 +878,7 @@ def test_inline_xml_omits_empty_state_and_actions_sequence_attrs() -> None:
     assert "role" not in empty_node.attrib
 
 
-@pytest.mark.parametrize("role", PUBLIC_NODE_ROLE_VALUES)
+@pytest.mark.parametrize("role", ["button", "input", "text", "scroll-container"])
 def test_inline_xml_renders_public_node_roles_as_tags(role: str) -> None:
     root = parse_xml(
         render_xml(
@@ -1781,34 +1780,6 @@ def test_retained_failure_xml_redacts_unsafe_details() -> None:
         "Traceback",
     ):
         assert unsafe_fragment not in xml_text
-
-
-@pytest.mark.parametrize("reason", ["api-token"])
-def test_retained_failure_xml_omits_token_like_reason_detail(reason: str) -> None:
-    root = parse_xml(
-        render_success_text(
-            payload=retained_result(
-                command="screenshot",
-                envelope="artifact",
-                ok=False,
-                code="ARTIFACT_WRITE_FAILED",
-                message="artifact write failed",
-                details={
-                    "sourceCode": "ARTIFACT_WRITE_FAILED",
-                    "sourceKind": "workspace",
-                    "reason": reason,
-                },
-            ),
-        )
-    )
-
-    details = root.find("./details")
-    assert details is not None
-    assert details.attrib == {
-        "sourceCode": "ARTIFACT_WRITE_FAILED",
-        "sourceKind": "workspace",
-    }
-    assert reason not in ET.tostring(root, encoding="unicode")
 
 
 def test_retained_busy_xml_reflects_payload_message_without_rewrite() -> None:

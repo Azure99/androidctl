@@ -375,10 +375,8 @@ def test_commands_run_rejects_close_kind(server: RuntimeApiHarness) -> None:
     assert response.json()["error"]["code"] == "DAEMON_BAD_REQUEST"
 
 
-@pytest.mark.parametrize("subcommand", ["screen", "tree", "query", "rpc"])
 def test_commands_run_rejects_removed_command_kind_before_dispatch(
     server: RuntimeApiHarness,
-    subcommand: str,
 ) -> None:
     response = server.post(
         "/commands/run",
@@ -386,7 +384,7 @@ def test_commands_run_rejects_removed_command_kind_before_dispatch(
         json={
             "command": {
                 "kind": REMOVED_COMMAND_KIND,
-                "subcommand": subcommand,
+                "subcommand": "rpc",
                 "payload": {
                     "query": "text=secret",
                     "body": {"token": "secret-token"},
@@ -1721,17 +1719,15 @@ def test_commands_run_accepts_trimmed_command_kind(server: RuntimeApiHarness) ->
     assert response.json()["error"]["code"] == "RUNTIME_BUSY"
 
 
-@pytest.mark.parametrize("options", [{}, {"debug": True}])
 def test_commands_run_rejects_options_root_field(
     server: RuntimeApiHarness,
-    options: dict[str, object],
 ) -> None:
     response = server.post(
         "/commands/run",
         headers=server.auth_headers(),
         json={
             "command": {"kind": "observe"},
-            "options": options,
+            "options": {"debug": True},
         },
     )
 

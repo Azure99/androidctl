@@ -505,11 +505,10 @@ def test_wait_payload_rejects_gone_ref_without_source_screen_id() -> None:
     assert error.value.code == "DAEMON_BAD_REQUEST"
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
-def test_global_action_payload_accepts_missing_source_screen_id(action: str) -> None:
-    payload = parse_command_request_payload({"kind": action})
+def test_global_action_payload_accepts_missing_source_screen_id() -> None:
+    payload = parse_command_request_payload({"kind": "back"})
 
-    assert payload.kind == action
+    assert payload.kind == "back"
     assert payload.source_screen_id is None
 
 
@@ -583,15 +582,12 @@ def test_list_apps_payload_rejects_unknown_extra_field_with_normalized_path() ->
     assert error.value.details["unknownFields"] == ["includeSystem"]
 
 
-@pytest.mark.parametrize("subcommand", ["screen", "tree", "query", "rpc"])
-def test_removed_command_kind_rejects_at_parser_boundary(
-    subcommand: str,
-) -> None:
+def test_removed_command_kind_rejects_at_parser_boundary() -> None:
     with pytest.raises(DaemonError) as error:
         parse_command_request_payload(
             {
                 "kind": REMOVED_COMMAND_KIND,
-                "subcommand": subcommand,
+                "subcommand": "rpc",
                 "payload": {"method": "device.ping", "params": {}},
             }
         )

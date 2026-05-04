@@ -232,8 +232,29 @@ def test_python_artifact_member_check_rejects_wheel_child_metadata(
     assert "androidctld-1.2.3.dist-info" in str(exc_info.value)
 
 
-def test_python_artifact_member_check_rejects_extra_wheel_apk_resource(
+@pytest.mark.parametrize(
+    ("archive_type", "extra_name", "expected_prefix", "expected_member"),
+    [
+        (
+            "wheel",
+            "debug.apk",
+            "wheel androidctl-1.2.3-py3-none-any.whl APK resource mismatch",
+            "androidctl/resources/debug.apk",
+        ),
+        (
+            "sdist",
+            "debug.apk",
+            "sdist androidctl-1.2.3.tar.gz APK resource mismatch",
+            "androidctl-1.2.3/androidctl/src/androidctl/resources/debug.apk",
+        ),
+    ],
+)
+def test_python_artifact_member_check_rejects_extra_apk_resource(
     tmp_path: Path,
+    archive_type: str,
+    extra_name: str,
+    expected_prefix: str,
+    expected_member: str,
 ) -> None:
     repo_root = _write_repo_fixture(tmp_path)
     paths = build_release_paths(repo_root)
@@ -241,35 +262,15 @@ def test_python_artifact_member_check_rejects_extra_wheel_apk_resource(
         paths,
         b"release-apk",
         paths.build_output_dir,
-        extra_wheel_apk_name="debug.apk",
+        extra_wheel_apk_name=extra_name if archive_type == "wheel" else None,
+        extra_sdist_apk_name=extra_name if archive_type == "sdist" else None,
     )
 
     with pytest.raises(SystemExit) as exc_info:
         inspect_python_artifact_members(paths, collect_project_artifacts(paths))
 
-    assert "wheel androidctl-1.2.3-py3-none-any.whl APK resource mismatch" in str(
-        exc_info.value
-    )
-    assert "androidctl/resources/debug.apk" in str(exc_info.value)
-
-
-def test_python_artifact_member_check_rejects_extra_sdist_apk_resource(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_repo_fixture(tmp_path)
-    paths = build_release_paths(repo_root)
-    _write_androidctl_archives_with_apk(
-        paths,
-        b"release-apk",
-        paths.build_output_dir,
-        extra_sdist_apk_name="debug.apk",
-    )
-
-    with pytest.raises(SystemExit) as exc_info:
-        inspect_python_artifact_members(paths, collect_project_artifacts(paths))
-
-    assert "sdist androidctl-1.2.3.tar.gz APK resource mismatch" in str(exc_info.value)
-    assert "androidctl/src/androidctl/resources/debug.apk" in str(exc_info.value)
+    assert expected_prefix in str(exc_info.value)
+    assert expected_member in str(exc_info.value)
 
 
 def test_python_artifact_member_check_rejects_sdist_child_metadata(

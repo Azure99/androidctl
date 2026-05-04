@@ -340,7 +340,6 @@ def assert_error_result_spine(
 
 __all__ = [
     "SOURCE_SCREEN_ABSENT",
-    "SOURCE_SCREEN_OPTIONAL",
     "SOURCE_SCREEN_REQUIRED",
     "assert_error_result_spine",
     "assert_public_result_spine",

@@ -714,23 +714,20 @@ def test_projection_failure_after_run_command_uses_static_cli_render_failed(
     assert root.attrib["command"] == "observe"
 
 
-@pytest.mark.parametrize("ok", [True, False])
 def test_stdout_output_failure_exits_environment_before_command_failure_exit(
     monkeypatch,
-    ok: bool,
 ) -> None:
     seen: dict[str, list[object]] = {"stdout": [], "stderr": []}
-    payload = semantic_result(ok=ok, command="tap", category="transition")
-    if not ok:
-        payload.update(
-            {
-                "payloadMode": "none",
-                "code": "ACTION_FAILED",
-                "message": "action failed",
-                "screen": None,
-                "nextScreenId": None,
-            }
-        )
+    payload = semantic_result(ok=False, command="tap", category="transition")
+    payload.update(
+        {
+            "payloadMode": "none",
+            "code": "ACTION_FAILED",
+            "message": "action failed",
+            "screen": None,
+            "nextScreenId": None,
+        }
+    )
 
     monkeypatch.setattr(
         "androidctl.commands.execute.render_outcome",

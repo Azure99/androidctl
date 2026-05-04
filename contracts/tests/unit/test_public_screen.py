@@ -136,53 +136,46 @@ def test_public_screen_still_accepts_role_text_nodes() -> None:
     ]
 
 
-@pytest.mark.parametrize("role", PUBLIC_NODE_ROLE_VALUES)
-def test_public_screen_accepts_each_final_role_token(role: str) -> None:
-    screen = PublicScreen.model_validate(
-        _screen_payload(
-            context_nodes=[
-                {"role": role, "label": f"{role} item"},
-            ]
+def test_public_screen_accepts_each_final_node_registry_token() -> None:
+    for role in PUBLIC_NODE_ROLE_VALUES:
+        screen = PublicScreen.model_validate(
+            _screen_payload(
+                context_nodes=[
+                    {"role": role, "label": f"{role} item"},
+                ]
+            )
         )
-    )
+        assert screen.groups[3].nodes[0].role == role
 
-    assert screen.groups[3].nodes[0].role == role
-
-
-@pytest.mark.parametrize("action", PUBLIC_NODE_ACTION_VALUES)
-def test_public_screen_accepts_each_final_action_token(action: str) -> None:
-    screen = PublicScreen.model_validate(
-        _screen_payload(
-            context_nodes=[
-                {
-                    "ref": "n1",
-                    "role": "button",
-                    "label": "Action",
-                    "actions": [action],
-                },
-            ]
+    for action in PUBLIC_NODE_ACTION_VALUES:
+        screen = PublicScreen.model_validate(
+            _screen_payload(
+                context_nodes=[
+                    {
+                        "ref": "n1",
+                        "role": "button",
+                        "label": "Action",
+                        "actions": [action],
+                    },
+                ]
+            )
         )
-    )
+        assert screen.groups[3].nodes[0].actions == (action,)
 
-    assert screen.groups[3].nodes[0].actions == (action,)
-
-
-@pytest.mark.parametrize("state", PUBLIC_NODE_STATE_VALUES)
-def test_public_screen_accepts_each_final_state_token(state: str) -> None:
-    screen = PublicScreen.model_validate(
-        _screen_payload(
-            context_nodes=[
-                {
-                    "ref": "n1",
-                    "role": "button",
-                    "label": "State",
-                    "state": [state],
-                },
-            ]
+    for state in PUBLIC_NODE_STATE_VALUES:
+        screen = PublicScreen.model_validate(
+            _screen_payload(
+                context_nodes=[
+                    {
+                        "ref": "n1",
+                        "role": "button",
+                        "label": "State",
+                        "state": [state],
+                    },
+                ]
+            )
         )
-    )
-
-    assert screen.groups[3].nodes[0].state == (state,)
+        assert screen.groups[3].nodes[0].state == (state,)
 
 
 @pytest.mark.parametrize("field_name", ["origin", "ambiguity"])
@@ -444,9 +437,6 @@ def test_public_screen_rejects_unknown_public_node_fields(field_name: str) -> No
     "submit_refs",
     [
         [""],
-        [" "],
-        ["n0"],
-        ["n01"],
         ["x1"],
         ["raw:1"],
         ["n2", "n2"],
@@ -560,32 +550,29 @@ def test_public_screen_rejects_invalid_submit_refs_screen_invariants(
         PublicScreen.model_validate(_screen_payload(context_nodes=context_nodes))
 
 
-@pytest.mark.parametrize("scroll_direction", SCROLL_DIRECTION_VALUES)
-def test_public_screen_accepts_each_scroll_direction_token(
-    scroll_direction: str,
-) -> None:
-    screen = PublicScreen.model_validate(
-        _screen_payload(
-            context_nodes=[
-                {
-                    "kind": "container",
-                    "ref": "n1",
-                    "role": "scroll-container",
-                    "label": "Results",
-                    "scrollDirections": [scroll_direction],
-                    "children": [
-                        {
-                            "ref": "n2",
-                            "role": "button",
-                            "label": "Open",
-                        }
-                    ],
-                },
-            ]
+def test_public_screen_accepts_each_scroll_direction_token() -> None:
+    for scroll_direction in SCROLL_DIRECTION_VALUES:
+        screen = PublicScreen.model_validate(
+            _screen_payload(
+                context_nodes=[
+                    {
+                        "kind": "container",
+                        "ref": "n1",
+                        "role": "scroll-container",
+                        "label": "Results",
+                        "scrollDirections": [scroll_direction],
+                        "children": [
+                            {
+                                "ref": "n2",
+                                "role": "button",
+                                "label": "Open",
+                            }
+                        ],
+                    },
+                ]
+            )
         )
-    )
-
-    assert screen.groups[3].nodes[0].scroll_directions == (scroll_direction,)
+        assert screen.groups[3].nodes[0].scroll_directions == (scroll_direction,)
 
 
 @pytest.mark.parametrize(
@@ -637,14 +624,14 @@ def test_public_screen_rejects_unknown_omitted_tokens_now(
         PublicScreen.model_validate(payload)
 
 
-@pytest.mark.parametrize("reason", OMITTED_REASON_VALUES)
-def test_public_screen_accepts_each_omitted_reason_token(reason: str) -> None:
-    payload = _screen_payload(context_nodes=[])
-    payload["omitted"] = [{"group": "targets", "reason": reason, "count": 1}]
+def test_public_screen_accepts_each_omitted_reason_token() -> None:
+    for reason in OMITTED_REASON_VALUES:
+        payload = _screen_payload(context_nodes=[])
+        payload["omitted"] = [{"group": "targets", "reason": reason, "count": 1}]
 
-    screen = PublicScreen.model_validate(payload)
+        screen = PublicScreen.model_validate(payload)
 
-    assert screen.omitted[0].reason == reason
+        assert screen.omitted[0].reason == reason
 
 
 def test_public_screen_rejects_unknown_transient_kind_now() -> None:
@@ -658,40 +645,38 @@ def test_public_screen_rejects_unknown_transient_kind_now() -> None:
         )
 
 
-@pytest.mark.parametrize("kind", TRANSIENT_KIND_VALUES)
-def test_public_screen_accepts_each_transient_kind_token(kind: str) -> None:
-    screen = PublicScreen.model_validate(
-        _screen_payload_with_transient(
-            transient_items=[
-                {"text": "Saved", "kind": kind},
-            ]
-        )
-    )
-
-    assert screen.transient[0].text == "Saved"
-    assert screen.transient[0].kind == kind
-    assert screen.model_dump(by_alias=True, mode="json")["transient"] == [
-        {"text": "Saved", "kind": kind}
-    ]
-
-
-def test_public_screen_rejects_transient_without_text() -> None:
-    with pytest.raises(ValidationError):
-        PublicScreen.model_validate(
+def test_public_screen_accepts_each_transient_kind_token() -> None:
+    for kind in TRANSIENT_KIND_VALUES:
+        screen = PublicScreen.model_validate(
             _screen_payload_with_transient(
                 transient_items=[
-                    {"label": "Saved", "kind": "toast"},
+                    {"text": "Saved", "kind": kind},
                 ]
             )
         )
 
+        assert screen.transient[0].text == "Saved"
+        assert screen.transient[0].kind == kind
+        assert screen.model_dump(by_alias=True, mode="json")["transient"] == [
+            {"text": "Saved", "kind": kind}
+        ]
 
-def test_public_screen_rejects_empty_transient_text() -> None:
+
+@pytest.mark.parametrize(
+    "transient_item",
+    [
+        {"label": "Saved", "kind": "toast"},
+        {"text": "", "kind": "toast"},
+    ],
+)
+def test_public_screen_rejects_malformed_transient_text(
+    transient_item: dict[str, object],
+) -> None:
     with pytest.raises(ValidationError):
         PublicScreen.model_validate(
             _screen_payload_with_transient(
                 transient_items=[
-                    {"text": "", "kind": "toast"},
+                    transient_item,
                 ]
             )
         )

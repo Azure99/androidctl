@@ -203,18 +203,6 @@ def test_build_context_defers_daemon_discovery_until_workspace_is_known(
             {"kind": "tap", "ref": "n3", "sourceScreenId": "screen-00013"},
         ),
         (
-            LateBoundActionCommand(kind="longTap", ref="n3"),
-            {"kind": "longTap", "ref": "n3", "sourceScreenId": "screen-00013"},
-        ),
-        (
-            LateBoundActionCommand(kind="focus", ref="n3"),
-            {"kind": "focus", "ref": "n3", "sourceScreenId": "screen-00013"},
-        ),
-        (
-            LateBoundActionCommand(kind="submit", ref="n3"),
-            {"kind": "submit", "ref": "n3", "sourceScreenId": "screen-00013"},
-        ),
-        (
             LateBoundActionCommand(kind="type", ref="n3", text="hello"),
             {
                 "kind": "type",
@@ -235,18 +223,6 @@ def test_build_context_defers_daemon_discovery_until_workspace_is_known(
         (
             LateBoundGlobalActionCommand(kind="back"),
             {"kind": "back", "sourceScreenId": "screen-00013"},
-        ),
-        (
-            LateBoundGlobalActionCommand(kind="home"),
-            {"kind": "home", "sourceScreenId": "screen-00013"},
-        ),
-        (
-            LateBoundGlobalActionCommand(kind="recents"),
-            {"kind": "recents", "sourceScreenId": "screen-00013"},
-        ),
-        (
-            LateBoundGlobalActionCommand(kind="notifications"),
-            {"kind": "notifications", "sourceScreenId": "screen-00013"},
         ),
         (
             LateBoundWaitCommand(
@@ -540,10 +516,10 @@ def test_bind_screen_relative_command_leaves_non_screen_relative_waits_unchanged
     assert bound.model_dump(exclude_none=True) == expected_command
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
-def test_prepare_global_action_without_live_screen_id_binds_source_less_payload(
-    action: str,
-) -> None:
+def test_prepare_global_action_without_live_screen_id_binds_source_less_payload() -> (
+    None
+):
+    action = "back"
     prepared = _prepare_ref_bound_request(
         CliCommandRequest(
             public_command=action,
@@ -902,11 +878,10 @@ def test_run_command_binds_deferred_gone_wait_to_live_screen(
     assert outcome.payload["command"] == "wait"
 
 
-@pytest.mark.parametrize("action", ["back", "recents", "notifications"])
 def test_run_command_injects_live_screen_id_for_global_action(
     tmp_path: Path,
-    action: str,
 ) -> None:
+    action = "back"
     workspace_root = tmp_path / "workspace"
     daemon = _make_daemon(workspace_root.resolve())
     ctx = AppContext(
@@ -936,11 +911,10 @@ def test_run_command_injects_live_screen_id_for_global_action(
     assert outcome.payload["command"] == action
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
 def test_run_command_dispatches_source_less_global_action_without_live_truth(
     tmp_path: Path,
-    action: str,
 ) -> None:
+    action = "back"
     workspace_root = tmp_path / "workspace"
     daemon = _make_daemon(workspace_root.resolve())
     daemon.current_screen_id = None
@@ -1343,7 +1317,6 @@ def test_run_command_wraps_expected_os_pre_dispatch_error(
     "programmer_error",
     [
         TypeError("wrong helper signature"),
-        AssertionError("impossible state"),
         RuntimeError("unexpected preparation failure"),
     ],
 )

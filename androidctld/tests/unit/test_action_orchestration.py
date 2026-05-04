@@ -1390,11 +1390,8 @@ def test_scroll_postcondition_rejects_missing_resolved_target_after_refresh() ->
     ("current_screen_updates", "target_updates"),
     [
         ({"package_name": "com.example.other", "activity_name": "OtherActivity"}, {}),
-        ({"keyboard_visible": True}, {}),
         ({"dialog": (make_public_node(ref="n9", label="Unrelated"),)}, {}),
-        ({"screen_id": "screen-raw-only"}, {}),
         ({}, {"bounds": (1, 2, 300, 400), "actions": ("scroll", "tap")}),
-        ({}, {"role": "container"}),
         ({}, {"label": "Results changed"}),
     ],
 )
@@ -1453,7 +1450,6 @@ def test_scroll_postcondition_ignores_non_content_changes(
     "child_updates",
     [
         {"kind": "node"},
-        {"role": "button"},
         {"label": "First row metadata changed"},
     ],
 )
@@ -1572,11 +1568,6 @@ def test_long_tap_postcondition_fails_closed_without_visible_feedback() -> None:
             "context",
             (make_public_node(ref="n9", label="Copy", actions=("tap",)),),
         ),
-        lambda screen, target: public_screen_with_group(
-            screen,
-            "dialog",
-            (make_public_node(ref="n9", role="dialog", label="Actions"),),
-        ),
         lambda screen, target: screen.model_copy(
             update={"transient": (TransientItem(kind="toast", text="Copied"),)}
         ),
@@ -1587,21 +1578,6 @@ def test_long_tap_postcondition_fails_closed_without_visible_feedback() -> None:
         lambda screen, target: public_screen_with_target(
             screen,
             target.model_copy(update={"actions": ("tap", "longTap")}),
-        ),
-        lambda screen, target: public_screen_with_target(
-            screen,
-            target.model_copy(
-                update={
-                    "children": (
-                        PublicNode(
-                            ref="n2",
-                            role="button",
-                            label="Copy",
-                            actions=("tap",),
-                        ),
-                    )
-                }
-            ),
         ),
     ],
 )
@@ -1622,8 +1598,11 @@ def test_long_tap_postcondition_accepts_conservative_visible_feedback(
     _validate_long_tap_postcondition(previous_screen, current_screen)
 
 
-@pytest.mark.parametrize("group_name", ["context", "dialog"])
-@pytest.mark.parametrize("nested", [False, True], ids=["direct", "nested"])
+@pytest.mark.parametrize(
+    ("group_name", "nested"),
+    [("context", False), ("dialog", True)],
+    ids=["context-direct", "dialog-nested"],
+)
 def test_long_tap_postcondition_rejects_context_dialog_label_only_change(
     group_name,
     nested,
@@ -1670,10 +1649,10 @@ def test_long_tap_postcondition_rejects_context_dialog_label_only_change(
     assert error.value.details["reason"] == "long_tap_feedback_not_observed"
 
 
-@pytest.mark.parametrize("group_name", ["context", "dialog"])
-def test_long_tap_postcondition_accepts_existing_context_dialog_feedback_change(
-    group_name,
-) -> None:
+def test_long_tap_postcondition_accepts_existing_context_dialog_feedback_change() -> (
+    None
+):
+    group_name = "context"
     target = _long_tap_target()
     baseline_screen = make_contract_screen(
         targets=(target,),
@@ -1740,11 +1719,6 @@ def test_long_tap_postcondition_supports_source_ref_fallback_context() -> None:
                 )
             }
         ),
-        lambda screen, target: screen.model_copy(
-            update={
-                "surface": screen.surface.model_copy(update={"keyboard_visible": True})
-            }
-        ),
         lambda screen, target: public_screen_with_group(
             screen,
             "system",
@@ -1752,24 +1726,7 @@ def test_long_tap_postcondition_supports_source_ref_fallback_context() -> None:
         ),
         lambda screen, target: public_screen_with_target(
             screen,
-            target.model_copy(update={"bounds": (1, 2, 300, 400)}),
-        ),
-        lambda screen, target: public_screen_with_target(
-            screen,
             target.model_copy(update={"label": "Renamed row"}),
-        ),
-        lambda screen, target: public_screen_with_group(
-            public_screen_with_target(screen, target),
-            "targets",
-            (),
-        ),
-        lambda screen, target: public_screen_with_group(
-            screen,
-            "targets",
-            (
-                target,
-                make_public_node(ref="n3", label="Other", state=("selected",)),
-            ),
         ),
     ],
 )

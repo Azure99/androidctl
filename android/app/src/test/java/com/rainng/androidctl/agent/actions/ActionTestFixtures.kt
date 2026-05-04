@@ -71,21 +71,6 @@ internal fun observedWindowState(
         activityName = activityName,
     )
 
-internal fun foregroundObservation(
-    packageName: String? = "com.android.settings",
-    activityName: String? = "SettingsActivity",
-    generation: Long = 0L,
-    interactive: Boolean = true,
-): ForegroundObservation =
-    ForegroundObservation(
-        state = observedWindowState(packageName = packageName, activityName = activityName),
-        generation = generation,
-        interactive = interactive,
-    )
-
-internal fun queuedForegroundObservationProvider(vararg observations: ForegroundObservation): ForegroundObservationProvider =
-    QueueForegroundObservationProvider(observations.toList())
-
 internal fun newActionPerformer(
     backend: RecordingActionBackend,
     clock: TestClock? = null,

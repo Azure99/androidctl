@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from tools.release.version_lockstep import (
@@ -431,13 +432,23 @@ def test_pypi_packaged_apk_version_evidence_drift_fails(tmp_path: Path) -> None:
     assert "versionCode" in failure.expected
 
 
-def test_pypi_packaged_apk_version_evidence_rejects_inverted_check(
+@pytest.mark.parametrize(
+    "pypi_text_kwargs",
+    [
+        {"version_code_operator": "=="},
+        {"derive_version_code_arg": '"0.0.0"'},
+        {"version_code_joiner": "and"},
+        {"version_name_suffix": " and False"},
+    ],
+)
+def test_pypi_packaged_apk_version_evidence_rejects_expression_drift(
     tmp_path: Path,
+    pypi_text_kwargs: dict[str, Any],
 ) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
         repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(version_code_operator="=="),
+        _pypi_release_text(**pypi_text_kwargs),
     )
 
     report = run_checks(repo_root)
@@ -446,13 +457,25 @@ def test_pypi_packaged_apk_version_evidence_rejects_inverted_check(
     assert failure is not None
 
 
-def test_pypi_packaged_apk_version_evidence_rejects_wrong_derivation_arg(
+@pytest.mark.parametrize(
+    "pypi_text_kwargs",
+    [
+        {"include_version_code_check": False, "include_decoy": True},
+        {
+            "include_version_code_check": False,
+            "include_decoy": True,
+            "include_early_return_before_decoy": True,
+        },
+    ],
+)
+def test_pypi_packaged_apk_version_evidence_rejects_dead_code_decoys(
     tmp_path: Path,
+    pypi_text_kwargs: dict[str, Any],
 ) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
         repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(derive_version_code_arg='"0.0.0"'),
+        _pypi_release_text(**pypi_text_kwargs),
     )
 
     report = run_checks(repo_root)
@@ -461,145 +484,22 @@ def test_pypi_packaged_apk_version_evidence_rejects_wrong_derivation_arg(
     assert failure is not None
 
 
-def test_pypi_packaged_apk_version_evidence_rejects_dead_code_decoy(
+@pytest.mark.parametrize(
+    "pypi_text_kwargs",
+    [
+        {"include_output_sha_check": False},
+        {"checksum_suffix": " and False"},
+        {"output_path_source": "paths.packaged_apk_source_path"},
+    ],
+)
+def test_pypi_packaged_apk_version_evidence_rejects_checksum_drift(
     tmp_path: Path,
+    pypi_text_kwargs: dict[str, Any],
 ) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
         repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(include_version_code_check=False, include_decoy=True),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_and_condition(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(version_code_joiner="and"),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_extra_falsey_condition(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(version_name_suffix=" and False"),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_early_return_decoy(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(
-            include_version_code_check=False,
-            include_decoy=True,
-            include_early_return_before_decoy=True,
-        ),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_try_body_return_decoy(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(
-            include_version_code_check=False,
-            include_decoy=True,
-            include_try_body_return=True,
-        ),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_try_body_guarded_return_decoy(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(
-            include_version_code_check=False,
-            include_decoy=True,
-            include_try_body_guarded_return=True,
-        ),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_missing_checksum_check(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(include_output_sha_check=False),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_weakened_checksum_condition(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(checksum_suffix=" and False"),
-    )
-
-    report = run_checks(repo_root)
-
-    failure = _find_failure(report, "PyPI packaged APK version evidence source")
-    assert failure is not None
-
-
-def test_pypi_packaged_apk_version_evidence_rejects_wrong_output_path_source(
-    tmp_path: Path,
-) -> None:
-    repo_root = _write_valid_repo(tmp_path)
-    _write_file(
-        repo_root / "tools/release/pypi_release.py",
-        _pypi_release_text(output_path_source="paths.packaged_apk_source_path"),
+        _pypi_release_text(**pypi_text_kwargs),
     )
 
     report = run_checks(repo_root)

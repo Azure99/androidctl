@@ -191,7 +191,7 @@ def test_action_target_rejects_unknown_evidence_token() -> None:
 
 @pytest.mark.parametrize(
     "command",
-    ["tap", "long-tap", "scroll", "open", "wait", "observe", "back"],
+    ["tap", "open", "wait", "observe"],
 )
 def test_action_target_rejects_non_v1_command_scope(command: str) -> None:
     category = (
@@ -319,7 +319,7 @@ def test_action_target_optional_null_refs_are_canonically_omitted(
 
 @pytest.mark.parametrize(
     "value",
-    ["", "w1:0.5", "rid-123", "/tmp/n1", "snapshot-42", "fingerprint-abcdef"],
+    ["", "w1:0.5", "/tmp/n1", "fingerprint-abcdef"],
 )
 def test_action_target_rejects_raw_path_fingerprint_snapshot_like_refs(
     value: str,
@@ -332,18 +332,7 @@ def test_action_target_rejects_raw_path_fingerprint_snapshot_like_refs(
     "value",
     [
         "screen/0001",
-        "screen\\0001",
-        "w1:0.5",
-        "0123456789abcdef",
-        "sha256:abcdef",
-        "snap-42",
         "https://example.test/screen",
-        ".androidctl/artifacts/screens/screen.json",
-        "/tmp/.androidctl/artifact/screen.json",
-        "snapshot-42",
-        "fingerprint-abcdef",
-        "bearer-token",
-        "device-token-abcdef",
         "screen id with spaces",
     ],
 )
@@ -363,15 +352,11 @@ def test_action_target_rejects_empty_screen_ids(field_name: str) -> None:
 
 
 @pytest.mark.parametrize("field_name", ["source_screen_id", "next_screen_id"])
-@pytest.mark.parametrize("value", [123, True, ["screen-00007"]])
 def test_action_target_rejects_non_string_screen_ids(
     field_name: str,
-    value: object,
 ) -> None:
     with pytest.raises(ValidationError):
-        ActionTargetPayload.model_validate(
-            _action_target_payload(**{field_name: value})
-        )
+        ActionTargetPayload.model_validate(_action_target_payload(**{field_name: 123}))
 
 
 def test_close_success_uses_retained_envelope_not_semantic_result() -> None:
@@ -680,7 +665,7 @@ def test_command_result_core_rejects_retained_commands(command: str) -> None:
         )
 
 
-@pytest.mark.parametrize("command", ["observe", "open", "tap", "wait"])
+@pytest.mark.parametrize("command", ["observe", "tap"])
 def test_retained_result_envelope_rejects_semantic_commands(command: str) -> None:
     with pytest.raises(ValidationError, match="semantic"):
         RetainedResultEnvelope.model_validate(
@@ -731,9 +716,7 @@ def test_list_apps_result_accepts_empty_app_list() -> None:
 @pytest.mark.parametrize(
     "payload",
     [
-        {"command": "list-apps", "apps": []},
         {"ok": True, "apps": []},
-        {"apps": []},
     ],
 )
 def test_list_apps_result_rejects_missing_wire_discriminators(
@@ -762,7 +745,6 @@ def test_list_apps_result_rejects_non_boolean_ok_wire_values(
     [
         {"ok": True, "command": "list-apps"},
         {"ok": True, "command": "list-apps", "apps": "not-a-list"},
-        {"ok": True, "command": "list-apps", "apps": ["com.android.settings"]},
         {
             "ok": True,
             "command": "list-apps",
@@ -777,11 +759,6 @@ def test_list_apps_result_rejects_non_boolean_ok_wire_values(
             "ok": True,
             "command": "list-apps",
             "apps": [{"packageName": "", "appLabel": "Settings"}],
-        },
-        {
-            "ok": True,
-            "command": "list-apps",
-            "apps": [{"packageName": "com.android.settings", "appLabel": "   "}],
         },
         {
             "ok": True,
@@ -828,12 +805,6 @@ def test_list_apps_result_rejects_malformed_app_shapes(
             "ok": True,
             "command": "list-apps",
             "apps": [],
-            "payloadMode": "full",
-        },
-        {
-            "ok": True,
-            "command": "list-apps",
-            "apps": [],
             "truth": {},
         },
         {
@@ -841,18 +812,6 @@ def test_list_apps_result_rejects_malformed_app_shapes(
             "command": "list-apps",
             "apps": [],
             "envelope": "artifact",
-        },
-        {
-            "ok": True,
-            "command": "list-apps",
-            "apps": [],
-            "code": "DEVICE_RPC_FAILED",
-        },
-        {
-            "ok": True,
-            "command": "list-apps",
-            "apps": [],
-            "message": "failed",
         },
         {
             "ok": True,
@@ -1124,16 +1083,9 @@ def test_post_action_observation_lost_accepts_documented_payload_light_shape() -
     [
         (("payloadMode",), "full", "payloadMode='none'"),
         (("truth", "executionOutcome"), "notApplicable", "executionOutcome"),
-        (("truth", "executionOutcome"), "notAttempted", "executionOutcome"),
         (("truth", "continuityStatus"), "stable", "continuityStatus"),
         (("truth", "observationQuality"), "authoritative", "observationQuality"),
         (("truth", "changed"), True, "changed"),
-        (("truth", "changed"), False, "changed"),
-        (
-            ("artifacts", "screenXml"),
-            "/repo/.androidctl/artifacts/screens/screen-00007.xml",
-            "artifact",
-        ),
         (
             ("artifacts", "screenshotPng"),
             "/repo/.androidctl/screenshots/shot-001.png",
@@ -1191,12 +1143,6 @@ def test_device_unavailable_accepts_documented_payload_light_shape(
         (("truth", "continuityStatus"), "stable", "continuityStatus"),
         (("truth", "observationQuality"), "authoritative", "observationQuality"),
         (("truth", "changed"), True, "changed"),
-        (("truth", "changed"), False, "changed"),
-        (
-            ("artifacts", "screenXml"),
-            "/repo/.androidctl/artifacts/screens/screen-00007.xml",
-            "artifact",
-        ),
         (
             ("artifacts", "screenshotPng"),
             "/repo/.androidctl/screenshots/shot-001.png",

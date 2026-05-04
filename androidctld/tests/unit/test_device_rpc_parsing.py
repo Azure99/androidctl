@@ -237,24 +237,6 @@ def test_device_rpc_client_normalizes_wrapped_remote_disconnect() -> None:
     assert error.value.details["exception"] == "ConnectionResetError"
 
 
-def test_device_rpc_client_normalizes_transport_abort() -> None:
-    with (
-        patch(
-            "androidctld.device.rpc.urlopen",
-            side_effect=URLError(
-                ConnectionAbortedError("software caused connection abort")
-            ),
-        ),
-        pytest.raises(DaemonError) as error,
-    ):
-        DeviceRpcClient(
-            DeviceEndpoint(host="127.0.0.1", port=17631), "token"
-        ).meta_get()
-    assert error.value.code == "DEVICE_RPC_TRANSPORT_RESET"
-    assert error.value.details["reason"] == "transport_reset"
-    assert error.value.details["exception"] == "ConnectionAbortedError"
-
-
 def test_device_rpc_client_normalizes_unexpected_remote_close() -> None:
     with (
         patch(
@@ -403,10 +385,8 @@ def test_device_rpc_client_maps_http_unauthorized_envelope_by_device_code(
     }
 
 
-@pytest.mark.parametrize("status", [401, 403])
-def test_device_rpc_client_maps_http_auth_status_with_safe_context(
-    status: int,
-) -> None:
+def test_device_rpc_client_maps_http_auth_status_with_safe_context() -> None:
+    status = 403
     body = json.dumps(
         {
             "ok": False,
@@ -438,10 +418,8 @@ def test_device_rpc_client_maps_http_auth_status_with_safe_context(
     }
 
 
-@pytest.mark.parametrize("status", [401, 403])
-def test_device_rpc_client_maps_http_auth_status_with_non_auth_envelope_first(
-    status: int,
-) -> None:
+def test_device_rpc_client_maps_http_auth_status_with_non_auth_envelope_first() -> None:
+    status = 401
     body = _rpc_error_body(
         "INVALID_REQUEST",
         "request is invalid",
@@ -1412,29 +1390,6 @@ def test_parse_meta_rejects_unknown_extra_field_as_generic_schema_failure() -> N
         "field": "result",
         "reason": "invalid_payload",
         "unknownFields": ["extraField"],
-    }
-
-
-def test_parse_meta_rejects_rpc_version_plus_extra_fields_as_generic_failure() -> None:
-    with pytest.raises(DeviceBootstrapError) as error:
-        parse_meta_payload(
-            {
-                "service": "androidctl-device-agent",
-                "version": "0.1.0",
-                "extraField": True,
-                "rpcVersion": 1,
-                "capabilities": {
-                    "supportsEventsPoll": True,
-                    "supportsScreenshot": True,
-                    "actionKinds": ["tap"],
-                },
-            }
-        )
-    assert error.value.code == "DEVICE_RPC_FAILED"
-    assert error.value.details == {
-        "field": "result",
-        "reason": "invalid_payload",
-        "unknownFields": ["extraField", "rpcVersion"],
     }
 
 

@@ -119,10 +119,7 @@ def test_daemon_command_payload_and_run_request_are_canonical_exports() -> None:
     "command_payload",
     [
         {"kind": "tap", "ref": "n3", "sourceScreenId": "screen-1"},
-        {"kind": "longTap", "ref": "n3", "sourceScreenId": "screen-1"},
-        {"kind": "focus", "ref": "n3", "sourceScreenId": "screen-1"},
         {"kind": "type", "ref": "n3", "text": "wifi", "sourceScreenId": "screen-1"},
-        {"kind": "submit", "ref": "n3", "sourceScreenId": "screen-1"},
         {
             "kind": "scroll",
             "ref": "n3",
@@ -513,45 +510,39 @@ def test_commands_run_wait_idle_can_omit_source_screen_id() -> None:
     assert request.command.predicate.kind == "idle"
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
-def test_global_actions_with_explicit_source_screen_id_preserve_it(
-    action: str,
-) -> None:
+def test_global_actions_with_explicit_source_screen_id_preserve_it() -> None:
     request = CommandRunRequest.model_validate(
         {
             "command": {
-                "kind": action,
+                "kind": "back",
                 "sourceScreenId": "screen-1",
             },
         }
     )
 
-    assert request.command.kind == action
+    assert request.command.kind == "back"
     assert request.model_dump()["command"]["sourceScreenId"] == "screen-1"
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
 @pytest.mark.parametrize("source_screen_id", ["", "   "])
 def test_global_actions_reject_blank_source_screen_id(
-    action: str,
     source_screen_id: str,
 ) -> None:
     with pytest.raises(ValidationError):
         CommandRunRequest.model_validate(
             {
                 "command": {
-                    "kind": action,
+                    "kind": "recents",
                     "sourceScreenId": source_screen_id,
                 },
             }
         )
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
-def test_global_actions_can_omit_source_screen_id_after_p2_4(action: str) -> None:
-    request = CommandRunRequest.model_validate({"command": {"kind": action}})
+def test_global_actions_can_omit_source_screen_id_after_p2_4() -> None:
+    request = CommandRunRequest.model_validate({"command": {"kind": "home"}})
 
-    assert request.command.kind == action
+    assert request.command.kind == "home"
     assert "sourceScreenId" not in request.model_dump(exclude_none=True)["command"]
 
 

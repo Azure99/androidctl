@@ -480,19 +480,71 @@ def test_list_apps_command_rejects_malformed_result_payload(
         )
 
 
-def test_semantic_command_rejects_retained_result_shape() -> None:
+@pytest.mark.parametrize(
+    ("command_request", "payload"),
+    [
+        (
+            CommandRunRequest(command=ObserveCommandPayload(kind="observe")),
+            _retained_payload(command="screenshot", envelope="artifact"),
+        ),
+        (
+            CommandRunRequest(command=ObserveCommandPayload(kind="observe")),
+            {
+                "ok": True,
+                "command": "list-apps",
+                "apps": [],
+            },
+        ),
+        (
+            CommandRunRequest(command=ScreenshotCommandPayload(kind="screenshot")),
+            {
+                "ok": True,
+                "command": "screenshot",
+                "category": "artifact",
+                "payloadMode": "full",
+                "sourceScreenId": "screen-00001",
+                "nextScreenId": "screen-00002",
+                "truth": {
+                    "executionOutcome": "notApplicable",
+                    "continuityStatus": "stable",
+                    "observationQuality": "authoritative",
+                    "changed": False,
+                },
+                "screen": _public_screen_payload("screen-00002"),
+                "warnings": [],
+                "artifacts": {},
+            },
+        ),
+        (
+            CommandRunRequest(command=ListAppsCommandPayload(kind="listApps")),
+            {
+                "ok": True,
+                "command": "list-apps",
+                "category": "observe",
+                "payloadMode": "full",
+                "truth": {
+                    "executionOutcome": "notApplicable",
+                    "continuityStatus": "stable",
+                    "observationQuality": "authoritative",
+                    "changed": False,
+                },
+                "screen": _public_screen_payload("screen-00002"),
+                "warnings": [],
+                "artifacts": {},
+            },
+        ),
+    ],
+)
+def test_run_command_rejects_incompatible_result_family(
+    command_request: CommandRunRequest,
+    payload: dict[str, object],
+) -> None:
     client = DaemonClient(
         httpx.Client(
             transport=httpx.MockTransport(
                 lambda _request: httpx.Response(
                     200,
-                    json={
-                        "ok": True,
-                        "result": _retained_payload(
-                            command="screenshot",
-                            envelope="artifact",
-                        ),
-                    },
+                    json={"ok": True, "result": payload},
                 )
             ),
             base_url="http://127.0.0.1:8765",
@@ -502,174 +554,7 @@ def test_semantic_command_rejects_retained_result_shape() -> None:
     )
 
     with pytest.raises(DaemonProtocolError, match="invalid commands/run"):
-        client.run_command(
-            request=CommandRunRequest(command=ObserveCommandPayload(kind="observe"))
-        )
-
-
-def test_retained_command_rejects_semantic_result_shape() -> None:
-    client = DaemonClient(
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _request: httpx.Response(
-                    200,
-                    json={
-                        "ok": True,
-                        "result": {
-                            "ok": True,
-                            "command": "screenshot",
-                            "category": "artifact",
-                            "payloadMode": "full",
-                            "sourceScreenId": "screen-00001",
-                            "nextScreenId": "screen-00002",
-                            "truth": {
-                                "executionOutcome": "notApplicable",
-                                "continuityStatus": "stable",
-                                "observationQuality": "authoritative",
-                                "changed": False,
-                            },
-                            "screen": _public_screen_payload("screen-00002"),
-                            "warnings": [],
-                            "artifacts": {},
-                        },
-                    },
-                )
-            ),
-            base_url="http://127.0.0.1:8765",
-        ),
-        owner_id="shell:self:1",
-        token="secret",
-    )
-
-    with pytest.raises(DaemonProtocolError, match="invalid commands/run"):
-        client.run_command(
-            request=CommandRunRequest(
-                command=ScreenshotCommandPayload(kind="screenshot")
-            )
-        )
-
-
-def test_list_apps_command_rejects_semantic_result_shape() -> None:
-    client = DaemonClient(
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _request: httpx.Response(
-                    200,
-                    json={
-                        "ok": True,
-                        "result": {
-                            "ok": True,
-                            "command": "list-apps",
-                            "category": "observe",
-                            "payloadMode": "full",
-                            "truth": {
-                                "executionOutcome": "notApplicable",
-                                "continuityStatus": "stable",
-                                "observationQuality": "authoritative",
-                                "changed": False,
-                            },
-                            "screen": _public_screen_payload("screen-00002"),
-                            "warnings": [],
-                            "artifacts": {},
-                        },
-                    },
-                )
-            ),
-            base_url="http://127.0.0.1:8765",
-        ),
-        owner_id="shell:self:1",
-        token="secret",
-    )
-
-    with pytest.raises(DaemonProtocolError, match="invalid commands/run"):
-        client.run_command(
-            request=CommandRunRequest(command=ListAppsCommandPayload(kind="listApps"))
-        )
-
-
-def test_list_apps_command_rejects_retained_result_shape() -> None:
-    client = DaemonClient(
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _request: httpx.Response(
-                    200,
-                    json={
-                        "ok": True,
-                        "result": _retained_payload(
-                            command="screenshot",
-                            envelope="artifact",
-                        ),
-                    },
-                )
-            ),
-            base_url="http://127.0.0.1:8765",
-        ),
-        owner_id="shell:self:1",
-        token="secret",
-    )
-
-    with pytest.raises(DaemonProtocolError, match="invalid commands/run"):
-        client.run_command(
-            request=CommandRunRequest(command=ListAppsCommandPayload(kind="listApps"))
-        )
-
-
-def test_semantic_command_rejects_list_apps_result_shape() -> None:
-    client = DaemonClient(
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _request: httpx.Response(
-                    200,
-                    json={
-                        "ok": True,
-                        "result": {
-                            "ok": True,
-                            "command": "list-apps",
-                            "apps": [],
-                        },
-                    },
-                )
-            ),
-            base_url="http://127.0.0.1:8765",
-        ),
-        owner_id="shell:self:1",
-        token="secret",
-    )
-
-    with pytest.raises(DaemonProtocolError, match="invalid commands/run"):
-        client.run_command(
-            request=CommandRunRequest(command=ObserveCommandPayload(kind="observe"))
-        )
-
-
-def test_retained_command_rejects_list_apps_result_shape() -> None:
-    client = DaemonClient(
-        httpx.Client(
-            transport=httpx.MockTransport(
-                lambda _request: httpx.Response(
-                    200,
-                    json={
-                        "ok": True,
-                        "result": {
-                            "ok": True,
-                            "command": "list-apps",
-                            "apps": [],
-                        },
-                    },
-                )
-            ),
-            base_url="http://127.0.0.1:8765",
-        ),
-        owner_id="shell:self:1",
-        token="secret",
-    )
-
-    with pytest.raises(DaemonProtocolError, match="invalid commands/run"):
-        client.run_command(
-            request=CommandRunRequest(
-                command=ScreenshotCommandPayload(kind="screenshot")
-            )
-        )
+        client.run_command(request=command_request)
 
 
 def test_retained_command_envelope_mismatch_raises_protocol_error() -> None:

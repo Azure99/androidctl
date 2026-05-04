@@ -350,14 +350,6 @@ def make_compiled_screen(
     )
 
 
-def compile_screen(
-    snapshot: RawSnapshot,
-    *,
-    sequence: int = 1,
-) -> CompiledScreen:
-    return SemanticCompiler().compile(sequence, snapshot)
-
-
 def install_snapshot_screen(
     runtime: object,
     snapshot: RawSnapshot,
@@ -365,7 +357,7 @@ def install_snapshot_screen(
     sequence: int = 1,
     include_artifacts: bool = True,
 ) -> CompiledScreen:
-    compiled_screen = compile_screen(snapshot, sequence=sequence)
+    compiled_screen = SemanticCompiler().compile(sequence, snapshot)
     public_screen = compiled_screen.to_public_screen()
     artifacts = (
         build_screen_artifacts(runtime, screen_id=public_screen.screen_id)

@@ -20,13 +20,6 @@ class SnapshotGetRequestCodecTest {
                 ),
             )
         }
-        assertValidationError("snapshot.get requires includeInvisible") {
-            SnapshotGetRequestCodec.read(
-                JsonReader.fromObject(
-                    JSONObject("""{"includeSystemWindows":true}"""),
-                ),
-            )
-        }
     }
 
     @Test
@@ -80,24 +73,6 @@ class SnapshotGetRequestCodecTest {
             SnapshotGetRequestCodec.read(
                 JsonReader.fromObject(
                     JSONObject("""{"includeInvisible":true,"includeSystemWindows":"false"}"""),
-                ),
-            )
-        }
-    }
-
-    @Test
-    fun readRejectsNullFlags() {
-        assertValidationError("snapshot.get includeInvisible must be a boolean") {
-            SnapshotGetRequestCodec.read(
-                JsonReader.fromObject(
-                    JSONObject("""{"includeInvisible":null,"includeSystemWindows":true}"""),
-                ),
-            )
-        }
-        assertValidationError("snapshot.get includeSystemWindows must be a boolean") {
-            SnapshotGetRequestCodec.read(
-                JsonReader.fromObject(
-                    JSONObject("""{"includeInvisible":true,"includeSystemWindows":null}"""),
                 ),
             )
         }

@@ -128,8 +128,6 @@ def patch_cli_context(
 
 
 __all__ = [
-    "BaseFakeDaemon",
-    "RecordingFakeDaemon",
     "ScriptedRecordingDaemon",
     "patch_cli_context",
 ]

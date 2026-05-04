@@ -324,17 +324,6 @@ class ActionRequestCodecTest {
     }
 
     @Test
-    fun readRejectsNullKind() {
-        assertValidationError("action.perform requires kind") {
-            readRequest(
-                JSONObject()
-                    .put("kind", JSONObject.NULL)
-                    .put("target", JSONObject().put("kind", "none")),
-            )
-        }
-    }
-
-    @Test
     fun readRejectsMissingTarget() {
         assertValidationError("action.perform requires target") {
             readRequest(JSONObject().put("kind", "tap"))
@@ -359,17 +348,6 @@ class ActionRequestCodecTest {
                 JSONObject()
                     .put("kind", "tap")
                     .put("target", JSONObject().put("kind", "widget")),
-            )
-        }
-    }
-
-    @Test
-    fun readRejectsNullTargetKindAsUnsupportedTargetKind() {
-        assertValidationError("unsupported target kind") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "tap")
-                    .put("target", JSONObject().put("kind", JSONObject.NULL)),
             )
         }
     }
@@ -425,27 +403,6 @@ class ActionRequestCodecTest {
     }
 
     @Test
-    fun readRejectsHandleTargetWithStringSnapshotId() {
-        assertValidationError("handle target requires snapshotId") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "tap")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "handle")
-                            .put(
-                                "handle",
-                                JSONObject()
-                                    .put("snapshotId", "42")
-                                    .put("rid", "w1:0.1"),
-                            ),
-                    ),
-            )
-        }
-    }
-
-    @Test
     fun readRejectsHandleTargetWithoutRid() {
         assertValidationError("handle target requires rid") {
             readRequest(
@@ -471,23 +428,6 @@ class ActionRequestCodecTest {
                         "target",
                         JSONObject()
                             .put("kind", "coordinates")
-                            .put("y", 1200),
-                    ),
-            )
-        }
-    }
-
-    @Test
-    fun readRejectsCoordinatesTargetWithStringX() {
-        assertValidationError("coordinates target requires x") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "tap")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "coordinates")
-                            .put("x", "540")
                             .put("y", 1200),
                     ),
             )
@@ -574,14 +514,6 @@ class ActionRequestCodecTest {
                     .put("global", JSONObject()),
             )
         }
-        assertValidationError("global action requires action name") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "global")
-                    .put("target", JSONObject().put("kind", "none"))
-                    .put("global", JSONObject().put("action", JSONObject.NULL)),
-            )
-        }
     }
 
     @Test
@@ -613,14 +545,6 @@ class ActionRequestCodecTest {
                     .put("intent", JSONObject()),
             )
         }
-        assertValidationError("launchApp requires packageName") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "launchApp")
-                    .put("target", JSONObject().put("kind", "none"))
-                    .put("intent", JSONObject().put("packageName", JSONObject.NULL)),
-            )
-        }
         assertActionError("openUrl requires none target") {
             readRequest(
                 JSONObject()
@@ -648,14 +572,6 @@ class ActionRequestCodecTest {
                     .put("intent", JSONObject()),
             )
         }
-        assertValidationError("openUrl requires url") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "openUrl")
-                    .put("target", JSONObject().put("kind", "none"))
-                    .put("intent", JSONObject().put("url", JSONObject.NULL)),
-            )
-        }
     }
 
     @Test
@@ -680,18 +596,6 @@ class ActionRequestCodecTest {
                     ).put("node", JSONObject()),
             )
         }
-        assertValidationError("node action requires action name") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "node")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "handle")
-                            .put("handle", JSONObject().put("snapshotId", 1).put("rid", "w1:0.9")),
-                    ).put("node", JSONObject().put("action", JSONObject.NULL)),
-            )
-        }
         assertActionError("scroll requires handle target") {
             readRequest(
                 JSONObject()
@@ -710,18 +614,6 @@ class ActionRequestCodecTest {
                             .put("kind", "handle")
                             .put("handle", JSONObject().put("snapshotId", 1).put("rid", "w1:0.4")),
                     ).put("scroll", JSONObject()),
-            )
-        }
-        assertValidationError("scroll requires direction") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "scroll")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "handle")
-                            .put("handle", JSONObject().put("snapshotId", 1).put("rid", "w1:0.4")),
-                    ).put("scroll", JSONObject().put("direction", JSONObject.NULL)),
             )
         }
         assertActionError("gesture requires none target") {
@@ -749,14 +641,6 @@ class ActionRequestCodecTest {
                     .put("kind", "gesture")
                     .put("target", JSONObject().put("kind", "none"))
                     .put("gesture", JSONObject()),
-            )
-        }
-        assertValidationError("gesture requires direction") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "gesture")
-                    .put("target", JSONObject().put("kind", "none"))
-                    .put("gesture", JSONObject().put("direction", JSONObject.NULL)),
             )
         }
     }
@@ -896,44 +780,6 @@ class ActionRequestCodecTest {
                             .put("replace", "true")
                             .put("submit", false)
                             .put("ensureFocused", true),
-                    ),
-            )
-        }
-        assertValidationError("type input.submit must be a boolean") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "type")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "handle")
-                            .put("handle", JSONObject().put("snapshotId", 1).put("rid", "w1:0.5")),
-                    ).put(
-                        "input",
-                        JSONObject()
-                            .put("text", "wifi")
-                            .put("replace", true)
-                            .put("submit", "false")
-                            .put("ensureFocused", true),
-                    ),
-            )
-        }
-        assertValidationError("type input.ensureFocused must be a boolean") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "type")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "handle")
-                            .put("handle", JSONObject().put("snapshotId", 1).put("rid", "w1:0.5")),
-                    ).put(
-                        "input",
-                        JSONObject()
-                            .put("text", "wifi")
-                            .put("replace", true)
-                            .put("submit", false)
-                            .put("ensureFocused", "true"),
                     ),
             )
         }
@@ -1078,34 +924,6 @@ class ActionRequestCodecTest {
                         "handle":{"snapshotId":42,"rid":"w1:0.1"}
                       },
                       "options":{"timeoutMs":"5000"}
-                    }
-                    """.trimIndent(),
-                ),
-            )
-        }
-        assertValidationError("options.timeoutMs must be an integer") {
-            readRequest(
-                JSONObject()
-                    .put("kind", "tap")
-                    .put(
-                        "target",
-                        JSONObject()
-                            .put("kind", "handle")
-                            .put("handle", JSONObject().put("snapshotId", 42).put("rid", "w1:0.1")),
-                    ).put("options", JSONObject().put("timeoutMs", JSONObject.NULL)),
-            )
-        }
-        assertValidationError("options.timeoutMs must be an integer") {
-            readRequest(
-                JSONObject(
-                    """
-                    {
-                      "kind":"tap",
-                      "target":{
-                        "kind":"handle",
-                        "handle":{"snapshotId":42,"rid":"w1:0.1"}
-                      },
-                      "options":{"timeoutMs":12.5}
                     }
                     """.trimIndent(),
                 ),

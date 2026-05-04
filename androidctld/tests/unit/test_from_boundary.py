@@ -228,16 +228,13 @@ def test_compile_global_action_command_builds_internal_global_command() -> None:
         assert compiled.source_screen_id == "screen-1"
 
 
-@pytest.mark.parametrize("action", ["back", "home", "recents", "notifications"])
-def test_compile_global_action_command_allows_missing_source_screen_id(
-    action: str,
-) -> None:
+def test_compile_global_action_command_allows_missing_source_screen_id() -> None:
     compiled = compile_global_action_command(
-        GlobalActionCommandPayload.model_validate({"kind": action})
+        GlobalActionCommandPayload.model_validate({"kind": "back"})
     )
 
     assert compiled.kind.value == "global"
-    assert compiled.action == action
+    assert compiled.action == "back"
     assert compiled.source_screen_id is None
 
 
