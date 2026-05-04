@@ -4,8 +4,6 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 
 import pytest
-from androidctl_contracts.daemon_api import RuntimeGetResult, RuntimePayload
-from androidctl_contracts.public_screen import PUBLIC_NODE_ROLE_VALUES
 from pydantic import BaseModel, ValidationError
 
 from androidctl.errors.models import PublicError
@@ -16,6 +14,8 @@ from androidctl.renderers.xml import (
     render_xml,
 )
 from androidctl.renderers.xml_projection import project_xml_payload
+from androidctl_contracts.daemon_api import RuntimeGetResult, RuntimePayload
+from androidctl_contracts.public_screen import PUBLIC_NODE_ROLE_VALUES
 from tests.support.semantic_contract import (
     assert_error_result_spine,
     assert_retained_result_spine,

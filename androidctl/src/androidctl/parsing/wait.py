@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from androidctl.command_payloads import (
+    CliWaitPredicatePayload,
+    LateBoundScreenRelativePredicate,
+)
+from androidctl.parsing.refs import parse_ref
+from androidctl.parsing.screen_id import parse_screen_id_override
 from androidctl_contracts.daemon_api import (
     AppPredicatePayload,
     GonePredicatePayload,
@@ -7,13 +13,6 @@ from androidctl_contracts.daemon_api import (
     ScreenChangePredicatePayload,
     TextPresentPredicatePayload,
 )
-
-from androidctl.command_payloads import (
-    CliWaitPredicatePayload,
-    LateBoundScreenRelativePredicate,
-)
-from androidctl.parsing.refs import parse_ref
-from androidctl.parsing.screen_id import parse_screen_id_override
 
 _WAIT_PREDICATES = {"app", "gone", "idle", "screen-change", "text-present"}
 

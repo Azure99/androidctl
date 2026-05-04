@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import pytest
+
+from androidctl.command_views import (
+    command_view_for_public_command,
+    help_order_for_public_command,
+    pre_dispatch_execution_outcome_for_public_command,
+)
+from androidctl.commands.actions import _ACTION_COMMAND_SPECS
 from androidctl_contracts.command_catalog import (
     PUBLIC_COMMAND_NAMES,
     daemon_kind_for_public_command,
@@ -9,13 +16,6 @@ from androidctl_contracts.command_catalog import (
     retained_envelope_kind_for_public_command,
 )
 from androidctl_contracts.vocabulary import PublicResultFamily
-
-from androidctl.command_views import (
-    command_view_for_public_command,
-    help_order_for_public_command,
-    pre_dispatch_execution_outcome_for_public_command,
-)
-from androidctl.commands.actions import _ACTION_COMMAND_SPECS
 
 _EXPECTED_COMMAND_VIEWS = (
     ("observe", 0, "notApplicable", "notApplicable"),

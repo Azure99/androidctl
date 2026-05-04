@@ -4,6 +4,9 @@ import json
 from typing import Any, TypeVar
 
 import httpx
+from pydantic import BaseModel, ValidationError
+
+from androidctl import __version__ as ANDROIDCTL_VERSION
 from androidctl_contracts.command_catalog import (
     entry_for_daemon_kind,
     runtime_close_entry,
@@ -25,9 +28,6 @@ from androidctl_contracts.daemon_api import (
 )
 from androidctl_contracts.user_state import ActiveDaemonRecord
 from androidctl_contracts.vocabulary import PublicResultFamily
-from pydantic import BaseModel, ValidationError
-
-from androidctl import __version__ as ANDROIDCTL_VERSION
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 CommandResultPayload = CommandResultCore | RetainedResultEnvelope | ListAppsResult

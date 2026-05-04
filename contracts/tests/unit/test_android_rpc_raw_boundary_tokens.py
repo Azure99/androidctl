@@ -5,39 +5,38 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 FIXTURE_PATH = (
     Path(__file__).resolve().parents[1]
     / "fixtures"
     / "android_rpc_raw_boundary_tokens.json"
 )
 REPO_ROOT = Path(__file__).resolve().parents[3]
+PRIVATE_DOCS_ROOT = REPO_ROOT / "docs"
 DOC_TOKEN_LISTS = {
-    "hostRawCallableMethods": REPO_ROOT
-    / "docs"
+    "hostRawCallableMethods": PRIVATE_DOCS_ROOT
     / "android"
     / "rpc"
     / "transport_and_envelope_contract.md",
-    "daemonTypedMethods": REPO_ROOT
-    / "docs"
+    "daemonTypedMethods": PRIVATE_DOCS_ROOT
     / "android"
     / "rpc"
     / "transport_and_envelope_contract.md",
-    "daemonWrapperBackedMethods": REPO_ROOT
-    / "docs"
+    "daemonWrapperBackedMethods": PRIVATE_DOCS_ROOT
     / "android"
     / "rpc"
     / "transport_and_envelope_contract.md",
-    "androidRpcErrorCodes": REPO_ROOT
-    / "docs"
+    "androidRpcErrorCodes": PRIVATE_DOCS_ROOT
     / "android"
     / "rpc"
     / "transport_and_envelope_contract.md",
-    "actionKinds": REPO_ROOT / "docs" / "android" / "rpc" / "action_contract.md",
-    "targetKinds": REPO_ROOT / "docs" / "android" / "rpc" / "action_contract.md",
-    "nodeActions": REPO_ROOT / "docs" / "android" / "rpc" / "action_contract.md",
-    "globalActions": REPO_ROOT / "docs" / "android" / "rpc" / "action_contract.md",
-    "scrollDirections": REPO_ROOT / "docs" / "android" / "rpc" / "action_contract.md",
-    "gestureDirections": REPO_ROOT / "docs" / "android" / "rpc" / "action_contract.md",
+    "actionKinds": PRIVATE_DOCS_ROOT / "android" / "rpc" / "action_contract.md",
+    "targetKinds": PRIVATE_DOCS_ROOT / "android" / "rpc" / "action_contract.md",
+    "nodeActions": PRIVATE_DOCS_ROOT / "android" / "rpc" / "action_contract.md",
+    "globalActions": PRIVATE_DOCS_ROOT / "android" / "rpc" / "action_contract.md",
+    "scrollDirections": PRIVATE_DOCS_ROOT / "android" / "rpc" / "action_contract.md",
+    "gestureDirections": PRIVATE_DOCS_ROOT / "android" / "rpc" / "action_contract.md",
 }
 TOKEN_LIST_KEYS = {
     "hostRawCallableMethods",
@@ -82,6 +81,14 @@ def _documented_tokens(path: Path, key: str) -> list[str]:
     return tokens
 
 
+def _private_docs_checkout_present() -> bool:
+    return PRIVATE_DOCS_ROOT.exists()
+
+
+def _missing_private_doc_paths() -> list[Path]:
+    return sorted(path for path in set(DOC_TOKEN_LISTS.values()) if not path.is_file())
+
+
 def test_android_rpc_raw_boundary_tokens_fixture_has_expected_shape() -> None:
     manifest = _load_fixture()
 
@@ -114,6 +121,16 @@ def test_android_rpc_raw_boundary_method_partitions_are_consistent() -> None:
 
 
 def test_android_rpc_raw_boundary_tokens_are_documented() -> None:
+    if not _private_docs_checkout_present():
+        pytest.skip("private docs checkout is not present")
+    assert PRIVATE_DOCS_ROOT.is_dir(), f"{PRIVATE_DOCS_ROOT} must be a directory"
+    missing_paths = _missing_private_doc_paths()
+    assert (
+        not missing_paths
+    ), "private docs checkout is missing required token docs: " + ", ".join(
+        str(path) for path in missing_paths
+    )
+
     manifest = _load_fixture()
 
     assert set(DOC_TOKEN_LISTS) == TOKEN_LIST_KEYS

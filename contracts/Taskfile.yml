@@ -3,20 +3,20 @@ tasks:
   test:
     desc: Run contracts tests
     cmds:
-      - python -m pytest
+      - python -m pytest contracts/tests
 
   lint:
     desc: Run contracts lint and type checks
     cmds:
-      - ruff check .
-      - black --check .
-      - mypy src
+      - ruff check contracts/src contracts/tests
+      - black --check contracts/src contracts/tests
+      - mypy contracts/src
 
   format:
     desc: Auto-format contracts sources
     cmds:
-      - ruff check --fix .
-      - black .
+      - ruff check --fix contracts/src contracts/tests
+      - black contracts/src contracts/tests
 
   quality:
     desc: Run contracts quality gate

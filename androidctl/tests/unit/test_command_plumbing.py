@@ -6,12 +6,12 @@ from typing import Annotated
 import click
 import pytest
 import typer
-from androidctl_contracts.daemon_api import ObserveCommandPayload
 from pydantic import BaseModel, StringConstraints
 
 from androidctl.cli_options import CliOptions
 from androidctl.commands import run_pipeline
 from androidctl.commands.plumbing import build_and_run_command
+from androidctl_contracts.daemon_api import ObserveCommandPayload
 
 
 def _ctx(options: CliOptions) -> typer.Context:

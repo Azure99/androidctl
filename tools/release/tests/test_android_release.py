@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import hashlib
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-
 from tools.release.android_release import (
     APK_VERIFY_LOG_NAME,
-    CHECKSUMS_NAME,
     CHECKSUM_VERIFY_LOG_NAME,
+    CHECKSUMS_NAME,
     PUBLIC_APK_TEMPLATE,
     build_release_paths,
     create_release_bundle,
@@ -91,7 +91,7 @@ def test_create_release_bundle_contains_expected_staged_entries(tmp_path: Path) 
         )
 
 
-def test_run_checksum_verification_writes_sha256sum_compatible_log(
+def test_run_checksum_verification_binds_file_name_and_sha256(
     tmp_path: Path,
 ) -> None:
     repo_root = _write_repo_fixture(tmp_path)
@@ -101,7 +101,10 @@ def test_run_checksum_verification_writes_sha256sum_compatible_log(
 
     run_checksum_verification(paths)
 
+    apk_sha256 = hashlib.sha256(paths.staged_apk_path.read_bytes()).hexdigest()
     assert paths.checksum_verify_log_path.read_text(encoding="utf-8") == (
+        f"verified_file={paths.staged_apk_path.name}\n"
+        f"verified_sha256={apk_sha256}\n"
         f"{paths.staged_apk_path.name}: OK\n"
     )
 
@@ -182,13 +185,20 @@ def test_main_verify_refreshes_only_verification_logs(
 
     exit_code = main(["--repo-root", str(repo_root), "verify"])
 
+    apk_sha256 = hashlib.sha256(paths.staged_apk_path.read_bytes()).hexdigest()
     assert exit_code == 0
     assert paths.staged_apk_path.read_bytes() == original_apk_bytes
     assert paths.checksums_path.read_text(encoding="utf-8") == original_checksums_text
     assert paths.checksum_verify_log_path.read_text(encoding="utf-8") == (
+        f"verified_file={paths.staged_apk_path.name}\n"
+        f"verified_sha256={apk_sha256}\n"
         f"{paths.staged_apk_path.name}: OK\n"
     )
-    assert paths.apk_verify_log_path.read_text(encoding="utf-8") == "signing ok\n"
+    assert paths.apk_verify_log_path.read_text(encoding="utf-8") == (
+        f"verified_file={paths.staged_apk_path.name}\n"
+        f"verified_sha256={apk_sha256}\n"
+        "signing ok\n"
+    )
     stdout = capsys.readouterr().out
     assert "wrote verify log" in stdout
     assert "wrote checksum check log" in stdout

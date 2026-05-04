@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from androidctl_contracts.daemon_api import OpenAppTargetPayload, OpenUrlTargetPayload
 
 from androidctl.parsing.open_target import parse_open_target
+from androidctl_contracts.daemon_api import OpenAppTargetPayload, OpenUrlTargetPayload
 
 
 @pytest.mark.parametrize(

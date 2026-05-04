@@ -8,8 +8,6 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import httpx
-from androidctl_contracts.paths import daemon_state_root
-from androidctl_contracts.user_state import ActiveDaemonRecord
 from pydantic import ValidationError
 
 from androidctl.daemon.client import (
@@ -21,6 +19,8 @@ from androidctl.daemon.client import (
 )
 from androidctl.daemon.launcher import resolve_launch_spec
 from androidctl.daemon.owner import derive_owner_id
+from androidctl_contracts.paths import daemon_state_root
+from androidctl_contracts.user_state import ActiveDaemonRecord
 
 
 def resolve_daemon_client(

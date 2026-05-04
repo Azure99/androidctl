@@ -3,13 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from androidctl_contracts.daemon_api import (
-    AppPredicatePayload,
-    GlobalActionCommandPayload,
-    GonePredicatePayload,
-    ScreenChangePredicatePayload,
-    WaitCommandPayload,
-)
 
 from androidctl.command_payloads import (
     CliCommandPayload,
@@ -22,6 +15,13 @@ from androidctl.command_payloads import (
     build_scroll_command,
     build_type_command,
     build_wait_command,
+)
+from androidctl_contracts.daemon_api import (
+    AppPredicatePayload,
+    GlobalActionCommandPayload,
+    GonePredicatePayload,
+    ScreenChangePredicatePayload,
+    WaitCommandPayload,
 )
 
 

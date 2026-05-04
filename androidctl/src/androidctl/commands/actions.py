@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Annotated, Literal, cast
 
 import typer
-from androidctl_contracts.command_catalog import daemon_kind_for_public_command
 
 from androidctl.command_payloads import (
     SCROLL_DIRECTIONS,
@@ -20,6 +19,7 @@ from androidctl.commands.execute import emit_usage_error
 from androidctl.commands.plumbing import build_and_run_command
 from androidctl.parsing.refs import parse_ref
 from androidctl.parsing.screen_id import parse_screen_id_override
+from androidctl_contracts.command_catalog import daemon_kind_for_public_command
 
 RefActionKind = Literal["tap", "longTap", "focus", "submit"]
 GlobalActionKind = Literal["back", "home", "recents", "notifications"]

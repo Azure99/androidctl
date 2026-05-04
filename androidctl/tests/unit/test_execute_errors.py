@@ -5,7 +5,6 @@ from pathlib import Path
 import httpx
 import pytest
 import typer
-from androidctl_contracts.daemon_api import ObserveCommandPayload
 from typer.testing import CliRunner
 
 from androidctl.app import app
@@ -23,6 +22,7 @@ from androidctl.daemon.client import (
 )
 from androidctl.exit_codes import ExitCode
 from androidctl.output import CLI_OUTPUT_FAILED, CLI_RENDER_FAILED, CliOutputError
+from androidctl_contracts.daemon_api import ObserveCommandPayload
 from tests.support import semantic_result
 from tests.support.semantic_contract import (
     assert_error_result_spine,

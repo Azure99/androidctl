@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from androidctl_contracts.daemon_api import ConnectCommandPayload, ConnectionPayload
 
 from androidctl.cli_options import CliOptions
 from androidctl.commands import run_pipeline
 from androidctl.commands.execute import emit_usage_error
 from androidctl.commands.plumbing import build_and_run_command
+from androidctl_contracts.daemon_api import ConnectCommandPayload, ConnectionPayload
 
 
 def register(app: typer.Typer) -> None:

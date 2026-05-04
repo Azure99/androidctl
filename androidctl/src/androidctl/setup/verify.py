@@ -4,11 +4,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from androidctl_contracts.daemon_api import ConnectCommandPayload, ConnectionPayload
-
 from androidctl.commands import run_pipeline
 from androidctl.errors.mapping import map_exception
 from androidctl.setup import adb as setup_adb
+from androidctl_contracts.daemon_api import ConnectCommandPayload, ConnectionPayload
 
 
 @dataclass(frozen=True)

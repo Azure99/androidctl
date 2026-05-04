@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from androidctl_contracts.daemon_api import ObserveCommandPayload
 
 from androidctl.commands import run_pipeline
 from androidctl.commands.plumbing import build_and_run_command
+from androidctl_contracts.daemon_api import ObserveCommandPayload
 
 
 def register(app: typer.Typer) -> None:

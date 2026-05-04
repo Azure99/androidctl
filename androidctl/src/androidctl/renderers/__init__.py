@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import TypeAlias
 
+from pydantic import BaseModel
+
+from androidctl.renderers._paths import normalize_public_path
 from androidctl_contracts.command_catalog import entry_for_result_command
 from androidctl_contracts.command_results import (
     CommandResultCore,
@@ -13,9 +16,6 @@ from androidctl_contracts.command_results import (
     dump_canonical_command_result,
 )
 from androidctl_contracts.vocabulary import PublicResultFamily
-from pydantic import BaseModel
-
-from androidctl.renderers._paths import normalize_public_path
 
 _PATH_KEYS = {"screenshotPng", "screenXml"}
 RenderPayload: TypeAlias = BaseModel | Mapping[str, object]

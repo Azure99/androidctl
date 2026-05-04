@@ -3,18 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from androidctl_contracts.command_results import (
-    CommandResultCore,
-    ListAppsResult,
-    RetainedResultEnvelope,
-)
-from androidctl_contracts.daemon_api import CommandRunRequest, RuntimePayload
 from typer.testing import CliRunner
 
 from androidctl.app import app
 from androidctl.commands.run_pipeline import AppContext
 from androidctl.daemon.client import DaemonApiError
 from androidctl.exit_codes import ExitCode
+from androidctl_contracts.command_results import (
+    CommandResultCore,
+    ListAppsResult,
+    RetainedResultEnvelope,
+)
+from androidctl_contracts.daemon_api import CommandRunRequest, RuntimePayload
 from tests.support import (
     SOURCE_SCREEN_REQUIRED,
     assert_error_result_spine,

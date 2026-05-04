@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from androidctl_contracts.command_results import RetainedResultEnvelope
-from androidctl_contracts.daemon_api import CommandRunRequest
 
 from androidctl.daemon.client import DaemonApiError
 from androidctl.setup import verify
+from androidctl_contracts.command_results import RetainedResultEnvelope
+from androidctl_contracts.daemon_api import CommandRunRequest
 from tests.support import retained_result
 from tests.support.daemon_fakes import ScriptedRecordingDaemon, patch_cli_context
 

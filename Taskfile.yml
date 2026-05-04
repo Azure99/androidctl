@@ -6,13 +6,13 @@ includes:
     dir: ./android
   androidctld:
     taskfile: ./androidctld/Taskfile.yml
-    dir: ./androidctld
+    dir: .
   androidctl:
     taskfile: ./androidctl/Taskfile.yml
-    dir: ./androidctl
+    dir: .
   contracts:
     taskfile: ./contracts/Taskfile.yml
-    dir: ./contracts
+    dir: .
 
 tasks:
   python:
@@ -127,12 +127,13 @@ tasks:
     cmds:
       - task: release:version-check
       - task: android:release:checksum
+      - task: release:android:verify
       - task: python
         vars:
           PYTHON_ARGS: -m tools.release.pypi_release build
 
   release:pypi:check:
-    desc: Run twine check and populate the local PyPI wheelhouse
+    desc: Run twine check for the built local PyPI artifacts
     cmds:
       - task: release:pypi:build
       - task: python
@@ -140,7 +141,7 @@ tasks:
           PYTHON_ARGS: -m tools.release.pypi_release check
 
   release:pypi:install:
-    desc: Install staged androidctl entry wheel from the local wheelhouse into a throwaway venv
+    desc: Install the built androidctl wheel into a throwaway venv
     cmds:
       - task: release:pypi:check
       - task: python
@@ -148,16 +149,6 @@ tasks:
           PYTHON_ARGS: -m tools.release.pypi_release install
 
   release:pypi:prepare:
-    desc: Build, check, install, and record dry-run publish evidence for the local PyPI candidate
+    desc: Build, check, and install the local PyPI candidate
     cmds:
-      - task: release:version-check
       - task: release:pypi:install
-      - task: release:pypi:publish:dry-run
-
-  release:pypi:publish:dry-run:
-    desc: Read the existing wheelhouse and record the intended PyPI publish order without uploading
-    cmds:
-      - task: release:version-check
-      - task: python
-        vars:
-          PYTHON_ARGS: -m tools.release.pypi_release publish-dry-run

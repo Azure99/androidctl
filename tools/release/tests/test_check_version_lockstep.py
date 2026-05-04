@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from tools.release.version_lockstep import (
     derive_android_version_code,
     format_report,
@@ -59,72 +58,60 @@ def test_derive_android_version_code_rejects_invalid_values(version_text: str) -
         derive_android_version_code(version_text)
 
 
-@pytest.mark.parametrize(
-    (
-        "pyproject_path",
-        "project_name",
-        "version",
-        "contracts_pin",
-        "daemon_pin",
-        "check_name",
-        "expected_actual",
-    ),
-    [
-        (
-            "androidctl/pyproject.toml",
-            "androidctl",
-            "0.1.1",
-            "0.1.0",
-            None,
-            "androidctl project.version",
-            "0.1.1",
-        ),
-        (
-            "androidctld/pyproject.toml",
-            "androidctld",
-            "0.1.0",
-            "0.1.1",
-            None,
-            "androidctld androidctl-contracts pin",
-            "androidctl-contracts==0.1.1",
-        ),
-        (
-            "androidctl/pyproject.toml",
-            "androidctl",
-            "0.1.0",
-            "0.1.0",
-            "0.1.1",
-            "androidctl androidctld pin",
-            "androidctld==0.1.1",
-        ),
-    ],
-)
-def test_pyproject_version_and_dependency_drift_fails(
-    tmp_path: Path,
-    pyproject_path: str,
-    project_name: str,
-    version: str,
-    contracts_pin: str | None,
-    daemon_pin: str | None,
-    check_name: str,
-    expected_actual: str,
-) -> None:
+def test_root_pyproject_version_drift_fails(tmp_path: Path) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
-        repo_root / pyproject_path,
-        _pyproject_text(
-            project_name,
-            version,
-            contracts_pin=contracts_pin,
-            daemon_pin=daemon_pin,
-        ),
+        repo_root / "pyproject.toml",
+        _pyproject_text(version="0.1.1"),
     )
 
     report = run_checks(repo_root)
 
-    failure = _find_failure(report, check_name)
+    failure = _find_failure(report, "root project.version")
     assert failure is not None
-    assert failure.actual == expected_actual
+    assert failure.actual == "0.1.1"
+
+
+def test_root_pyproject_name_drift_fails(tmp_path: Path) -> None:
+    repo_root = _write_valid_repo(tmp_path)
+    _write_file(
+        repo_root / "pyproject.toml",
+        _pyproject_text(project_name="androidctld"),
+    )
+
+    report = run_checks(repo_root)
+
+    failure = _find_failure(report, "root project.name")
+    assert failure is not None
+    assert failure.actual == "androidctld"
+
+
+def test_root_package_discovery_drift_fails(tmp_path: Path) -> None:
+    repo_root = _write_valid_repo(tmp_path)
+    _write_file(
+        repo_root / "pyproject.toml",
+        _pyproject_text(where='["androidctl/src"]'),
+    )
+
+    report = run_checks(repo_root)
+
+    failure = _find_failure(report, "root package discovery")
+    assert failure is not None
+    assert "contracts/src" in failure.expected
+
+
+def test_child_packaging_entrypoint_fails(tmp_path: Path) -> None:
+    repo_root = _write_valid_repo(tmp_path)
+    _write_file(
+        repo_root / "androidctl/pyproject.toml",
+        "[project]\nname='androidctl'\n",
+    )
+
+    report = run_checks(repo_root)
+
+    failure = _find_failure(report, "child packaging entrypoint absent")
+    assert failure is not None
+    assert failure.path == repo_root / "androidctl/pyproject.toml"
 
 
 def test_runtime_version_module_drift_fails(tmp_path: Path) -> None:
@@ -378,14 +365,8 @@ def test_android_meta_get_dead_code_decoy_still_fails(tmp_path: Path) -> None:
 def test_androidctl_packaged_apk_package_data_drift_fails(tmp_path: Path) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
-        repo_root / "androidctl/pyproject.toml",
-        _pyproject_text(
-            "androidctl",
-            "0.1.0",
-            contracts_pin="0.1.0",
-            daemon_pin="0.1.0",
-            apk_package_data='["*.txt"]',
-        ),
+        repo_root / "pyproject.toml",
+        _pyproject_text(apk_package_data='["*.txt"]'),
     )
 
     report = run_checks(repo_root)
@@ -689,14 +670,14 @@ def test_daemon_server_banner_dead_code_decoy_still_fails(tmp_path: Path) -> Non
 def test_failure_message_contains_path_expected_and_actual(tmp_path: Path) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
-        repo_root / "androidctl/pyproject.toml",
-        _pyproject_text("androidctl", "0.1.1", contracts_pin="0.1.0"),
+        repo_root / "pyproject.toml",
+        _pyproject_text(version="0.1.1"),
     )
 
     report = run_checks(repo_root)
     rendered = format_report(report)
 
-    assert "androidctl/pyproject.toml" in rendered
+    assert "pyproject.toml" in rendered
     assert "expected: 0.1.0" in rendered
     assert "actual: 0.1.1" in rendered
 
@@ -711,21 +692,8 @@ def _find_failure(report, check_name: str):
 def _write_valid_repo(repo_root: Path, version: str = "0.1.0") -> Path:
     _write_file(repo_root / "VERSION", f"{version}\n")
     _write_file(
-        repo_root / "contracts/pyproject.toml",
-        _pyproject_text("androidctl-contracts", version),
-    )
-    _write_file(
-        repo_root / "androidctl/pyproject.toml",
-        _pyproject_text(
-            "androidctl",
-            version,
-            contracts_pin=version,
-            daemon_pin=version,
-        ),
-    )
-    _write_file(
-        repo_root / "androidctld/pyproject.toml",
-        _pyproject_text("androidctld", version, contracts_pin=version),
+        repo_root / "pyproject.toml",
+        _pyproject_text(version=version),
     )
     _write_file(
         repo_root / "contracts/src/androidctl_contracts/_version.py",
@@ -836,25 +804,25 @@ def _write_file(path: Path, content: str) -> None:
 
 
 def _pyproject_text(
-    project_name: str,
-    version: str,
-    contracts_pin: str | None = None,
-    daemon_pin: str | None = None,
+    project_name: str = "androidctl",
+    version: str = "0.1.0",
+    where: str = '["contracts/src", "androidctld/src", "androidctl/src"]',
+    include: str = '["androidctl_contracts*", "androidctld*", "androidctl*"]',
+    namespaces: str = "false",
     apk_package_data: str = '["*.apk"]',
 ) -> str:
-    dependencies = ['    "typing-extensions>=4.12,<5",']
-    if contracts_pin is not None:
-        dependencies.append(f'    "androidctl-contracts=={contracts_pin}",')
-    if daemon_pin is not None:
-        dependencies.append(f'    "androidctld=={daemon_pin}",')
-    dependencies_block = "\n".join(dependencies)
     return (
         "[project]\n"
         f'name = "{project_name}"\n'
         f'version = "{version}"\n'
         "dependencies = [\n"
-        f"{dependencies_block}\n"
+        '    "typing-extensions>=4.12,<5",\n'
         "]\n"
+        "\n"
+        "[tool.setuptools.packages.find]\n"
+        f"where = {where}\n"
+        f"include = {include}\n"
+        f"namespaces = {namespaces}\n"
         "\n"
         "[tool.setuptools.package-data]\n"
         f'"androidctl.resources" = {apk_package_data}\n'
@@ -900,7 +868,10 @@ def _pypi_release_text(
         "    if False:\n"
         '        version_code = element.get("versionCode")\n'
         "        expected_version_code = derive_android_version_code(paths.version)\n"
-        "        if type(version_code) is not int or version_code != expected_version_code:\n"
+        "        if (\n"
+        "            type(version_code) is not int\n"
+        "            or version_code != expected_version_code\n"
+        "        ):\n"
         '            raise SystemExit("bad version code")\n'
         if include_decoy
         else ""
@@ -986,12 +957,14 @@ def _build_gradle_text(
         "    val patch = segments[2].toLong()\n"
         f"{minor_range_check}"
         f"{patch_range_check}"
-        f"    val versionCode = (major * {major_multiplier}) + (minor * 1_000L) + patch\n"
+        "    val versionCode =\n"
+        f"        (major * {major_multiplier}) + (minor * 1_000L) + patch\n"
         f"{upper_bound_check}"
         "    return versionCode.toInt()\n"
         "}\n\n"
         "val canonicalReleaseVersion = readCanonicalReleaseVersion()\n"
-        "val canonicalReleaseVersionCode = deriveAndroidVersionCode(canonicalReleaseVersion)\n\n"
+        "val canonicalReleaseVersionCode =\n"
+        "    deriveAndroidVersionCode(canonicalReleaseVersion)\n\n"
         "android {\n"
         "    defaultConfig {\n"
         f"        versionCode = {version_code_expr}\n"

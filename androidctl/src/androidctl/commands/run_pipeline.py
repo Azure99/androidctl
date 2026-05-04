@@ -8,17 +8,6 @@ from typing import NoReturn, Protocol
 
 import click
 import httpx
-from androidctl_contracts.command_catalog import runtime_close_entry
-from androidctl_contracts.command_results import (
-    CommandResultCore,
-    ListAppsResult,
-    RetainedResultEnvelope,
-    dump_canonical_command_result,
-)
-from androidctl_contracts.daemon_api import (
-    CommandRunRequest,
-    RuntimePayload,
-)
 from pydantic import ValidationError
 
 from androidctl.command_payloads import (
@@ -38,6 +27,17 @@ from androidctl.daemon.discovery import (
 )
 from androidctl.errors.models import ErrorTier
 from androidctl.workspace.resolve import resolve_workspace_root
+from androidctl_contracts.command_catalog import runtime_close_entry
+from androidctl_contracts.command_results import (
+    CommandResultCore,
+    ListAppsResult,
+    RetainedResultEnvelope,
+    dump_canonical_command_result,
+)
+from androidctl_contracts.daemon_api import (
+    CommandRunRequest,
+    RuntimePayload,
+)
 
 CommandResultPayload = CommandResultCore | RetainedResultEnvelope | ListAppsResult
 

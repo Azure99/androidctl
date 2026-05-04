@@ -5,14 +5,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
 
+from androidctl.commands.run_pipeline import AppContext
 from androidctl_contracts.command_results import (
     CommandResultCore,
     ListAppsResult,
     RetainedResultEnvelope,
 )
 from androidctl_contracts.daemon_api import CommandRunRequest, RuntimePayload
-
-from androidctl.commands.run_pipeline import AppContext
 
 CommandResultPayload = CommandResultCore | RetainedResultEnvelope | ListAppsResult
 

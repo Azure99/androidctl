@@ -1,4 +1,9 @@
 import pytest
+
+from androidctl.command_payloads import (
+    LateBoundScreenRelativePredicate,
+)
+from androidctl.parsing.wait import parse_wait_predicate
 from androidctl_contracts.daemon_api import (
     AppPredicatePayload,
     GonePredicatePayload,
@@ -6,11 +11,6 @@ from androidctl_contracts.daemon_api import (
     ScreenChangePredicatePayload,
     TextPresentPredicatePayload,
 )
-
-from androidctl.command_payloads import (
-    LateBoundScreenRelativePredicate,
-)
-from androidctl.parsing.wait import parse_wait_predicate
 
 
 def test_parse_screen_change_wait_uses_source_screen_id() -> None:

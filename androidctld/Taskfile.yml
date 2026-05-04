@@ -4,20 +4,20 @@ tasks:
   test:
     desc: Run androidctld tests
     cmds:
-      - python -m pytest
+      - python -m pytest androidctld/tests
 
   lint:
     desc: Run androidctld lint and type checks
     cmds:
-      - ruff check .
-      - black --check .
-      - mypy src
+      - ruff check androidctld/src androidctld/tests
+      - black --check androidctld/src androidctld/tests
+      - mypy androidctld/src
 
   format:
     desc: Auto-format androidctld sources
     cmds:
-      - ruff check --fix .
-      - black .
+      - ruff check --fix androidctld/src androidctld/tests
+      - black androidctld/src androidctld/tests
 
   quality:
     desc: Run androidctld quality gate

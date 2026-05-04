@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from typer.testing import CliRunner
+
+from androidctl.app import app
+from androidctl.exit_codes import ExitCode
 from androidctl_contracts.command_results import (
     CommandResultCore,
     RetainedResultEnvelope,
 )
 from androidctl_contracts.daemon_api import CommandRunRequest
-from typer.testing import CliRunner
-
-from androidctl.app import app
-from androidctl.exit_codes import ExitCode
 from tests.support import (
     SOURCE_SCREEN_ABSENT,
     SOURCE_SCREEN_REQUIRED,

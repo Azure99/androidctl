@@ -1,0 +1,127 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "androidctl"
+version = "0.1.0"
+description = "A Playwright-like CLI for Android automation, built for AI agents."
+authors = [{ name = "Azure99" }]
+keywords = ["agent", "android", "adb", "automation", "cli", "accessibility"]
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "click>=8.1,<9",
+    "httpx>=0.27,<0.29",
+    "pydantic>=2.11,<3",
+    "pydantic-core>=2.33,<3",
+    "typing-extensions>=4.12,<5",
+    "typer>=0.16,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "build",
+    "mypy<1.11",
+    "pytest>=8,<9",
+    "ruff",
+    "tomli",
+    "twine",
+]
+
+[project.scripts]
+androidctl = "androidctl.app:app"
+androidctld = "androidctld.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/Azure99/androidctl"
+Repository = "https://github.com/Azure99/androidctl"
+Issues = "https://github.com/Azure99/androidctl/issues"
+
+[tool.setuptools.packages.find]
+where = ["contracts/src", "androidctld/src", "androidctl/src"]
+include = ["androidctl_contracts*", "androidctld*", "androidctl*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"androidctl.resources" = ["*.apk"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "contracts/src",
+    "androidctld/src",
+    "androidctl/src",
+]
+testpaths = [
+    "contracts/tests",
+    "androidctld/tests",
+    "androidctl/tests/unit",
+    "androidctl/tests/integration",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = [
+    "contracts/src",
+    "contracts/tests",
+    "androidctld/src",
+    "androidctld/tests",
+    "androidctl/src",
+    "androidctl/tests",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "SIM", "C4", "RUF009", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "androidctl",
+    "androidctld",
+    "androidctl_contracts",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["E402"]
+"contracts/tests/**/*.py" = ["E402"]
+"androidctld/tests/**/*.py" = ["E402"]
+"androidctl/tests/**/*.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+    "contracts/src",
+    "androidctld/src",
+    "androidctl/src",
+]
+mypy_path = "contracts/src,androidctld/src,androidctl/src"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+no_implicit_reexport = true
+strict_equality = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_ignores = true
+warn_redundant_casts = true

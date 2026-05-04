@@ -14,10 +14,30 @@ _VERSION_PATTERN = re.compile(r"\d+\.\d+\.\d+\Z")
 _ANDROID_VERSION_COMPONENT_MAX = 999
 _ANDROID_VERSION_CODE_MIN = 1
 _ANDROID_VERSION_CODE_MAX = 2_100_000_000
+_VERSION_FILE_EXPECTATION = (
+    "exactly MAJOR.MINOR.PATCH with at most one terminating newline"
+)
 _PACKAGED_APK_RESOURCE_PACKAGE = "androidctl.resources"
 _PACKAGED_APK_RESOURCE_DIR = "androidctl/src/androidctl/resources"
 _PACKAGED_APK_TEMPLATE = "androidctl-agent-{version}-release.apk"
 _PACKAGED_APK_GLOB = "androidctl-agent-*-release.apk"
+_ROOT_PACKAGE_DISCOVERY_WHERE = ["contracts/src", "androidctld/src", "androidctl/src"]
+_ROOT_PACKAGE_DISCOVERY_INCLUDE = [
+    "androidctl_contracts*",
+    "androidctld*",
+    "androidctl*",
+]
+_CHILD_PACKAGING_ENTRYPOINTS = (
+    Path("contracts/pyproject.toml"),
+    Path("contracts/setup.py"),
+    Path("contracts/setup.cfg"),
+    Path("androidctld/pyproject.toml"),
+    Path("androidctld/setup.py"),
+    Path("androidctld/setup.cfg"),
+    Path("androidctl/pyproject.toml"),
+    Path("androidctl/setup.py"),
+    Path("androidctl/setup.cfg"),
+)
 
 
 @dataclass(frozen=True)
@@ -60,9 +80,7 @@ def parse_canonical_version_text(raw_text: str) -> str:
         or "\r" in candidate
         or not _VERSION_PATTERN.fullmatch(candidate)
     ):
-        raise _VersionParseError(
-            "must contain exactly MAJOR.MINOR.PATCH with at most one terminating newline"
-        )
+        raise _VersionParseError(f"must contain {_VERSION_FILE_EXPECTATION}")
     return candidate
 
 
@@ -85,7 +103,9 @@ def derive_android_version_code(canonical_version: str) -> int:
     version_code = (major * 1_000_000) + (minor * 1_000) + patch
     if not _ANDROID_VERSION_CODE_MIN <= version_code <= _ANDROID_VERSION_CODE_MAX:
         raise _AndroidVersionCodeError(
-            f"versionCode must be in {_ANDROID_VERSION_CODE_MIN}..{_ANDROID_VERSION_CODE_MAX}, got {version_code}"
+            "versionCode must be in "
+            f"{_ANDROID_VERSION_CODE_MIN}..{_ANDROID_VERSION_CODE_MAX}, "
+            f"got {version_code}"
         )
     return version_code
 
@@ -99,49 +119,18 @@ def run_checks(repo_root: Path) -> CheckReport:
     checked_items += 1
 
     if canonical_version is not None:
-        _check_pyproject_version(
+        _check_pyproject_name(
             repo_root,
-            Path("contracts/pyproject.toml"),
-            canonical_version,
-            "contracts project.version",
+            Path("pyproject.toml"),
+            "androidctl",
+            "root project.name",
             failures,
         )
         _check_pyproject_version(
             repo_root,
-            Path("androidctl/pyproject.toml"),
+            Path("pyproject.toml"),
             canonical_version,
-            "androidctl project.version",
-            failures,
-        )
-        _check_pyproject_version(
-            repo_root,
-            Path("androidctld/pyproject.toml"),
-            canonical_version,
-            "androidctld project.version",
-            failures,
-        )
-        _check_dependency_pin(
-            repo_root,
-            Path("androidctl/pyproject.toml"),
-            "androidctl-contracts",
-            canonical_version,
-            "androidctl androidctl-contracts pin",
-            failures,
-        )
-        _check_dependency_pin(
-            repo_root,
-            Path("androidctl/pyproject.toml"),
-            "androidctld",
-            canonical_version,
-            "androidctl androidctld pin",
-            failures,
-        )
-        _check_dependency_pin(
-            repo_root,
-            Path("androidctld/pyproject.toml"),
-            "androidctl-contracts",
-            canonical_version,
-            "androidctld androidctl-contracts pin",
+            "root project.version",
             failures,
         )
         _check_version_module(
@@ -171,8 +160,9 @@ def run_checks(repo_root: Path) -> CheckReport:
             canonical_version,
             failures,
         )
-        checked_items += 10
+        checked_items += 6
 
+    _check_root_package_discovery(repo_root, Path("pyproject.toml"), failures)
     _check_package_reexport(
         repo_root,
         Path("contracts/src/androidctl_contracts/__init__.py"),
@@ -227,9 +217,10 @@ def run_checks(repo_root: Path) -> CheckReport:
     )
     _check_androidctl_packaged_apk_package_data(
         repo_root,
-        Path("androidctl/pyproject.toml"),
+        Path("pyproject.toml"),
         failures,
     )
+    _check_child_packaging_entrypoints_absent(repo_root, failures)
     _check_packaged_apk_resource_package(
         repo_root,
         Path("androidctl/src/androidctl/resources/__init__.py"),
@@ -250,7 +241,7 @@ def run_checks(repo_root: Path) -> CheckReport:
         Path("tools/release/pypi_release.py"),
         failures,
     )
-    checked_items += 14
+    checked_items += 16
 
     return CheckReport(
         repo_root=repo_root,
@@ -291,7 +282,7 @@ def _check_canonical_version(
             CheckFailure(
                 check_name="canonical release version",
                 path=version_path,
-                expected="exactly MAJOR.MINOR.PATCH with at most one terminating newline",
+                expected=_VERSION_FILE_EXPECTATION,
                 actual=f"unable to read file: {error}",
             )
         )
@@ -303,7 +294,7 @@ def _check_canonical_version(
             CheckFailure(
                 check_name="canonical release version",
                 path=version_path,
-                expected="exactly MAJOR.MINOR.PATCH with at most one terminating newline",
+                expected=_VERSION_FILE_EXPECTATION,
                 actual=repr(raw_text),
             )
         )
@@ -338,6 +329,38 @@ def _check_pyproject_version(
                 path=pyproject_path,
                 expected=expected_version,
                 actual=str(actual_version),
+            )
+        )
+
+
+def _check_pyproject_name(
+    repo_root: Path,
+    relative_path: Path,
+    expected_name: str,
+    check_name: str,
+    failures: list[CheckFailure],
+) -> None:
+    pyproject_path = repo_root / relative_path
+    try:
+        project_data = _load_pyproject(pyproject_path)
+        actual_name = project_data["project"]["name"]
+    except Exception as error:
+        failures.append(
+            CheckFailure(
+                check_name=check_name,
+                path=pyproject_path,
+                expected=expected_name,
+                actual=f"unable to parse project.name: {error}",
+            )
+        )
+        return
+    if actual_name != expected_name:
+        failures.append(
+            CheckFailure(
+                check_name=check_name,
+                path=pyproject_path,
+                expected=expected_name,
+                actual=str(actual_name),
             )
         )
 
@@ -444,7 +467,10 @@ def _check_package_reexport(
             CheckFailure(
                 check_name=check_name,
                 path=module_path,
-                expected='__all__ is a static literal when present and exposes "__version__"',
+                expected=(
+                    "__all__ is a static literal when present and exposes "
+                    '"__version__"'
+                ),
                 actual=str(error),
             )
         )
@@ -462,6 +488,77 @@ def _check_package_reexport(
         )
 
 
+def _check_root_package_discovery(
+    repo_root: Path,
+    relative_path: Path,
+    failures: list[CheckFailure],
+) -> None:
+    pyproject_path = repo_root / relative_path
+    try:
+        project_data = _load_pyproject(pyproject_path)
+        tool_data = _require_mapping(project_data.get("tool"), "tool")
+        setuptools_data = _require_mapping(tool_data.get("setuptools"), "setuptools")
+        packages_data = _require_mapping(setuptools_data.get("packages"), "packages")
+        find_data = _require_mapping(packages_data.get("find"), "find")
+        package_dir = setuptools_data.get("package-dir")
+        where = find_data["where"]
+        include = find_data["include"]
+        namespaces = find_data["namespaces"]
+    except Exception as error:
+        failures.append(
+            CheckFailure(
+                check_name="root package discovery",
+                path=pyproject_path,
+                expected=(
+                    "multi-root setuptools discovery for androidctl, androidctld, "
+                    "and androidctl_contracts"
+                ),
+                actual=f"unable to parse package discovery: {error}",
+            )
+        )
+        return
+    expected = (
+        f"where={_ROOT_PACKAGE_DISCOVERY_WHERE!r}; "
+        f"include={_ROOT_PACKAGE_DISCOVERY_INCLUDE!r}; namespaces=false; "
+        "no package-dir"
+    )
+    actual = (
+        f"where={where!r}; include={include!r}; "
+        f"namespaces={namespaces!r}; package-dir={package_dir!r}"
+    )
+    if (
+        where != _ROOT_PACKAGE_DISCOVERY_WHERE
+        or include != _ROOT_PACKAGE_DISCOVERY_INCLUDE
+        or namespaces is not False
+        or package_dir is not None
+    ):
+        failures.append(
+            CheckFailure(
+                check_name="root package discovery",
+                path=pyproject_path,
+                expected=expected,
+                actual=actual,
+            )
+        )
+
+
+def _check_child_packaging_entrypoints_absent(
+    repo_root: Path,
+    failures: list[CheckFailure],
+) -> None:
+    for relative_path in _CHILD_PACKAGING_ENTRYPOINTS:
+        entrypoint_path = repo_root / relative_path
+        if entrypoint_path.exists():
+            failures.append(
+                CheckFailure(
+                    check_name="child packaging entrypoint absent",
+                    path=entrypoint_path,
+                    expected="file does not exist",
+                    actual="exists",
+                )
+            )
+
+
 def _check_daemon_health_source(
     repo_root: Path,
     relative_path: Path,
@@ -475,7 +572,10 @@ def _check_daemon_health_source(
             CheckFailure(
                 check_name="daemon health version source",
                 path=module_path,
-                expected='HealthResult(..., version=__version__, ...) with "from androidctld import __version__"',
+                expected=(
+                    "HealthResult(..., version=__version__, ...) with "
+                    '"from androidctld import __version__"'
+                ),
                 actual=f"unable to parse module: {error}",
             )
         )
@@ -495,7 +595,10 @@ def _check_daemon_health_source(
         CheckFailure(
             check_name="daemon health version source",
             path=module_path,
-            expected='HealthResult(..., version=__version__, ...) with "from androidctld import __version__"',
+            expected=(
+                "HealthResult(..., version=__version__, ...) with "
+                '"from androidctld import __version__"'
+            ),
             actual="designated health version wiring not found",
         )
     )
@@ -514,7 +617,9 @@ def _check_daemon_server_banner_source(
             CheckFailure(
                 check_name="daemon server banner version source",
                 path=module_path,
-                expected='RequestHandler.server_version = f"{SERVICE_NAME}/{__version__}"',
+                expected=(
+                    "RequestHandler.server_version = " 'f"{SERVICE_NAME}/{__version__}"'
+                ),
                 actual=f"unable to parse module: {error}",
             )
         )
@@ -579,7 +684,10 @@ def _check_android_version_name_source(
             CheckFailure(
                 check_name="Android versionName source",
                 path=gradle_path,
-                expected="build.gradle.kts reads repo-root VERSION and assigns versionName = canonicalReleaseVersion",
+                expected=(
+                    "build.gradle.kts reads repo-root VERSION and assigns "
+                    "versionName = canonicalReleaseVersion"
+                ),
                 actual=f"unable to read file: {error}",
             )
         )
@@ -617,7 +725,10 @@ def _check_android_version_name_source(
         CheckFailure(
             check_name="Android versionName source",
             path=gradle_path,
-            expected="build.gradle.kts reads repo-root VERSION and assigns versionName = canonicalReleaseVersion",
+            expected=(
+                "build.gradle.kts reads repo-root VERSION and assigns "
+                "versionName = canonicalReleaseVersion"
+            ),
             actual="designated canonical VERSION wiring not found",
         )
     )
@@ -708,7 +819,10 @@ def _check_android_rpc_environment_source(
             CheckFailure(
                 check_name="Android RPC default version provider",
                 path=source_path,
-                expected="RpcEnvironment default versionProvider returns BuildConfig.VERSION_NAME",
+                expected=(
+                    "RpcEnvironment default versionProvider returns "
+                    "BuildConfig.VERSION_NAME"
+                ),
                 actual=f"unable to read file: {error}",
             )
         )
@@ -738,7 +852,10 @@ def _check_android_rpc_environment_source(
         CheckFailure(
             check_name="Android RPC default version provider",
             path=source_path,
-            expected="RpcEnvironment default versionProvider returns BuildConfig.VERSION_NAME",
+            expected=(
+                "RpcEnvironment default versionProvider returns "
+                "BuildConfig.VERSION_NAME"
+            ),
             actual="designated BuildConfig.VERSION_NAME default provider not found",
         )
     )
@@ -757,7 +874,9 @@ def _check_android_meta_get_source(
             CheckFailure(
                 check_name="Android meta.get version source",
                 path=source_path,
-                expected="MetaGetMethod uses versionProvider() for MetaResponse.version",
+                expected=(
+                    "MetaGetMethod uses versionProvider() for " "MetaResponse.version"
+                ),
                 actual=f"unable to read file: {error}",
             )
         )
@@ -1196,12 +1315,12 @@ def _assignment_matches(statement: ast.stmt, target_name: str, predicate) -> boo
             for target in statement.targets
         ):
             value_node = statement.value
-    elif isinstance(statement, ast.AnnAssign):
-        if (
-            isinstance(statement.target, ast.Name)
-            and statement.target.id == target_name
-        ):
-            value_node = statement.value
+    elif (
+        isinstance(statement, ast.AnnAssign)
+        and isinstance(statement.target, ast.Name)
+        and statement.target.id == target_name
+    ):
+        value_node = statement.value
     if value_node is None:
         return False
     return predicate(value_node)
@@ -1442,9 +1561,12 @@ def _extract_string_assignment(path: Path, name: str) -> str:
                 for target in node.targets
             ):
                 value_node = node.value
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == name:
-                value_node = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+        ):
+            value_node = node.value
         if value_node is None:
             continue
         value = ast.literal_eval(value_node)
@@ -1464,9 +1586,12 @@ def _extract_path_constructor_assignment(path: Path, name: str) -> str:
                 for target in node.targets
             ):
                 value_node = node.value
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == name:
-                value_node = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+        ):
+            value_node = node.value
         if value_node is None:
             continue
         if not (
@@ -1892,9 +2017,12 @@ def _extract_dunder_all(module: ast.Module) -> set[str] | None:
                 for target in node.targets
             ):
                 value_node = node.value
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == "__all__":
-                value_node = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "__all__"
+        ):
+            value_node = node.value
         if value_node is None:
             continue
         value = ast.literal_eval(value_node)

@@ -10,9 +10,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-from androidctl_contracts.daemon_api import HealthResult
-from androidctl_contracts.paths import daemon_state_root
-from androidctl_contracts.user_state import ActiveDaemonRecord
 
 from androidctl.daemon.client import (
     DaemonApiError,
@@ -27,6 +24,9 @@ from androidctl.daemon.discovery import (
     resolve_daemon_client,
 )
 from androidctl.daemon.launcher import LaunchSpec, resolve_launch_spec
+from androidctl_contracts.daemon_api import HealthResult
+from androidctl_contracts.paths import daemon_state_root
+from androidctl_contracts.user_state import ActiveDaemonRecord
 
 
 def _active_record(

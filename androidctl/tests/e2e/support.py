@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import signal
 import subprocess
 import time
@@ -15,6 +16,26 @@ if TYPE_CHECKING:
 
 ANDROIDCTL_COMMAND_TIMEOUT_SECONDS = 30
 DAEMON_STOP_TIMEOUT_SECONDS = 5.0
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def editable_metadata_dirs(repo_root: Path = REPO_ROOT) -> list[Path]:
+    metadata_roots = (
+        repo_root,
+        repo_root / "contracts" / "src",
+        repo_root / "androidctld" / "src",
+        repo_root / "androidctl" / "src",
+    )
+    metadata_dirs: list[Path] = []
+    for metadata_root in metadata_roots:
+        metadata_dirs.extend(metadata_root.glob("*.egg-info"))
+        metadata_dirs.extend(metadata_root.glob("*.dist-info"))
+    return sorted(metadata_dirs)
+
+
+def remove_editable_metadata_dirs(repo_root: Path = REPO_ROOT) -> None:
+    for metadata_dir in editable_metadata_dirs(repo_root):
+        shutil.rmtree(metadata_dir, ignore_errors=True)
 
 
 def workspace_dir(home_dir: Path) -> Path:

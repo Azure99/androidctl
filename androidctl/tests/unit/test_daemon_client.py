@@ -4,6 +4,15 @@ import json
 
 import httpx
 import pytest
+
+from androidctl import __version__ as ANDROIDCTL_VERSION
+from androidctl.daemon.client import (
+    DaemonApiError,
+    DaemonClient,
+    DaemonProtocolError,
+    IncompatibleDaemonError,
+    IncompatibleDaemonVersionError,
+)
 from androidctl_contracts.command_results import (
     CommandResultCore,
     ListAppsResult,
@@ -22,15 +31,6 @@ from androidctl_contracts.daemon_api import (
     WaitCommandPayload,
 )
 from androidctl_contracts.user_state import ActiveDaemonRecord
-
-from androidctl import __version__ as ANDROIDCTL_VERSION
-from androidctl.daemon.client import (
-    DaemonApiError,
-    DaemonClient,
-    DaemonProtocolError,
-    IncompatibleDaemonError,
-    IncompatibleDaemonVersionError,
-)
 
 
 def _public_screen_payload(screen_id: str) -> dict[str, object]:

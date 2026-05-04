@@ -97,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
         run_checksum_verification(paths)
         run_apk_signature_verification(paths)
         print(
-            f"wrote verify log: {relative_to_repo(paths.apk_verify_log_path, repo_root)}"
+            "wrote verify log: "
+            f"{relative_to_repo(paths.apk_verify_log_path, repo_root)}"
         )
         print(
             "wrote checksum check log: "
@@ -204,7 +205,7 @@ def run_checksum_verification(paths: ReleasePaths) -> None:
     verification_lines, failed_files = verify_checksums_file(paths)
     write_command_output(
         paths.checksum_verify_log_path,
-        "".join(f"{line}\n" for line in verification_lines),
+        render_verified_artifact_log(paths, verification_lines),
     )
     if failed_files:
         raise SystemExit(
@@ -229,7 +230,10 @@ def run_apk_signature_verification(paths: ReleasePaths) -> None:
         text=True,
         check=False,
     )
-    write_command_output(paths.apk_verify_log_path, result.stdout)
+    write_command_output(
+        paths.apk_verify_log_path,
+        render_verified_artifact_log(paths, result.stdout.splitlines()),
+    )
     if result.returncode != 0:
         raise SystemExit(
             "apksigner verification failed; see "
@@ -349,6 +353,15 @@ def resolve_apksigner() -> Path:
     )
 
 
+def render_verified_artifact_log(paths: ReleasePaths, body_lines: list[str]) -> str:
+    lines = [
+        f"verified_file={paths.staged_apk_path.name}",
+        f"verified_sha256={sha256_file(paths.staged_apk_path)}",
+        *body_lines,
+    ]
+    return "".join(f"{line}\n" for line in lines)
+
+
 def parse_version_tuple(raw_value: str) -> tuple[int, ...]:
     return tuple(int(part) for part in raw_value.split("."))
 
@@ -391,7 +404,8 @@ def verify_checksums_file(paths: ReleasePaths) -> tuple[list[str], list[str]]:
 
     if not checksum_lines:
         raise SystemExit(
-            f"checksum file {relative_to_repo(paths.checksums_path, paths.repo_root)} is empty"
+            "checksum file "
+            f"{relative_to_repo(paths.checksums_path, paths.repo_root)} is empty"
         )
 
     for line in checksum_lines:
@@ -413,7 +427,9 @@ def verify_checksums_file(paths: ReleasePaths) -> tuple[list[str], list[str]]:
 
     if not verification_lines:
         raise SystemExit(
-            f"checksum file {relative_to_repo(paths.checksums_path, paths.repo_root)} has no usable entries"
+            "checksum file "
+            f"{relative_to_repo(paths.checksums_path, paths.repo_root)} "
+            "has no usable entries"
         )
 
     if failed_files:

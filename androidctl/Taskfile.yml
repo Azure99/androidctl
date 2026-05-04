@@ -4,25 +4,25 @@ tasks:
   test:
     desc: Run androidctl tests
     cmds:
-      - python -m pytest
+      - python -m pytest androidctl/tests/unit androidctl/tests/integration
 
   e2e:
     desc: Run androidctl process-level e2e tests
     cmds:
-      - python -m pytest tests/e2e
+      - python -m pytest androidctl/tests/e2e
 
   lint:
     desc: Run androidctl lint and type checks
     cmds:
-      - ruff check .
-      - black --check .
-      - mypy src
+      - ruff check androidctl/src androidctl/tests
+      - black --check androidctl/src androidctl/tests
+      - mypy androidctl/src
 
   format:
     desc: Auto-format androidctl sources
     cmds:
-      - ruff check --fix .
-      - black .
+      - ruff check --fix androidctl/src androidctl/tests
+      - black androidctl/src androidctl/tests
 
   quality:
     desc: Run androidctl quality gate

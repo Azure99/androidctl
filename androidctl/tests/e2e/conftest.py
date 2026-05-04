@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from tests.e2e.support import remove_editable_metadata_dirs
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PACKAGE_DIRS = (
-    REPO_ROOT / "contracts",
-    REPO_ROOT / "androidctld",
-    REPO_ROOT / "androidctl",
-)
 VENV_CREATE_TIMEOUT_SECONDS = 120
 PIP_INSTALL_TIMEOUT_SECONDS = 240
 
@@ -23,18 +18,6 @@ PIP_INSTALL_TIMEOUT_SECONDS = 240
 class EditableInstallEnv:
     python_executable: Path
     androidctl_executable: Path
-
-
-def _editable_metadata_dirs() -> list[Path]:
-    metadata_dirs: list[Path] = []
-    for package_dir in PACKAGE_DIRS:
-        metadata_dirs.extend(sorted((package_dir / "src").glob("*.egg-info")))
-    return metadata_dirs
-
-
-def _remove_editable_metadata_dirs() -> None:
-    for metadata_dir in _editable_metadata_dirs():
-        shutil.rmtree(metadata_dir, ignore_errors=True)
 
 
 def _python_path(venv_dir: Path) -> Path:
@@ -72,7 +55,7 @@ def _minimal_install_env() -> dict[str, str]:
 
 
 def _install_editable_packages(root: Path) -> EditableInstallEnv:
-    _remove_editable_metadata_dirs()
+    remove_editable_metadata_dirs()
     venv_dir = root / "venv"
     subprocess.run(
         [sys.executable, "-m", "venv", venv_dir.as_posix()],
@@ -90,12 +73,9 @@ def _install_editable_packages(root: Path) -> EditableInstallEnv:
             "pip",
             "install",
             "-e",
-            PACKAGE_DIRS[0].as_posix(),
-            "-e",
-            PACKAGE_DIRS[1].as_posix(),
-            "-e",
-            f"{PACKAGE_DIRS[2].as_posix()}[dev]",
+            f"{REPO_ROOT.as_posix()}[dev]",
         ],
+        cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,
@@ -116,4 +96,4 @@ def editable_install_env(
     try:
         yield env
     finally:
-        _remove_editable_metadata_dirs()
+        remove_editable_metadata_dirs()

@@ -25,21 +25,30 @@ androidctl observe
 ## Requirements
 
 - Python 3.10.
-- Conda for the recommended local Python environment.
 - Android SDK platform tools, especially `adb`.
-- JDK 17 or newer for the Android Gradle build.
 - An Android 11+ device or emulator with USB debugging enabled.
-- `task` for the repository task shortcuts.
+
+## Install From PyPI
+
+Install the released host tools with the single public distribution:
+
+```sh
+pip install androidctl
+androidctl --help
+```
+
+The `androidctl` distribution includes the CLI, host daemon, and shared Python
+contracts. Do not install separate `androidctld` or `androidctl-contracts`
+distributions.
 
 ## Install From Source
 
-Create a local Python environment and install the three Python packages in
-editable mode:
+Create a local Python environment and install AndroidCtl in editable mode:
 
 ```sh
 conda create -p ./.conda python=3.10
 ./.conda/bin/python -m pip install -U pip
-./.conda/bin/python -m pip install -e ./contracts -e ./androidctld -e ./androidctl
+./.conda/bin/python -m pip install -e ".[dev]"
 export PATH="$PWD/.conda/bin:$PATH"
 ```
 
@@ -52,10 +61,13 @@ androidctl --help
 
 ## Build The Android Agent
 
-When working from source, build a debug APK and pass it to setup:
+Released Python packages include the Android agent APK used by setup. When
+working from source and testing a locally built debug agent, build a debug APK
+and pass it to setup with `--apk`:
 
 ```sh
 (cd android && ./gradlew :app:assembleDebug)
+androidctl setup --adb --apk android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 The debug APK is created at:
@@ -75,13 +87,13 @@ adb devices
 Run the onboarding helper:
 
 ```sh
-androidctl setup --adb --apk android/app/build/outputs/apk/debug/app-debug.apk
+androidctl setup --adb
 ```
 
 If more than one device is connected, pass the ADB serial:
 
 ```sh
-androidctl setup --adb --serial <adb-serial> --apk android/app/build/outputs/apk/debug/app-debug.apk
+androidctl setup --adb --serial <adb-serial>
 ```
 
 Setup installs the Android agent, starts its foreground RPC server, provisions a
@@ -97,7 +109,7 @@ Pair and connect from the CLI if you prefer Android wireless debugging:
 ```sh
 androidctl adb-pair --pair <host:pair-port> --code <pairing-code>
 androidctl adb-connect <host:connect-port>
-androidctl setup --adb --serial <host:connect-port> --apk android/app/build/outputs/apk/debug/app-debug.apk
+androidctl setup --adb --serial <host:connect-port>
 ```
 
 ## Basic Usage
@@ -158,6 +170,9 @@ task android:test
 task format
 task --list
 ```
+
+Source development additionally requires Conda, JDK 17 or newer for Android
+Gradle builds, and `task` for repository shortcuts.
 
 Process-level CLI checks are available through:
 

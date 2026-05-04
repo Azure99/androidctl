@@ -4,6 +4,14 @@ import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import Literal, TypeAlias, TypedDict, cast
 
+from typing_extensions import NotRequired
+
+from androidctl.renderers import (
+    ProjectionDict,
+    ProjectionValue,
+    RenderPayload,
+    projection_dict,
+)
 from androidctl_contracts.public_screen import (
     BLOCKING_GROUP_NAMES,
     OMITTED_REASON_VALUES,
@@ -14,14 +22,6 @@ from androidctl_contracts.public_screen import (
     OmittedReason,
     PublicGroupName,
     TransientKind,
-)
-from typing_extensions import NotRequired
-
-from androidctl.renderers import (
-    ProjectionDict,
-    ProjectionValue,
-    RenderPayload,
-    projection_dict,
 )
 
 XmlScalarAttrs: TypeAlias = dict[str, str]

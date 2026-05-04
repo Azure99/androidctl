@@ -22,7 +22,7 @@ Use the root `Taskfile.yml` when possible:
 - `task test:extended`: run process-level CLI e2e tests.
 - `task release:version-check`: verify all package and Android versions match `VERSION`.
 
-Python requires 3.10. If no environment is active, create one with `conda create -p ./.conda python=3.10` and install `contracts/`, `androidctld/`, and `androidctl/` editable.
+Python requires 3.10. If no environment is active, create one with `conda create -p ./.conda python=3.10` and install the root package editable with `python -m pip install -e ".[dev]"`.
 
 ## Coding Style & Naming Conventions
 
