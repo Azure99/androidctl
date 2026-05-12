@@ -28,6 +28,14 @@ androidctl observe
 - Android SDK platform tools, especially `adb`.
 - An Android 11+ device or emulator with USB debugging enabled.
 
+## Installing skills
+
+For agents that support skills, ask your agent to install the AndroidCtl skill:
+
+```text
+Install this skill: https://github.com/Azure99/androidctl/tree/main/skills/androidctl
+```
+
 ## Install From PyPI
 
 Install the released host tools with the single public distribution:
