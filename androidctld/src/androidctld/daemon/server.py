@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import threading
@@ -26,6 +27,18 @@ from androidctld.runtime_policy import (
     DAEMON_HTTP_MAX_REQUEST_BODY_BYTES,
     DAEMON_HTTP_SOCKET_TIMEOUT_SECONDS,
 )
+
+_CLIENT_DISCONNECT_ERRNOS = {
+    errno.EPIPE,
+    errno.ECONNRESET,
+    errno.ECONNABORTED,
+    errno.ETIMEDOUT,
+}
+_CLIENT_DISCONNECT_WINERRORS = {
+    10053,  # WSAECONNABORTED
+    10054,  # WSAECONNRESET
+    10058,  # WSAESHUTDOWN
+}
 
 
 class AndroidctldHttpServer:
@@ -177,23 +190,29 @@ class AndroidctldHttpServer:
             if result.shutdown_after_write:
                 self._enter_closing_gate()
                 try:
-                    self._write_json(
+                    self._try_write_json_response(
                         handler,
                         result.status_code,
                         success_envelope(result.payload),
+                        response_kind="close_success",
                     )
-                except OSError:
-                    self._logger.info("close response write failed", exc_info=True)
                 finally:
                     self._request_shutdown_after_close()
                 return
-            self._write_json(
+            if not self._try_write_json_response(
                 handler,
                 result.status_code,
                 success_envelope(result.payload),
-            )
+                response_kind="success",
+            ):
+                return
         except DaemonError as error:
-            self._write_json(handler, error.http_status, error_envelope(error))
+            self._try_write_json_response(
+                handler,
+                error.http_status,
+                error_envelope(error),
+                response_kind="daemon_error",
+            )
         except Exception:  # pragma: no cover - defensive fallback
             self._logger.exception("unexpected daemon failure")
             daemon_error = DaemonError(
@@ -203,8 +222,11 @@ class AndroidctldHttpServer:
                 details={},
                 http_status=500,
             )
-            self._write_json(
-                handler, daemon_error.http_status, error_envelope(daemon_error)
+            self._try_write_json_response(
+                handler,
+                daemon_error.http_status,
+                error_envelope(daemon_error),
+                response_kind="internal_error",
             )
 
     def _enter_closing_gate(self) -> None:
@@ -284,3 +306,95 @@ class AndroidctldHttpServer:
         handler.send_header("Content-Length", str(len(body)))
         handler.end_headers()
         handler.wfile.write(body)
+
+    def _try_write_json_response(
+        self,
+        handler: BaseHTTPRequestHandler,
+        status_code: int,
+        payload: dict[str, Any],
+        *,
+        response_kind: str,
+    ) -> bool:
+        try:
+            self._write_json(handler, status_code, payload)
+            return True
+        except OSError as error:
+            if _is_response_write_client_disconnect(error):
+                self._log_client_disconnect(
+                    handler,
+                    status_code=status_code,
+                    response_kind=response_kind,
+                    error=error,
+                )
+                handler.close_connection = True
+                return False
+            self._log_response_write_failure(
+                handler,
+                status_code=status_code,
+                response_kind=response_kind,
+                error=error,
+            )
+            handler.close_connection = True
+            return False
+
+    def _log_client_disconnect(
+        self,
+        handler: BaseHTTPRequestHandler,
+        *,
+        status_code: int,
+        response_kind: str,
+        error: OSError,
+    ) -> None:
+        self._logger.info(
+            "client disconnected before response write completed "
+            "method=%s path=%s status=%s response=%s exception=%s",
+            _handler_method(handler),
+            _handler_path(handler),
+            status_code,
+            response_kind,
+            type(error).__name__,
+        )
+
+    def _log_response_write_failure(
+        self,
+        handler: BaseHTTPRequestHandler,
+        *,
+        status_code: int,
+        response_kind: str,
+        error: OSError,
+    ) -> None:
+        self._logger.warning(
+            "response write failed method=%s path=%s status=%s response=%s "
+            "exception=%s",
+            _handler_method(handler),
+            _handler_path(handler),
+            status_code,
+            response_kind,
+            type(error).__name__,
+            exc_info=True,
+        )
+
+
+def _is_response_write_client_disconnect(error: OSError) -> bool:
+    if isinstance(
+        error,
+        (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+            TimeoutError,
+        ),
+    ):
+        return True
+    if error.errno in _CLIENT_DISCONNECT_ERRNOS:
+        return True
+    winerror = getattr(error, "winerror", None)
+    return winerror in _CLIENT_DISCONNECT_WINERRORS
+
+
+def _handler_method(handler: BaseHTTPRequestHandler) -> str:
+    return str(getattr(handler, "command", "<unknown>"))
+
+
+def _handler_path(handler: BaseHTTPRequestHandler) -> str:
+    return str(getattr(handler, "path", "<unknown>"))

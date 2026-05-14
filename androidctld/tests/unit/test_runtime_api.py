@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -1201,6 +1202,7 @@ def test_runtime_close_failure_does_not_enter_closing_gate(tmp_path: Path) -> No
 
 def test_runtime_close_write_failure_still_gates_and_requests_shutdown(
     tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
@@ -1218,12 +1220,18 @@ def test_runtime_close_write_failure_still_gates_and_requests_shutdown(
         runtime_path=workspace_root / ".androidctl" / "runtime.json",
         status=RuntimeStatus.READY,
     )
+    logger = logging.getLogger(f"tests.androidctld.runtime_close.{id(tmp_path)}")
+    logger.handlers.clear()
+    logger.propagate = True
+    logger.setLevel(logging.INFO)
+    caplog.set_level(logging.INFO, logger=logger.name)
     shutdown_events: list[str] = []
     server = AndroidctldHttpServer(
         config=config,
         token_store=token_store,
         runtime_store=FakeRuntimeStore(runtime),
         command_service=BusyCommandService(runtime),
+        logger=logger,
         shutdown_callback=lambda: shutdown_events.append("shutdown"),
     )
 
@@ -1261,6 +1269,9 @@ def test_runtime_close_write_failure_still_gates_and_requests_shutdown(
     assert runtime.status == RuntimeStatus.CLOSED
     assert shutdown_events == ["shutdown"]
     assert server._closing is True
+    assert "client disconnected before response write completed" in caplog.text
+    assert "response=close_success" in caplog.text
+    assert "unexpected daemon failure" not in caplog.text
 
     with pytest.raises(DaemonError) as error:
         server.handle(
