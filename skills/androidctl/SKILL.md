@@ -61,9 +61,12 @@ Commands use this workspace resolution order:
 2. `ANDROIDCTL_WORKSPACE_ROOT`
 3. the current directory
 
-Use an explicit workspace when operating from scripts, a different directory, or
-multiple projects. Treat `.androidctl/` as sensitive runtime state and artifact
-storage. Do not commit it, expose tokens, or paste local absolute artifact paths.
+Prefer omitting `--workspace-root` so commands use the current directory.
+Override it only when operating from scripts, a different directory, or multiple
+projects. Treat `.androidctl/` as sensitive runtime state and artifact storage.
+Do not commit it, expose tokens, or paste local absolute artifact paths.
+On Windows hosts, set the same short `ANDROIDCTL_OWNER_ID` for every
+`androidctl` invocation; Linux/macOS infer it automatically.
 
 ## Command Families
 
