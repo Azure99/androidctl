@@ -6,6 +6,7 @@ from pathlib import Path
 from androidctld.commands.command_models import ObserveCommand
 from androidctld.commands.handlers.observe import ObserveCommandHandler
 from androidctld.device.types import DeviceEvent, EventsPollResult
+from androidctld.errors import DaemonError, DaemonErrorCode
 from androidctld.observation import ObservationLoop, ObservationPolicy
 from androidctld.protocol import RuntimeStatus
 from androidctld.runtime.models import ScreenState
@@ -14,7 +15,7 @@ from androidctld.snapshots.models import parse_raw_snapshot
 
 from .support.doubles import PassiveRuntimeKernel, StaticSnapshotService
 from .support.runtime import build_connected_runtime
-from .support.semantic_screen import install_snapshot_screen
+from .support.semantic_screen import install_snapshot_screen, make_snapshot
 
 
 def test_apply_poll_result_advances_cursor() -> None:
@@ -138,33 +139,122 @@ def _load_settings_snapshot() -> object:
 
 def _observe_handler(
     tmp_path: Path, *, with_current_screen: bool
-) -> ObserveCommandHandler:
+) -> tuple[ObserveCommandHandler, StaticSnapshotService]:
     runtime = build_connected_runtime(tmp_path, status=RuntimeStatus.READY)
     snapshot = _load_settings_snapshot()
     if with_current_screen:
         install_snapshot_screen(runtime, snapshot, include_artifacts=False)
-    return ObserveCommandHandler(
-        runtime_kernel=PassiveRuntimeKernel(runtime),
-        snapshot_service=StaticSnapshotService(snapshot),
-        screen_refresh=_CompilerRefreshService(),
+    snapshot_service = StaticSnapshotService(snapshot)
+    return (
+        ObserveCommandHandler(
+            runtime_kernel=PassiveRuntimeKernel(runtime),
+            snapshot_service=snapshot_service,
+            screen_refresh=_CompilerRefreshService(),
+        ),
+        snapshot_service,
     )
 
 
 def test_bootstrap_observe_omits_source_screen_id(tmp_path: Path) -> None:
-    handler = _observe_handler(tmp_path, with_current_screen=False)
+    handler, snapshot_service = _observe_handler(tmp_path, with_current_screen=False)
 
     payload = handler.handle(command=ObserveCommand())
 
+    assert snapshot_service.fetch_calls[0][1] is True
     assert payload.get("sourceScreenId") is None
     assert payload["truth"]["continuityStatus"] == "none"
     assert payload["truth"].get("changed") is None
 
 
 def test_repeat_observe_same_screen_is_stable_and_unchanged(tmp_path: Path) -> None:
-    handler = _observe_handler(tmp_path, with_current_screen=True)
+    handler, snapshot_service = _observe_handler(tmp_path, with_current_screen=True)
 
     payload = handler.handle(command=ObserveCommand())
 
+    assert snapshot_service.fetch_calls[0][1] is True
     assert payload["sourceScreenId"] == payload["nextScreenId"]
     assert payload["truth"]["continuityStatus"] == "stable"
     assert payload["truth"]["changed"] is False
+
+
+def test_observe_with_authoritative_current_still_fetches_live_snapshot(
+    tmp_path: Path,
+) -> None:
+    runtime = build_connected_runtime(tmp_path, status=RuntimeStatus.READY)
+    old_snapshot = make_snapshot(
+        snapshot_id=1,
+        package_name="com.taobao.taobao",
+        activity_name="TaobaoActivity",
+        label="Taobao",
+    )
+    old_compiled = install_snapshot_screen(
+        runtime, old_snapshot, include_artifacts=True
+    )
+    new_snapshot = make_snapshot(
+        snapshot_id=2,
+        package_name="com.jingdong.app.mall",
+        activity_name="MainFrameActivity",
+        label="JD",
+    )
+    snapshot_service = StaticSnapshotService(new_snapshot)
+    handler = ObserveCommandHandler(
+        runtime_kernel=PassiveRuntimeKernel(runtime),
+        snapshot_service=snapshot_service,
+        screen_refresh=_CompilerRefreshService(),
+    )
+
+    payload = handler.handle(command=ObserveCommand())
+
+    assert snapshot_service.fetch_calls[0][1] is True
+    assert payload["sourceScreenId"] == old_compiled.screen_id
+    assert payload["screen"]["app"]["packageName"] == "com.jingdong.app.mall"
+    assert payload["screen"]["app"]["packageName"] != "com.taobao.taobao"
+
+
+def test_observe_with_authoritative_current_and_fetch_failure_omits_old_screen(
+    tmp_path: Path,
+) -> None:
+    runtime = build_connected_runtime(tmp_path, status=RuntimeStatus.READY)
+    old_snapshot = make_snapshot(
+        snapshot_id=1,
+        package_name="com.taobao.taobao",
+        activity_name="TaobaoActivity",
+        label="Taobao",
+    )
+    install_snapshot_screen(runtime, old_snapshot, include_artifacts=True)
+    fetch_calls: list[bool] = []
+
+    class _FailingSnapshotService:
+        def fetch(
+            self,
+            runtime: object,
+            force_refresh: bool = False,
+            *,
+            lifecycle_lease: object | None = None,
+        ) -> object:
+            del runtime, lifecycle_lease
+            fetch_calls.append(force_refresh)
+            raise DaemonError(
+                code=DaemonErrorCode.DEVICE_RPC_FAILED,
+                message="snapshot failed",
+                retryable=True,
+                details={},
+                http_status=200,
+            )
+
+    handler = ObserveCommandHandler(
+        runtime_kernel=PassiveRuntimeKernel(runtime),
+        snapshot_service=_FailingSnapshotService(),
+        screen_refresh=_CompilerRefreshService(),
+    )
+
+    payload = handler.handle(command=ObserveCommand())
+
+    assert fetch_calls == [True]
+    assert payload["ok"] is False
+    assert payload["payloadMode"] == "none"
+    assert "screen" not in payload
+    assert "nextScreenId" not in payload
+    assert payload["truth"]["observationQuality"] == "none"
+    assert payload["truth"]["continuityStatus"] == "none"
+    assert "changed" not in payload["truth"]

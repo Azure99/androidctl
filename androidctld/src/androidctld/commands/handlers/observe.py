@@ -54,7 +54,6 @@ class ObserveCommandHandler:
                 artifacts=None if source_basis is None else source_basis.artifacts,
             ).model_dump(by_alias=True, mode="json")
         lifecycle_lease = self._runtime_kernel.capture_lifecycle_lease(runtime)
-        force_refresh = source_basis is None
         self._runtime_kernel.acquire_progress_lane(
             runtime,
             occupant_kind=command.kind.value,
@@ -62,7 +61,7 @@ class ObserveCommandHandler:
         try:
             snapshot = self._snapshot_service.fetch(
                 runtime,
-                force_refresh=force_refresh,
+                force_refresh=True,
                 lifecycle_lease=lifecycle_lease,
             )
             previous_screen = (
