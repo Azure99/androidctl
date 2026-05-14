@@ -46,6 +46,7 @@ internal fun AgentStatusScreen(
         ConnectionCard(uiModel = uiModel, actions = actions)
         AccessibilityCard(uiModel = uiModel, actions = actions)
         BackgroundReliabilityCard(uiModel = backgroundReliabilityUiModel, actions = actions)
+        OemBackgroundChecklistCard()
         SecurityTokenCard(uiModel = uiModel, actions = actions)
         DiagnosticsCard(uiModel = uiModel)
         NextStepsCard()

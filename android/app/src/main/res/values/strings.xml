@@ -29,6 +29,7 @@
     <string name="section_connection">Connection</string>
     <string name="section_accessibility">Accessibility</string>
     <string name="section_background_reliability">Background reliability</string>
+    <string name="section_oem_manual_checklist">OEM manual checklist</string>
     <string name="section_security_token">Security token</string>
     <string name="section_diagnostics">Diagnostics</string>
     <string name="section_next_steps">Next steps</string>
@@ -61,6 +62,12 @@
     <string name="status_battery_optimization_ignored_detail">Android battery optimizations are already ignored for this app.</string>
     <string name="status_battery_optimization_not_ignored_detail">Android may restrict background work for this app until you change battery optimization settings.</string>
     <string name="status_battery_optimization_unknown_detail">This device did not report a battery optimization state for the app.</string>
+    <string name="oem_manual_checklist_intro">Vendor labels can vary. Manually check the closest matching background lock, auto-start, chained launch, and power management pages on this device.</string>
+    <string name="oem_manual_checklist_note">Checked boxes are only your own confirmation notes. They do not represent system state or runtime readiness.</string>
+    <string name="oem_checklist_background_lock">Background lock or keep in recents</string>
+    <string name="oem_checklist_auto_start">Auto-start permission</string>
+    <string name="oem_checklist_associated_launch">Associated or chained launch</string>
+    <string name="oem_checklist_power_management">Battery or power management limit</string>
     <string name="next_step_enable_accessibility">1. Enable the accessibility service for this app.</string>
     <string name="next_step_start_server">2. Start the RPC server.</string>
     <string name="next_step_share_token">3. Use the current device token when connecting from androidctld.</string>

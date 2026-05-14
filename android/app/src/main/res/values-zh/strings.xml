@@ -30,6 +30,7 @@
     <string name="section_connection">连接</string>
     <string name="section_accessibility">无障碍服务</string>
     <string name="section_background_reliability">后台可靠性</string>
+    <string name="section_oem_manual_checklist">OEM 后台手工清单</string>
     <string name="section_security_token">安全令牌</string>
     <string name="section_diagnostics">诊断</string>
     <string name="section_next_steps">下一步</string>
@@ -62,6 +63,12 @@
     <string name="status_battery_optimization_ignored_detail">Android 的省电策略已经对本 App 生效为忽略。</string>
     <string name="status_battery_optimization_not_ignored_detail">在你调整省电策略设置之前，Android 可能会限制本 App 的后台工作。</string>
     <string name="status_battery_optimization_unknown_detail">此设备没有返回本 App 的省电策略状态。</string>
+    <string name="oem_manual_checklist_intro">厂商命名可能不同。请在这台设备上手动检查最接近的后台锁定、自启动、关联/链式启动和电源管理页面。</string>
+    <string name="oem_manual_checklist_note">勾选只表示你自己的确认记录，不代表系统状态，也不代表运行时就绪。</string>
+    <string name="oem_checklist_background_lock">后台锁定或保留在最近任务</string>
+    <string name="oem_checklist_auto_start">自启动权限</string>
+    <string name="oem_checklist_associated_launch">关联或链式启动</string>
+    <string name="oem_checklist_power_management">电池或省电管理限制</string>
     <string name="next_step_enable_accessibility">1. 为本 App 启用无障碍服务。</string>
     <string name="next_step_start_server">2. 启动 RPC 服务。</string>
     <string name="next_step_share_token">3. 从 androidctld 连接时使用当前设备令牌。</string>
