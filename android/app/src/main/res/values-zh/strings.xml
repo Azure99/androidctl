@@ -29,6 +29,7 @@
     <string name="status_token_unavailable">令牌当前不可用</string>
     <string name="section_connection">连接</string>
     <string name="section_accessibility">无障碍服务</string>
+    <string name="section_background_reliability">后台可靠性</string>
     <string name="section_security_token">安全令牌</string>
     <string name="section_diagnostics">诊断</string>
     <string name="section_next_steps">下一步</string>
@@ -38,12 +39,15 @@
     <string name="field_bind_address">监听地址</string>
     <string name="field_accessibility_system_service">系统服务</string>
     <string name="field_accessibility_runtime">Runtime 连接</string>
+    <string name="field_battery_optimization_status">省电策略</string>
     <string name="field_device_token_status">令牌状态</string>
     <string name="field_last_request">最近请求</string>
     <string name="field_last_error">最近错误</string>
     <string name="action_start_server">启动服务</string>
     <string name="action_stop_server">停止服务</string>
     <string name="action_open_accessibility_settings">打开无障碍设置</string>
+    <string name="action_open_app_info">打开应用信息</string>
+    <string name="action_open_battery_optimization_settings">打开省电策略设置</string>
     <string name="action_refresh_status">刷新状态</string>
     <string name="device_token_label">设备令牌</string>
     <string name="action_copy_token">复制令牌</string>
@@ -52,6 +56,12 @@
     <string name="regenerate_token_note">重新生成令牌后，host 下次连接时需要使用新令牌。</string>
     <string name="last_request_empty">暂无请求。</string>
     <string name="last_error_empty">近期没有错误。</string>
+    <string name="status_battery_optimization_ignored">已忽略</string>
+    <string name="status_battery_optimization_not_ignored">未忽略</string>
+    <string name="status_battery_optimization_unknown">未知</string>
+    <string name="status_battery_optimization_ignored_detail">Android 的省电策略已经对本 App 生效为忽略。</string>
+    <string name="status_battery_optimization_not_ignored_detail">在你调整省电策略设置之前，Android 可能会限制本 App 的后台工作。</string>
+    <string name="status_battery_optimization_unknown_detail">此设备没有返回本 App 的省电策略状态。</string>
     <string name="next_step_enable_accessibility">1. 为本 App 启用无障碍服务。</string>
     <string name="next_step_start_server">2. 启动 RPC 服务。</string>
     <string name="next_step_share_token">3. 从 androidctld 连接时使用当前设备令牌。</string>

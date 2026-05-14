@@ -26,6 +26,10 @@ class SetupActivity : ComponentActivity() {
                         onStartServer = { startAgentServer(this) },
                         onStopServer = { stopAgentServer(this) },
                         onOpenAccessibilitySettings = { openAgentAccessibilitySettings(this) },
+                        onOpenAppInfo = { openAgentAppInfo(this) },
+                        onOpenBatteryOptimizationSettings = {
+                            openAgentBatteryOptimizationSettings(this)
+                        },
                         onRegenerateToken = { runtimeStatusAccess.regenerateDeviceToken() },
                         onRefreshStatus = { runtimeStatusAccess.refreshStatus() },
                     ),

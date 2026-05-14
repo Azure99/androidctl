@@ -28,6 +28,7 @@
     <string name="status_token_unavailable">Token not available</string>
     <string name="section_connection">Connection</string>
     <string name="section_accessibility">Accessibility</string>
+    <string name="section_background_reliability">Background reliability</string>
     <string name="section_security_token">Security token</string>
     <string name="section_diagnostics">Diagnostics</string>
     <string name="section_next_steps">Next steps</string>
@@ -37,12 +38,15 @@
     <string name="field_bind_address">Bind address</string>
     <string name="field_accessibility_system_service">System service</string>
     <string name="field_accessibility_runtime">Runtime connection</string>
+    <string name="field_battery_optimization_status">Battery optimization</string>
     <string name="field_device_token_status">Token status</string>
     <string name="field_last_request">Last request</string>
     <string name="field_last_error">Last error</string>
     <string name="action_start_server">Start server</string>
     <string name="action_stop_server">Stop server</string>
     <string name="action_open_accessibility_settings">Open Accessibility settings</string>
+    <string name="action_open_app_info">Open app info</string>
+    <string name="action_open_battery_optimization_settings">Open battery optimization settings</string>
     <string name="action_refresh_status">Refresh status</string>
     <string name="device_token_label">Device token</string>
     <string name="action_copy_token">Copy token</string>
@@ -51,6 +55,12 @@
     <string name="regenerate_token_note">Regenerating the token requires the host to use the new token on the next connection.</string>
     <string name="last_request_empty">No requests yet.</string>
     <string name="last_error_empty">No recent errors.</string>
+    <string name="status_battery_optimization_ignored">Ignored</string>
+    <string name="status_battery_optimization_not_ignored">Not ignored</string>
+    <string name="status_battery_optimization_unknown">Unknown</string>
+    <string name="status_battery_optimization_ignored_detail">Android battery optimizations are already ignored for this app.</string>
+    <string name="status_battery_optimization_not_ignored_detail">Android may restrict background work for this app until you change battery optimization settings.</string>
+    <string name="status_battery_optimization_unknown_detail">This device did not report a battery optimization state for the app.</string>
     <string name="next_step_enable_accessibility">1. Enable the accessibility service for this app.</string>
     <string name="next_step_start_server">2. Start the RPC server.</string>
     <string name="next_step_share_token">3. Use the current device token when connecting from androidctld.</string>

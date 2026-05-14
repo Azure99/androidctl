@@ -31,6 +31,8 @@ class MainActivity : ComponentActivity() {
                         onStartServer = { startServer() },
                         onStopServer = { stopServer() },
                         onOpenAccessibilitySettings = { openAccessibilitySettings() },
+                        onOpenAppInfo = { openAppInfo() },
+                        onOpenBatteryOptimizationSettings = { openBatteryOptimizationSettings() },
                         onRegenerateToken = { runtimeStatusAccess.regenerateDeviceToken() },
                         onRefreshStatus = { runtimeStatusAccess.refreshStatus() },
                     ),
@@ -50,6 +52,14 @@ class MainActivity : ComponentActivity() {
         openAgentAccessibilitySettings(this)
     }
 
+    private fun openAppInfo() {
+        openAgentAppInfo(this)
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        openAgentBatteryOptimizationSettings(this)
+    }
+
     override fun onResume() {
         super.onResume()
         runtimeStatusAccess.refreshStatus()
@@ -60,12 +70,15 @@ class MainActivity : ComponentActivity() {
 internal fun AgentStatusApp(
     runtimeStatusAccess: RuntimeStatusAccess,
     actions: AgentStatusActions,
+    backgroundReliabilityAccess: BackgroundReliabilityAccess = AndroidBackgroundReliabilityAccess,
 ) {
     AndroidCtlTheme {
         val state by runtimeStatusAccess.state.collectAsState()
+        val backgroundReliabilityState = rememberBackgroundReliabilityState(backgroundReliabilityAccess)
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             AgentStatusScreen(
                 state = state,
+                backgroundReliabilityState = backgroundReliabilityState,
                 actions = actions,
                 modifier = Modifier.padding(innerPadding),
             )
@@ -77,6 +90,8 @@ internal data class AgentStatusActions(
     val onStartServer: () -> Unit,
     val onStopServer: () -> Unit,
     val onOpenAccessibilitySettings: () -> Unit,
+    val onOpenAppInfo: () -> Unit,
+    val onOpenBatteryOptimizationSettings: () -> Unit,
     val onRegenerateToken: () -> Unit,
     val onRefreshStatus: () -> Unit,
 )

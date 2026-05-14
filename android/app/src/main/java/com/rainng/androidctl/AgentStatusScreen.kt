@@ -28,10 +28,12 @@ import com.rainng.androidctl.agent.runtime.AgentRuntimeState
 @Composable
 internal fun AgentStatusScreen(
     state: AgentRuntimeState,
+    backgroundReliabilityState: BackgroundReliabilityState,
     actions: AgentStatusActions,
     modifier: Modifier = Modifier,
 ) {
     val uiModel = state.toAgentStatusUiModel()
+    val backgroundReliabilityUiModel = backgroundReliabilityState.toBackgroundReliabilityUiModel()
     Column(
         modifier =
             modifier
@@ -43,6 +45,7 @@ internal fun AgentStatusScreen(
         StatusHeader(uiModel = uiModel)
         ConnectionCard(uiModel = uiModel, actions = actions)
         AccessibilityCard(uiModel = uiModel, actions = actions)
+        BackgroundReliabilityCard(uiModel = backgroundReliabilityUiModel, actions = actions)
         SecurityTokenCard(uiModel = uiModel, actions = actions)
         DiagnosticsCard(uiModel = uiModel)
         NextStepsCard()
@@ -131,6 +134,35 @@ private fun AccessibilityCard(
             }
             TextButton(onClick = actions.onRefreshStatus, modifier = Modifier.fillMaxWidth()) {
                 Text(text = stringResource(R.string.action_refresh_status))
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundReliabilityCard(
+    uiModel: BackgroundReliabilityUiModel,
+    actions: AgentStatusActions,
+) {
+    StatusInfoCard(titleRes = R.string.section_background_reliability) {
+        StatusRow(
+            R.string.field_battery_optimization_status,
+            stringResource(uiModel.batteryOptimizationStatusRes),
+        )
+        Text(
+            text = stringResource(uiModel.batteryOptimizationDetailRes),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        VerticalActions {
+            Button(
+                onClick = actions.onOpenBatteryOptimizationSettings,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.action_open_battery_optimization_settings))
+            }
+            TextButton(onClick = actions.onOpenAppInfo, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.action_open_app_info))
             }
         }
     }
