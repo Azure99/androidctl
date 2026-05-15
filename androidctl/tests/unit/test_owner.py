@@ -156,23 +156,210 @@ def test_owner_id_derives_windows_shell_identity_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(owner.sys, "platform", "win32")
-    monkeypatch.setattr(owner, "_find_windows_shell_ancestor_pid", lambda: 3131)
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=300,
+                process_name="pwsh.exe",
+            ),
+            300: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name="explorer.exe",
+            ),
+        },
+    )
     monkeypatch.setattr(
         owner,
         "_read_windows_process_creation_filetime",
-        lambda pid: "133485408000000000",
+        lambda pid: "133485408000000000" if pid == 200 else None,
     )
 
     owner_id = owner.derive_owner_id(env={})
 
-    assert owner_id == "shell:win32:3131:133485408000000000"
+    assert owner_id == "shell:win32:200:133485408000000000"
+
+
+def test_owner_id_derives_windows_agent_anchor_before_ephemeral_shell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(owner.sys, "platform", "win32")
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=300,
+                process_name="pwsh.exe",
+            ),
+            300: owner._WindowsProcessInfo(
+                parent_pid=400,
+                process_name="codex.exe",
+            ),
+            400: owner._WindowsProcessInfo(
+                parent_pid=500,
+                process_name="node.exe",
+            ),
+            500: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name="pwsh.exe",
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_creation_filetime",
+        lambda pid: {
+            200: "shell-time",
+            300: "agent-time",
+        }.get(pid),
+    )
+
+    owner_id = owner.derive_owner_id(env={})
+
+    assert owner_id == "agent:win32:codex.exe:300:agent-time"
+
+
+def test_owner_id_derives_windows_claude_anchor_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(owner.sys, "platform", "win32")
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=300,
+                process_name="pwsh.exe",
+            ),
+            300: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name="claude.exe",
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_creation_filetime",
+        lambda pid: {
+            200: "shell-time",
+            300: "agent-time",
+        }.get(pid),
+    )
+
+    owner_id = owner.derive_owner_id(env={})
+
+    assert owner_id == "agent:win32:claude.exe:300:agent-time"
+
+
+def test_owner_id_derives_configured_windows_agent_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(owner.sys, "platform", "win32")
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=300,
+                process_name="cmd.exe",
+            ),
+            300: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name=r"C:\Agents\MyAgent.EXE",
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_creation_filetime",
+        lambda pid: {
+            200: "shell-time",
+            300: "agent-time",
+        }.get(pid),
+    )
+
+    owner_id = owner.derive_owner_id(
+        env={owner.WINDOWS_OWNER_ANCHOR_ENV: " other.exe; myagent.exe "}
+    )
+
+    assert owner_id == "agent:win32:myagent.exe:300:agent-time"
+
+
+def test_owner_id_falls_back_to_windows_shell_when_agent_time_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(owner.sys, "platform", "win32")
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=300,
+                process_name="pwsh.exe",
+            ),
+            300: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name="codex.exe",
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_creation_filetime",
+        lambda pid: "shell-time" if pid == 200 else None,
+    )
+
+    owner_id = owner.derive_owner_id(env={})
+
+    assert owner_id == "shell:win32:200:shell-time"
 
 
 def test_owner_id_fails_closed_when_windows_creation_time_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(owner.sys, "platform", "win32")
-    monkeypatch.setattr(owner, "_find_windows_shell_ancestor_pid", lambda: 3131)
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name="pwsh.exe",
+            ),
+        },
+    )
     monkeypatch.setattr(
         owner,
         "_read_windows_process_creation_filetime",
@@ -187,7 +374,21 @@ def test_owner_id_fails_closed_when_windows_shell_ancestor_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(owner.sys, "platform", "win32")
-    monkeypatch.setattr(owner, "_find_windows_shell_ancestor_pid", lambda: None)
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    monkeypatch.setattr(
+        owner,
+        "_read_windows_process_table",
+        lambda: {
+            100: owner._WindowsProcessInfo(
+                parent_pid=200,
+                process_name="python.exe",
+            ),
+            200: owner._WindowsProcessInfo(
+                parent_pid=0,
+                process_name="explorer.exe",
+            ),
+        },
+    )
     monkeypatch.setattr(
         owner,
         "_read_windows_process_creation_filetime",
@@ -256,6 +457,83 @@ def test_windows_shell_ancestor_fails_closed_without_shell(
     shell_pid = owner._find_windows_shell_ancestor_pid()
 
     assert shell_pid is None
+
+
+def test_windows_ancestor_chain_stops_at_missing_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    process_table = {
+        100: owner._WindowsProcessInfo(
+            parent_pid=200,
+            process_name="python.exe",
+        ),
+        200: owner._WindowsProcessInfo(
+            parent_pid=999,
+            process_name=r"C:\Program Files\PowerShell\7\PwSh.ExE",
+        ),
+    }
+
+    chain = owner._windows_ancestor_chain(process_table)
+
+    assert chain == [
+        owner._WindowsAncestorProcess(
+            pid=200,
+            process_name="pwsh.exe",
+        )
+    ]
+
+
+def test_windows_ancestor_chain_fails_closed_on_cycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(owner.os, "getpid", lambda: 100)
+    process_table = {
+        100: owner._WindowsProcessInfo(
+            parent_pid=200,
+            process_name="python.exe",
+        ),
+        200: owner._WindowsProcessInfo(
+            parent_pid=300,
+            process_name="conhost.exe",
+        ),
+        300: owner._WindowsProcessInfo(
+            parent_pid=200,
+            process_name="pwsh.exe",
+        ),
+    }
+
+    chain = owner._windows_ancestor_chain(process_table)
+
+    assert chain == []
+
+
+def test_windows_ancestor_chain_stops_at_hop_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current_pid = 1000
+    first_parent_pid = current_pid + 1
+    process_table = {
+        current_pid: owner._WindowsProcessInfo(
+            parent_pid=first_parent_pid,
+            process_name="python.exe",
+        )
+    }
+    for pid in range(
+        first_parent_pid,
+        first_parent_pid + owner._MAX_OWNER_PROCESS_HOPS + 1,
+    ):
+        process_table[pid] = owner._WindowsProcessInfo(
+            parent_pid=pid + 1,
+            process_name="python.exe",
+        )
+    monkeypatch.setattr(owner.os, "getpid", lambda: current_pid)
+
+    chain = owner._windows_ancestor_chain(process_table)
+
+    assert len(chain) == owner._MAX_OWNER_PROCESS_HOPS
+    assert chain[0].pid == first_parent_pid
+    assert chain[-1].pid == first_parent_pid + owner._MAX_OWNER_PROCESS_HOPS - 1
 
 
 def test_read_windows_process_table_reads_snapshot_and_closes_handle(

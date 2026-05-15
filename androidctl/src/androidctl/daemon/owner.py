@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 OWNER_ENV = "ANDROIDCTL_OWNER_ID"
+WINDOWS_OWNER_ANCHOR_ENV = "ANDROIDCTL_OWNER_ANCHOR_PROCESSES"
 DEFAULT_OWNER_HINT = "Set ANDROIDCTL_OWNER_ID explicitly."
 _MAX_OWNER_PROCESS_HOPS = 64
 _SHELL_PROCESS_NAMES = frozenset(
@@ -18,6 +19,7 @@ _SHELL_PROCESS_NAMES = frozenset(
 _WINDOWS_SHELL_PROCESS_NAMES = frozenset(
     {"bash.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "sh.exe"}
 )
+_DEFAULT_WINDOWS_OWNER_ANCHOR_PROCESS_NAMES = frozenset({"claude.exe", "codex.exe"})
 _TH32CS_SNAPPROCESS = 0x00000002
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _ERROR_NO_MORE_FILES = 18
@@ -27,6 +29,19 @@ _WINDOWS_INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 @dataclass(frozen=True)
 class _WindowsProcessInfo:
     parent_pid: int
+    process_name: str
+
+
+@dataclass(frozen=True)
+class _WindowsAncestorProcess:
+    pid: int
+    process_name: str
+
+
+@dataclass(frozen=True)
+class _WindowsOwnerTarget:
+    kind: str
+    pid: int
     process_name: str
 
 
@@ -58,8 +73,8 @@ def derive_owner_id(*, env: Mapping[str, str]) -> str:
         candidate = configured.strip()
         if candidate:
             return candidate
-    if sys.platform == "win32":
-        owner_id = _derive_windows_owner_id()
+    if _is_windows_platform():
+        owner_id = _derive_windows_owner_id(env=env)
         if owner_id is None:
             raise ValueError(
                 "Unable to derive a safe owner identity automatically. "
@@ -79,6 +94,10 @@ def derive_owner_id(*, env: Mapping[str, str]) -> str:
             f"{DEFAULT_OWNER_HINT}"
         )
     return f"shell:{shell_pid}:{lifetime}"
+
+
+def _is_windows_platform() -> bool:
+    return sys.platform == "win32"
 
 
 def _find_interactive_shell_ancestor_pid(env: Mapping[str, str]) -> int | None:
@@ -108,39 +127,112 @@ def _find_interactive_shell_ancestor_pid(env: Mapping[str, str]) -> int | None:
     return None
 
 
-def _derive_windows_owner_id() -> str | None:
-    shell_pid = _find_windows_shell_ancestor_pid()
-    if shell_pid is None:
+def _derive_windows_owner_id(*, env: Mapping[str, str]) -> str | None:
+    process_table = _read_windows_process_table()
+    if process_table is None:
         return None
-    lifetime = _read_windows_process_creation_filetime(shell_pid)
-    if lifetime is None:
-        return None
-    return f"shell:win32:{shell_pid}:{lifetime}"
+    for target in _find_windows_owner_targets(process_table, env=env):
+        lifetime = _read_windows_process_creation_filetime(target.pid)
+        if lifetime is None:
+            continue
+        if target.kind == "agent":
+            return f"agent:win32:{target.process_name}:{target.pid}:{lifetime}"
+        return f"shell:win32:{target.pid}:{lifetime}"
+    return None
+
+
+def _find_windows_owner_targets(
+    process_table: dict[int, _WindowsProcessInfo],
+    *,
+    env: Mapping[str, str],
+) -> list[_WindowsOwnerTarget]:
+    anchor_names = _windows_owner_anchor_process_names(env)
+    agent_targets: list[_WindowsOwnerTarget] = []
+    shell_target: _WindowsOwnerTarget | None = None
+    for ancestor in _windows_ancestor_chain(process_table):
+        if ancestor.process_name in anchor_names:
+            agent_targets.append(
+                _WindowsOwnerTarget(
+                    kind="agent",
+                    pid=ancestor.pid,
+                    process_name=ancestor.process_name,
+                )
+            )
+        if (
+            shell_target is None
+            and ancestor.process_name in _WINDOWS_SHELL_PROCESS_NAMES
+        ):
+            shell_target = _WindowsOwnerTarget(
+                kind="shell",
+                pid=ancestor.pid,
+                process_name=ancestor.process_name,
+            )
+    if shell_target is not None:
+        return [*agent_targets, shell_target]
+    return agent_targets
+
+
+def _windows_ancestor_chain(
+    process_table: dict[int, _WindowsProcessInfo],
+) -> list[_WindowsAncestorProcess]:
+    current_pid = os.getpid()
+    current = process_table.get(current_pid)
+    if current is None:
+        return []
+    ancestor_pid = current.parent_pid
+    seen: set[int] = {current_pid}
+    ancestors: list[_WindowsAncestorProcess] = []
+    hops = 0
+    while ancestor_pid > 0 and hops < _MAX_OWNER_PROCESS_HOPS:
+        if ancestor_pid in seen:
+            return []
+        seen.add(ancestor_pid)
+        ancestor = process_table.get(ancestor_pid)
+        if ancestor is None:
+            break
+        ancestors.append(
+            _WindowsAncestorProcess(
+                pid=ancestor_pid,
+                process_name=_normalize_windows_process_name(ancestor.process_name),
+            )
+        )
+        ancestor_pid = ancestor.parent_pid
+        hops += 1
+    return ancestors
+
+
+def _windows_owner_anchor_process_names(env: Mapping[str, str]) -> set[str]:
+    process_names = set(_DEFAULT_WINDOWS_OWNER_ANCHOR_PROCESS_NAMES)
+    configured = env.get(WINDOWS_OWNER_ANCHOR_ENV)
+    if configured is None:
+        return process_names
+    for raw_name in configured.replace(";", ",").split(","):
+        normalized = _normalize_windows_process_name(raw_name)
+        if normalized:
+            process_names.add(normalized)
+    return process_names
 
 
 def _find_windows_shell_ancestor_pid() -> int | None:
     process_table = _read_windows_process_table()
     if process_table is None:
         return None
-    current_pid = os.getpid()
-    current = process_table.get(current_pid)
-    if current is None:
+    target = _find_windows_shell_ancestor(process_table)
+    if target is None:
         return None
-    ancestor_pid = current.parent_pid
-    seen: set[int] = {current_pid}
-    hops = 0
-    while ancestor_pid > 0 and hops < _MAX_OWNER_PROCESS_HOPS:
-        if ancestor_pid in seen:
-            return None
-        seen.add(ancestor_pid)
-        ancestor = process_table.get(ancestor_pid)
-        if ancestor is None:
-            return None
-        process_name = _normalize_windows_process_name(ancestor.process_name)
-        if process_name in _WINDOWS_SHELL_PROCESS_NAMES:
-            return ancestor_pid
-        ancestor_pid = ancestor.parent_pid
-        hops += 1
+    return target.pid
+
+
+def _find_windows_shell_ancestor(
+    process_table: dict[int, _WindowsProcessInfo],
+) -> _WindowsOwnerTarget | None:
+    for ancestor in _windows_ancestor_chain(process_table):
+        if ancestor.process_name in _WINDOWS_SHELL_PROCESS_NAMES:
+            return _WindowsOwnerTarget(
+                kind="shell",
+                pid=ancestor.pid,
+                process_name=ancestor.process_name,
+            )
     return None
 
 
