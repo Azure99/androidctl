@@ -97,6 +97,7 @@ class AndroidctldHttpServer:
             and method == "POST"
             and path
             in {
+                "/health",
                 "/runtime/get",
                 "/runtime/close",
                 "/commands/run",
@@ -189,6 +190,7 @@ class AndroidctldHttpServer:
             )
             if result.shutdown_after_write:
                 self._enter_closing_gate()
+                self._retire_active_slot_for_close()
                 try:
                     self._try_write_json_response(
                         handler,
@@ -233,6 +235,22 @@ class AndroidctldHttpServer:
         if self._closing:
             return
         self._closing = True
+
+    def _retire_active_slot_for_close(self) -> None:
+        try:
+            self._active_slot.clear_record()
+        except Exception:
+            self._logger.warning(
+                "failed to clear active daemon record while closing",
+                exc_info=True,
+            )
+        try:
+            self._active_slot.release_owner()
+        except Exception:
+            self._logger.warning(
+                "failed to release active daemon owner lock while closing",
+                exc_info=True,
+            )
 
     def _request_shutdown_after_close(self) -> None:
         if self._shutdown_after_close_requested:

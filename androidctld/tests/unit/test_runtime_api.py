@@ -639,7 +639,7 @@ def test_commands_run_rejects_scroll_direction_outside_shared_contract(
     }
 
 
-def test_runtime_close_requests_shutdown_after_response_write_before_owner_release(
+def test_runtime_close_retires_active_slot_before_response_write(
     tmp_path: Path,
 ) -> None:
     workspace_root = tmp_path / "workspace"
@@ -735,15 +735,100 @@ def test_runtime_close_requests_shutdown_after_response_write_before_owner_relea
     assert payload["result"]["command"] == "close"
     assert payload["result"]["envelope"] == "lifecycle"
     assert_retained_omits_semantic_fields(payload["result"])
-    assert ("write", False, True, True) in events
-    assert config.owner_lock_path.exists() is True
-    assert config.active_file_path.exists() is True
-    assert events[-1] == ("shutdown", True, True)
+    assert ("write", False, False, False) in events
+    assert config.owner_lock_path.exists() is False
+    assert config.active_file_path.exists() is False
+    assert events[-1] == ("shutdown", False, False)
 
     server.stop()
 
     assert config.owner_lock_path.exists() is False
     assert config.active_file_path.exists() is False
+
+
+def test_runtime_close_retire_active_slot_failure_still_returns_close_success(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    config = DaemonConfig(
+        workspace_root=workspace_root,
+        owner_id="shell:self:1",
+        host="127.0.0.1",
+        port=0,
+    )
+    token_store = DaemonTokenStore(config)
+    token = token_store.current_token()
+    runtime = WorkspaceRuntime(
+        workspace_root=workspace_root,
+        artifact_root=workspace_root / ".androidctl",
+        runtime_path=workspace_root / ".androidctl" / "runtime.json",
+        status=RuntimeStatus.READY,
+    )
+    logger = logging.getLogger(f"tests.androidctld.close_retire.{id(tmp_path)}")
+    logger.handlers.clear()
+    logger.propagate = True
+    caplog.set_level(logging.WARNING, logger=logger.name)
+    shutdown_events: list[str] = []
+    server = AndroidctldHttpServer(
+        config=config,
+        token_store=token_store,
+        runtime_store=FakeRuntimeStore(runtime),
+        command_service=BusyCommandService(runtime),
+        logger=logger,
+        shutdown_callback=lambda: shutdown_events.append("shutdown"),
+    )
+
+    class FailingActiveSlot:
+        def clear_record(self) -> None:
+            raise RuntimeError("clear failed")
+
+        def release_owner(self) -> None:
+            raise RuntimeError("release failed")
+
+    class RecordingWriter:
+        def __init__(self) -> None:
+            self.body = b""
+
+        def write(self, data: bytes) -> None:
+            self.body += data
+
+    class FakeHandler:
+        def __init__(self) -> None:
+            payload = json.dumps({}).encode("utf-8")
+            self.command = "POST"
+            self.path = "/runtime/close"
+            self.headers = {
+                TOKEN_HEADER_NAME: token,
+                OWNER_HEADER_NAME: config.owner_id,
+                "Content-Length": str(len(payload)),
+            }
+            self.rfile = io.BytesIO(payload)
+            self.wfile = RecordingWriter()
+            self.status_code: int | None = None
+            self.sent_headers: list[tuple[str, str]] = []
+
+        def send_response(self, status_code: int) -> None:
+            self.status_code = status_code
+
+        def send_header(self, name: str, value: str) -> None:
+            self.sent_headers.append((name, value))
+
+        def end_headers(self) -> None:
+            pass
+
+    server._active_slot = FailingActiveSlot()  # type: ignore[assignment]
+    handler = FakeHandler()
+
+    server._handle(handler)
+
+    payload = json.loads(handler.wfile.body.decode("utf-8"))
+    assert payload["ok"] is True
+    assert payload["result"]["command"] == "close"
+    assert shutdown_events == ["shutdown"]
+    assert "failed to clear active daemon record while closing" in caplog.text
+    assert "failed to release active daemon owner lock while closing" in caplog.text
 
 
 def test_http_runtime_close_busy_returns_retained_no_close_without_shutdown(
@@ -907,9 +992,9 @@ def test_runtime_close_gate_rejects_followup_work_without_dispatch(
     server._handle(health_handler)
 
     health_payload = json.loads(health_handler.wfile.body.decode("utf-8"))
-    assert health_payload["ok"] is True
-    assert health_payload["result"]["service"] == "androidctld"
-    assert health_payload["result"]["ownerId"] == config.owner_id
+    assert health_payload["ok"] is False
+    assert health_payload["error"]["code"] == "RUNTIME_BUSY"
+    assert health_payload["error"]["details"] == {"reason": "daemon_shutting_down"}
 
     followup_handler = FakeHandler(
         "/commands/run",
@@ -1066,6 +1151,15 @@ def test_runtime_close_gate_rejects_followup_while_response_write_is_blocked(
 
     assert write_started.wait(timeout=2.0)
     assert server._closing is True
+    assert shutdown_called.is_set() is False
+
+    health_handler = FakeHandler("/health", {})
+    server._handle(health_handler)
+
+    health_payload = json.loads(health_handler.wfile.body.decode("utf-8"))
+    assert health_payload["ok"] is False
+    assert health_payload["error"]["code"] == "RUNTIME_BUSY"
+    assert health_payload["error"]["details"] == {"reason": "daemon_shutting_down"}
     assert shutdown_called.is_set() is False
 
     followup_handler = FakeHandler(
