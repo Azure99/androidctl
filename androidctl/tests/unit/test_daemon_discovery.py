@@ -11,6 +11,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from androidctl import __version__ as ANDROIDCTL_VERSION
 from androidctl.daemon.client import (
     DaemonApiError,
     DaemonClient,
@@ -50,6 +51,11 @@ def _active_record(
     )
 
 
+def _next_patch_version(version: str) -> str:
+    major, minor, patch = (int(part) for part in version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
+
+
 def _write_active_payload(
     workspace_root: Path,
     payload: str | dict[str, object],
@@ -78,7 +84,7 @@ def _write_active_record(
 def _health_result(record: ActiveDaemonRecord) -> HealthResult:
     return HealthResult(
         service="androidctld",
-        version="0.1.0",
+        version=ANDROIDCTL_VERSION,
         workspace_root=record.workspace_root,
         owner_id=record.owner_id,
     )
@@ -116,7 +122,7 @@ def _loopback_daemon_server(
                     "ok": True,
                     "result": {
                         "service": "androidctld",
-                        "version": "0.1.0",
+                        "version": ANDROIDCTL_VERSION,
                         "workspaceRoot": workspace_root,
                         "ownerId": owner_id,
                     },
@@ -268,7 +274,7 @@ def test_try_get_healthy_daemon_raises_on_incompatible_health_identity() -> None
             json={
                 "result": {
                     "service": "not-androidctld",
-                    "version": "0.1.0",
+                    "version": ANDROIDCTL_VERSION,
                     "workspaceRoot": "/repo",
                     "ownerId": "shell:self:1",
                 }
@@ -293,7 +299,7 @@ def test_try_get_healthy_daemon_raises_on_undocumented_instance_id_field() -> No
                 "ok": True,
                 "result": {
                     "service": "androidctld",
-                    "version": "0.1.0",
+                    "version": ANDROIDCTL_VERSION,
                     "instanceId": "inst-2",
                     "workspaceRoot": "/repo",
                     "ownerId": "shell:self:1",
@@ -319,7 +325,7 @@ def test_try_get_healthy_daemon_raises_on_extra_api_version_field() -> None:
                 "ok": True,
                 "result": {
                     "service": "androidctld",
-                    "version": "0.1.0",
+                    "version": ANDROIDCTL_VERSION,
                     "apiVersion": 1,
                     "workspaceRoot": "/repo",
                     "ownerId": "shell:self:1",
@@ -547,6 +553,7 @@ def test_discover_existing_daemon_client_same_owner_version_mismatch_hard_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    other_version = _next_patch_version(ANDROIDCTL_VERSION)
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     _write_active_record(workspace_root)
@@ -559,8 +566,8 @@ def test_discover_existing_daemon_client_same_owner_version_mismatch_hard_fails(
         "androidctl.daemon.discovery.try_get_healthy_daemon",
         lambda _client, _record: (_ for _ in ()).throw(
             IncompatibleDaemonVersionError(
-                expected_version="0.1.0",
-                actual_version="0.1.1",
+                expected_version=ANDROIDCTL_VERSION,
+                actual_version=other_version,
             )
         ),
     )
@@ -725,6 +732,7 @@ def test_resolve_daemon_client_same_owner_version_mismatch_does_not_fallback_lau
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    other_version = _next_patch_version(ANDROIDCTL_VERSION)
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     _write_active_record(workspace_root)
@@ -737,8 +745,8 @@ def test_resolve_daemon_client_same_owner_version_mismatch_does_not_fallback_lau
         "androidctl.daemon.discovery.try_get_healthy_daemon",
         lambda _client, _record: (_ for _ in ()).throw(
             IncompatibleDaemonVersionError(
-                expected_version="0.1.0",
-                actual_version="0.1.1",
+                expected_version=ANDROIDCTL_VERSION,
+                actual_version=other_version,
             )
         ),
     )
@@ -912,6 +920,7 @@ def test_resolve_daemon_client_launched_version_mismatch_hard_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    other_version = _next_patch_version(ANDROIDCTL_VERSION)
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     record = _active_record(workspace_root=workspace_root.resolve().as_posix())
@@ -926,8 +935,8 @@ def test_resolve_daemon_client_launched_version_mismatch_hard_fails(
         "androidctl.daemon.discovery.try_get_healthy_daemon",
         lambda _client, _record: (_ for _ in ()).throw(
             IncompatibleDaemonVersionError(
-                expected_version="0.1.0",
-                actual_version="0.1.1",
+                expected_version=ANDROIDCTL_VERSION,
+                actual_version=other_version,
             )
         ),
     )
@@ -1223,6 +1232,7 @@ def test_resolve_daemon_client_owner_mismatch_version_mismatch_stays_workspace_b
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    other_version = _next_patch_version(ANDROIDCTL_VERSION)
     workspace_root = tmp_path / "workspace"
     workspace_root.mkdir()
     _write_active_record(workspace_root, owner_id="shell:other:1")
@@ -1230,8 +1240,8 @@ def test_resolve_daemon_client_owner_mismatch_version_mismatch_stays_workspace_b
     class VersionMismatchClient:
         def health(self, record):
             raise IncompatibleDaemonVersionError(
-                expected_version="0.1.0",
-                actual_version="0.1.1",
+                expected_version=ANDROIDCTL_VERSION,
+                actual_version=other_version,
             )
 
     monkeypatch.setattr(

@@ -27,6 +27,11 @@ from androidctld.runtime_policy import ADB_COMMAND_TIMEOUT_SECONDS
 from ..support.runtime_store import runtime_store_for_workspace
 
 
+def _next_patch_version(version: str) -> str:
+    major, minor, patch = (int(part) for part in version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
+
+
 class FakeDeviceAgentServer:
     def __init__(self) -> None:
         self.meta_version = ANDROIDCTLD_VERSION
@@ -367,7 +372,8 @@ def test_bootstrap_maps_version_mismatch(
     fake_device_agent_server: tuple[FakeDeviceAgentServer, DeviceEndpoint],
 ) -> None:
     server, endpoint = fake_device_agent_server
-    server.meta_version = "0.1.1"
+    other_version = _next_patch_version(ANDROIDCTLD_VERSION)
+    server.meta_version = other_version
     bootstrapper = DeviceBootstrapper(
         connector_factory=StaticConnectorFactory(endpoint)
     )
@@ -376,7 +382,7 @@ def test_bootstrap_maps_version_mismatch(
     assert excinfo.value.code == "DEVICE_AGENT_VERSION_MISMATCH"
     assert excinfo.value.details == {
         "expectedReleaseVersion": ANDROIDCTLD_VERSION,
-        "actualReleaseVersion": "0.1.1",
+        "actualReleaseVersion": other_version,
     }
     assert "release version mismatch" in excinfo.value.message
     assert server.methods == ["meta.get"]
@@ -386,7 +392,7 @@ def test_bootstrap_rpc_version_extra_field_stops_before_release_mismatch_and_rea
     fake_device_agent_server: tuple[FakeDeviceAgentServer, DeviceEndpoint],
 ) -> None:
     server, endpoint = fake_device_agent_server
-    server.meta_version = "0.1.1"
+    server.meta_version = _next_patch_version(ANDROIDCTLD_VERSION)
     server.meta_extra_fields = {"rpcVersion": 1}
     server.snapshot_error_code = "ACCESSIBILITY_DISABLED"
     bootstrapper = DeviceBootstrapper(
@@ -425,7 +431,7 @@ def test_bootstrap_keeps_unknown_extra_meta_field_as_generic_schema_failure(
     fake_device_agent_server: tuple[FakeDeviceAgentServer, DeviceEndpoint],
 ) -> None:
     server, endpoint = fake_device_agent_server
-    server.meta_version = "0.1.1"
+    server.meta_version = _next_patch_version(ANDROIDCTLD_VERSION)
     server.meta_extra_fields = {"extraField": True}
     server.snapshot_error_code = "ACCESSIBILITY_DISABLED"
     bootstrapper = DeviceBootstrapper(
@@ -448,7 +454,7 @@ def test_bootstrap_does_not_remap_rpc_version_when_other_unknown_fields_exist(
     fake_device_agent_server: tuple[FakeDeviceAgentServer, DeviceEndpoint],
 ) -> None:
     server, endpoint = fake_device_agent_server
-    server.meta_version = "0.1.1"
+    server.meta_version = _next_patch_version(ANDROIDCTLD_VERSION)
     server.meta_extra_fields = {"extraField": True, "rpcVersion": 1}
     server.snapshot_error_code = "ACCESSIBILITY_DISABLED"
     bootstrapper = DeviceBootstrapper(

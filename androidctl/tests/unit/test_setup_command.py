@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from androidctl import __version__ as ANDROIDCTL_VERSION
 from androidctl.app import app
 from androidctl.commands import setup as setup_command
 from androidctl.setup import adb as setup_adb
+from androidctl.setup.apk_resource import packaged_agent_apk_name
 
 
 @contextmanager
@@ -81,7 +83,7 @@ def test_setup_dry_run_prints_human_progress_without_adb(
     assert result.stdout == ""
     assert "<result" not in result.stderr
     assert "mode: dry-run" in result.stderr
-    assert "androidctl-agent-0.1.0-release.apk" in result.stderr
+    assert packaged_agent_apk_name(ANDROIDCTL_VERSION) in result.stderr
     assert "status: dry-run complete" in result.stderr
 
 

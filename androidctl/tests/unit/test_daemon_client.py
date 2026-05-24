@@ -76,6 +76,11 @@ def _retained_payload(
     return payload
 
 
+def _next_patch_version(version: str) -> str:
+    major, minor, patch = (int(part) for part in version.split("."))
+    return f"{major}.{minor}.{patch + 1}"
+
+
 def test_health_from_active_record_posts_caller_owner_header() -> None:
     seen_headers: dict[str, str] = {}
 
@@ -87,7 +92,7 @@ def test_health_from_active_record_posts_caller_owner_header() -> None:
                 "ok": True,
                 "result": {
                     "service": "androidctld",
-                    "version": "0.1.0",
+                    "version": ANDROIDCTL_VERSION,
                     "workspaceRoot": "/repo",
                     "ownerId": "shell:caller:1",
                 },
@@ -121,6 +126,7 @@ def test_health_from_active_record_posts_caller_owner_header() -> None:
 
 
 def test_health_rejects_release_version_mismatch() -> None:
+    other_version = _next_patch_version(ANDROIDCTL_VERSION)
     client = DaemonClient(
         httpx.Client(
             transport=httpx.MockTransport(
@@ -130,7 +136,7 @@ def test_health_rejects_release_version_mismatch() -> None:
                         "ok": True,
                         "result": {
                             "service": "androidctld",
-                            "version": "0.1.1",
+                            "version": other_version,
                             "workspaceRoot": "/repo",
                             "ownerId": "shell:self:1",
                         },
@@ -147,13 +153,14 @@ def test_health_rejects_release_version_mismatch() -> None:
         IncompatibleDaemonVersionError,
         match=(
             "androidctl/androidctld release version mismatch: "
-            f"cli={ANDROIDCTL_VERSION} daemon=0.1.1"
+            f"cli={ANDROIDCTL_VERSION} daemon={other_version}"
         ),
     ):
         client.health()
 
 
 def test_health_checks_active_record_identity_before_release_version_gate() -> None:
+    other_version = _next_patch_version(ANDROIDCTL_VERSION)
     record = ActiveDaemonRecord(
         pid=1234,
         host="127.0.0.1",
@@ -172,7 +179,7 @@ def test_health_checks_active_record_identity_before_release_version_gate() -> N
                         "ok": True,
                         "result": {
                             "service": "androidctld",
-                            "version": "0.1.1",
+                            "version": other_version,
                             "workspaceRoot": "/other-workspace",
                             "ownerId": "shell:other:1",
                         },
