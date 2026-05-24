@@ -63,14 +63,28 @@ def test_root_pyproject_version_drift_fails(tmp_path: Path) -> None:
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
         repo_root / "pyproject.toml",
-        _pyproject_text(version="0.1.1"),
+        _pyproject_text(version="0.1.1", dynamic_version=False),
     )
 
     report = run_checks(repo_root)
 
-    failure = _find_failure(report, "root project.version")
+    failure = _find_failure(report, "root project.version source")
     assert failure is not None
-    assert failure.actual == "0.1.1"
+    assert "project.version='0.1.1'" in failure.actual
+
+
+def test_root_pyproject_dynamic_version_file_drift_fails(tmp_path: Path) -> None:
+    repo_root = _write_valid_repo(tmp_path)
+    _write_file(
+        repo_root / "pyproject.toml",
+        _pyproject_text(version_file='["OTHER_VERSION"]'),
+    )
+
+    report = run_checks(repo_root)
+
+    failure = _find_failure(report, "root project.version source")
+    assert failure is not None
+    assert "OTHER_VERSION" in failure.actual
 
 
 def test_root_pyproject_name_drift_fails(tmp_path: Path) -> None:
@@ -126,7 +140,7 @@ def test_runtime_version_module_drift_fails(tmp_path: Path) -> None:
 
     failure = _find_failure(report, "contracts runtime __version__")
     assert failure is not None
-    assert failure.actual == "0.1.2"
+    assert "runtime version resolver" in failure.actual
 
 
 def test_python_reexport_drift_fails(tmp_path: Path) -> None:
@@ -571,15 +585,16 @@ def test_failure_message_contains_path_expected_and_actual(tmp_path: Path) -> No
     repo_root = _write_valid_repo(tmp_path)
     _write_file(
         repo_root / "pyproject.toml",
-        _pyproject_text(version="0.1.1"),
+        _pyproject_text(version_file='["OTHER_VERSION"]'),
     )
 
     report = run_checks(repo_root)
     rendered = format_report(report)
 
     assert "pyproject.toml" in rendered
-    assert "expected: 0.1.0" in rendered
-    assert "actual: 0.1.1" in rendered
+    assert "expected: project.version absent" in rendered
+    assert "actual:" in rendered
+    assert "OTHER_VERSION" in rendered
 
 
 def _find_failure(report, check_name: str):
@@ -593,19 +608,23 @@ def _write_valid_repo(repo_root: Path, version: str = "0.1.0") -> Path:
     _write_file(repo_root / "VERSION", f"{version}\n")
     _write_file(
         repo_root / "pyproject.toml",
-        _pyproject_text(version=version),
+        _pyproject_text(),
     )
     _write_file(
         repo_root / "contracts/src/androidctl_contracts/_version.py",
-        f'__version__ = "{version}"\n',
+        _contracts_version_module_text(),
     )
     _write_file(
         repo_root / "androidctl/src/androidctl/_version.py",
-        f'__version__ = "{version}"\n',
+        _host_version_module_text(),
     )
     _write_file(
         repo_root / "androidctld/src/androidctld/_version.py",
-        f'__version__ = "{version}"\n',
+        _host_version_module_text(),
+    )
+    _write_file(
+        repo_root / "contracts/src/androidctl_contracts/_version_source.py",
+        _version_source_text(),
     )
     _write_file(
         repo_root / "contracts/src/androidctl_contracts/__init__.py",
@@ -706,15 +725,25 @@ def _write_file(path: Path, content: str) -> None:
 def _pyproject_text(
     project_name: str = "androidctl",
     version: str = "0.1.0",
+    dynamic_version: bool = True,
+    version_file: str = '["VERSION"]',
     where: str = '["contracts/src", "androidctld/src", "androidctl/src"]',
     include: str = '["androidctl_contracts*", "androidctld*", "androidctl*"]',
     namespaces: str = "false",
     apk_package_data: str = '["*.apk"]',
 ) -> str:
+    version_source = (
+        'dynamic = ["version"]\n' if dynamic_version else f'version = "{version}"\n'
+    )
+    dynamic_table = (
+        "\n" "[tool.setuptools.dynamic]\n" f"version = {{ file = {version_file} }}\n"
+        if dynamic_version
+        else ""
+    )
     return (
         "[project]\n"
         f'name = "{project_name}"\n'
-        f'version = "{version}"\n'
+        f"{version_source}"
         "dependencies = [\n"
         '    "typing-extensions>=4.12,<5",\n'
         "]\n"
@@ -726,6 +755,69 @@ def _pyproject_text(
         "\n"
         "[tool.setuptools.package-data]\n"
         f'"androidctl.resources" = {apk_package_data}\n'
+        f"{dynamic_table}"
+    )
+
+
+def _contracts_version_module_text() -> str:
+    return (
+        "from __future__ import annotations\n\n"
+        "from ._version_source import resolve_release_version\n\n"
+        "__version__ = resolve_release_version()\n"
+    )
+
+
+def _host_version_module_text() -> str:
+    return (
+        "from __future__ import annotations\n\n"
+        "from androidctl_contracts._version_source import resolve_release_version\n\n"
+        "__version__ = resolve_release_version()\n"
+    )
+
+
+def _version_source_text() -> str:
+    return (
+        "from __future__ import annotations\n\n"
+        "import re\n"
+        "from importlib.metadata import PackageNotFoundError\n"
+        "from importlib.metadata import version as distribution_version\n"
+        "from pathlib import Path\n\n"
+        '_DISTRIBUTION_NAME = "androidctl"\n'
+        '_VERSION_FILE_NAME = "VERSION"\n'
+        r'_VERSION_PATTERN = re.compile(r"\d+\.\d+\.\d+\Z")'
+        "\n\n\n"
+        "def resolve_release_version() -> str:\n"
+        "    source_version = _read_source_version()\n"
+        "    if source_version is not None:\n"
+        "        return source_version\n"
+        "    try:\n"
+        "        return distribution_version(_DISTRIBUTION_NAME)\n"
+        "    except PackageNotFoundError as error:\n"
+        "        raise RuntimeError(\n"
+        '            "unable to resolve androidctl release version"\n'
+        "        ) from error\n"
+        "\n\n"
+        "def _read_source_version() -> str | None:\n"
+        "    for candidate_root in Path(__file__).resolve().parents:\n"
+        "        version_path = candidate_root / _VERSION_FILE_NAME\n"
+        "        if (\n"
+        "            not version_path.is_file()\n"
+        "            or not _looks_like_repo_root(candidate_root)\n"
+        "        ):\n"
+        "            continue\n"
+        '        return _parse_version_text(version_path.read_text(encoding="utf-8"))\n'
+        "    return None\n"
+        "\n\n"
+        "def _looks_like_repo_root(path: Path) -> bool:\n"
+        "    return (\n"
+        '        (path / "pyproject.toml").is_file()\n'
+        '        and (path / "androidctl").is_dir()\n'
+        '        and (path / "androidctld").is_dir()\n'
+        '        and (path / "contracts").is_dir()\n'
+        "    )\n"
+        "\n\n"
+        "def _parse_version_text(raw_text: str) -> str:\n"
+        '    return raw_text.removesuffix("\\n")\n'
     )
 
 

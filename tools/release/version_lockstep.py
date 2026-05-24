@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -126,28 +128,32 @@ def run_checks(repo_root: Path) -> CheckReport:
             "root project.name",
             failures,
         )
-        _check_pyproject_version(
+        _check_pyproject_dynamic_version(
             repo_root,
             Path("pyproject.toml"),
-            canonical_version,
-            "root project.version",
+            "root project.version source",
             failures,
         )
-        _check_version_module(
+        _check_runtime_version_helper(
+            repo_root,
+            Path("contracts/src/androidctl_contracts/_version_source.py"),
+            failures,
+        )
+        _check_runtime_version_source(
             repo_root,
             Path("contracts/src/androidctl_contracts/_version.py"),
             canonical_version,
             "contracts runtime __version__",
             failures,
         )
-        _check_version_module(
+        _check_runtime_version_source(
             repo_root,
             Path("androidctl/src/androidctl/_version.py"),
             canonical_version,
             "androidctl runtime __version__",
             failures,
         )
-        _check_version_module(
+        _check_runtime_version_source(
             repo_root,
             Path("androidctld/src/androidctld/_version.py"),
             canonical_version,
@@ -160,7 +166,7 @@ def run_checks(repo_root: Path) -> CheckReport:
             canonical_version,
             failures,
         )
-        checked_items += 6
+        checked_items += 7
 
     _check_root_package_discovery(repo_root, Path("pyproject.toml"), failures)
     _check_package_reexport(
@@ -301,36 +307,70 @@ def _check_canonical_version(
         return None
 
 
-def _check_pyproject_version(
+def _check_pyproject_dynamic_version(
     repo_root: Path,
     relative_path: Path,
-    expected_version: str,
     check_name: str,
     failures: list[CheckFailure],
 ) -> None:
     pyproject_path = repo_root / relative_path
     try:
         project_data = _load_pyproject(pyproject_path)
-        actual_version = project_data["project"]["version"]
+        project = _require_mapping(project_data.get("project"), "project")
+        project_version = project.get("version")
+        project_dynamic = project.get("dynamic")
+        version_files = _dynamic_version_files(project_data)
     except Exception as error:
         failures.append(
             CheckFailure(
                 check_name=check_name,
                 path=pyproject_path,
-                expected=expected_version,
-                actual=f"unable to parse project.version: {error}",
+                expected=(
+                    "project.version absent; project.dynamic contains 'version'; "
+                    "tool.setuptools.dynamic.version.file == ['VERSION']"
+                ),
+                actual=f"unable to parse dynamic project.version source: {error}",
             )
         )
         return
-    if actual_version != expected_version:
+    if (
+        project_version is not None
+        or not isinstance(project_dynamic, list)
+        or "version" not in project_dynamic
+        or version_files != ["VERSION"]
+    ):
         failures.append(
             CheckFailure(
                 check_name=check_name,
                 path=pyproject_path,
-                expected=expected_version,
-                actual=str(actual_version),
+                expected=(
+                    "project.version absent; project.dynamic contains 'version'; "
+                    "tool.setuptools.dynamic.version.file == ['VERSION']"
+                ),
+                actual=(
+                    f"project.version={project_version!r}; "
+                    f"project.dynamic={project_dynamic!r}; "
+                    "tool.setuptools.dynamic.version.file="
+                    f"{version_files!r}"
+                ),
             )
         )
+
+
+def _dynamic_version_files(project_data: dict[str, object]) -> object:
+    tool = project_data.get("tool")
+    if not isinstance(tool, dict):
+        return None
+    setuptools = tool.get("setuptools")
+    if not isinstance(setuptools, dict):
+        return None
+    dynamic_table = setuptools.get("dynamic")
+    if not isinstance(dynamic_table, dict):
+        return None
+    version_table = dynamic_table.get("version")
+    if not isinstance(version_table, dict):
+        return None
+    return version_table.get("file")
 
 
 def _check_pyproject_name(
@@ -400,7 +440,7 @@ def _check_dependency_pin(
         )
 
 
-def _check_version_module(
+def _check_runtime_version_source(
     repo_root: Path,
     relative_path: Path,
     expected_version: str,
@@ -409,14 +449,40 @@ def _check_version_module(
 ) -> None:
     module_path = repo_root / relative_path
     try:
-        actual_version = _extract_string_assignment(module_path, "__version__")
+        source = module_path.read_text(encoding="utf-8")
+        module = ast.parse(source, filename=module_path.as_posix())
+    except Exception as error:
+        failures.append(
+            CheckFailure(
+                check_name=check_name,
+                path=module_path,
+                expected="runtime __version__ resolves from repo VERSION or metadata",
+                actual=f"unable to parse module: {error}",
+            )
+        )
+        return
+    if not _has_runtime_version_resolver(module, module_path):
+        failures.append(
+            CheckFailure(
+                check_name=check_name,
+                path=module_path,
+                expected=(
+                    "__version__ = resolve_release_version() from shared "
+                    "androidctl_contracts._version_source helper"
+                ),
+                actual="designated runtime version resolver not found",
+            )
+        )
+        return
+    try:
+        actual_version = _load_runtime_version(repo_root, module_path)
     except Exception as error:
         failures.append(
             CheckFailure(
                 check_name=check_name,
                 path=module_path,
                 expected=expected_version,
-                actual=str(error),
+                actual=f"unable to resolve runtime __version__: {error}",
             )
         )
         return
@@ -429,6 +495,159 @@ def _check_version_module(
                 actual=actual_version,
             )
         )
+
+
+def _check_runtime_version_helper(
+    repo_root: Path,
+    relative_path: Path,
+    failures: list[CheckFailure],
+) -> None:
+    helper_path = repo_root / relative_path
+    try:
+        module = _parse_python_module(helper_path)
+    except Exception as error:
+        failures.append(
+            CheckFailure(
+                check_name="runtime version helper source",
+                path=helper_path,
+                expected="shared resolver reads repo VERSION or androidctl metadata",
+                actual=f"unable to parse module: {error}",
+            )
+        )
+        return
+    if not _has_runtime_version_helper(module, helper_path):
+        failures.append(
+            CheckFailure(
+                check_name="runtime version helper source",
+                path=helper_path,
+                expected=(
+                    "resolve_release_version reads repo VERSION or "
+                    "androidctl metadata"
+                ),
+                actual="designated runtime version helper not found",
+            )
+        )
+
+
+def _has_runtime_version_resolver(module: ast.Module, module_path: Path) -> bool:
+    return _module_imports_version_source(
+        module, module_path
+    ) and _module_assigns_name_to_call(module, "__version__", "resolve_release_version")
+
+
+def _has_runtime_version_helper(module: ast.Module, module_path: Path) -> bool:
+    try:
+        distribution_name = _extract_string_assignment(
+            module_path, "_DISTRIBUTION_NAME"
+        )
+        version_file_name = _extract_string_assignment(
+            module_path, "_VERSION_FILE_NAME"
+        )
+    except Exception:
+        return False
+    return (
+        distribution_name == "androidctl"
+        and version_file_name == "VERSION"
+        and _find_python_function(module, "resolve_release_version") is not None
+        and _find_python_function(module, "_read_source_version") is not None
+        and _find_python_function(module, "_parse_version_text") is not None
+    )
+
+
+def _module_imports_version_source(module: ast.Module, module_path: Path) -> bool:
+    if "contracts/src/androidctl_contracts" in module_path.as_posix():
+        for node in module.body:
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.level != 1 or node.module != "_version_source":
+                continue
+            imported_names = {
+                alias.name for alias in node.names if alias.asname in (None, alias.name)
+            }
+            if "resolve_release_version" in imported_names:
+                return True
+        return False
+    return _module_imports_names(
+        module,
+        "androidctl_contracts._version_source",
+        {"resolve_release_version"},
+    )
+
+
+def _load_runtime_version(repo_root: Path, module_path: Path) -> str:
+    module_name = _runtime_module_name(repo_root, module_path)
+    pythonpath = [
+        repo_root / "contracts" / "src",
+        repo_root / "androidctld" / "src",
+        repo_root / "androidctl" / "src",
+    ]
+    script = (
+        "from importlib import import_module\n"
+        f"module = import_module({module_name!r})\n"
+        "value = getattr(module, '__version__', None)\n"
+        "if not isinstance(value, str):\n"
+        "    raise SystemExit('__version__ did not resolve to a string')\n"
+        "print(value)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo_root,
+        env={
+            "PYTHONPATH": ":".join(path.as_posix() for path in pythonpath),
+        },
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError(result.stdout.strip())
+    return result.stdout.strip()
+
+
+def _runtime_module_name(repo_root: Path, module_path: Path) -> str:
+    relative_path = module_path.relative_to(repo_root)
+    candidates = {
+        Path("contracts/src/androidctl_contracts/_version.py"): (
+            "androidctl_contracts._version"
+        ),
+        Path("androidctl/src/androidctl/_version.py"): "androidctl._version",
+        Path("androidctld/src/androidctld/_version.py"): "androidctld._version",
+    }
+    try:
+        return candidates[relative_path]
+    except KeyError as error:
+        raise ValueError(
+            f"unsupported runtime version module: {relative_path}"
+        ) from error
+
+
+def _module_assigns_name_to_call(
+    module: ast.Module,
+    target_name: str,
+    function_name: str,
+) -> bool:
+    for node in module.body:
+        value_node: ast.AST | None = None
+        if (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == target_name
+                for target in node.targets
+            )
+        ) or (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == target_name
+        ):
+            value_node = node.value
+        if (
+            isinstance(value_node, ast.Call)
+            and isinstance(value_node.func, ast.Name)
+            and value_node.func.id == function_name
+        ):
+            return True
+    return False
 
 
 def _check_package_reexport(

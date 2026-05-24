@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "androidctl"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A Playwright-like CLI for Android automation, built for AI agents."
 authors = [{ name = "Azure99" }]
 keywords = ["agent", "android", "adb", "automation", "cli", "accessibility"]
@@ -57,6 +57,9 @@ namespaces = false
 
 [tool.setuptools.package-data]
 "androidctl.resources" = ["*.apk"]
+
+[tool.setuptools.dynamic]
+version = { file = ["VERSION"] }
 
 [tool.pytest.ini_options]
 pythonpath = [
