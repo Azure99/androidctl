@@ -113,10 +113,15 @@ def run_command(cli_request: CliCommandRequest, ctx: AppContext) -> CommandOutco
         _raise_pre_dispatch_error(error, cli_request.command)
 
     try:
-        runtime_payload = daemon.get_runtime()
+        daemon, runtime_payload = _get_runtime_with_single_rediscovery_retry(
+            daemon=daemon,
+            ctx=ctx,
+            workspace_root=workspace_root,
+        )
     except (
         DaemonApiError,
         DaemonProtocolError,
+        click.ClickException,
         OSError,
         ValidationError,
         httpx.HTTPStatusError,
@@ -245,6 +250,41 @@ def _resolve_command_daemon(
         raise click.ClickException(
             f"unable to start or discover androidctld daemon: {error}"
         ) from error
+
+
+def _get_runtime_with_single_rediscovery_retry(
+    *,
+    daemon: RuntimeCommandClient,
+    ctx: AppContext,
+    workspace_root: Path,
+) -> tuple[RuntimeCommandClient, RuntimePayload]:
+    try:
+        return daemon, daemon.get_runtime()
+    except (
+        DaemonProtocolError,
+        OSError,
+        httpx.HTTPStatusError,
+        httpx.RequestError,
+    ):
+        if not _should_rediscover_daemon(ctx):
+            raise
+    except DaemonApiError as error:
+        if not _should_rediscover_daemon(ctx) or not _is_daemon_shutdown_busy(error):
+            raise
+
+    refreshed_daemon = _resolve_command_daemon(ctx, workspace_root)
+    return refreshed_daemon, refreshed_daemon.get_runtime()
+
+
+def _should_rediscover_daemon(ctx: AppContext) -> bool:
+    return ctx.daemon is None and ctx.daemon_discovery is not None
+
+
+def _is_daemon_shutdown_busy(error: DaemonApiError) -> bool:
+    return (
+        error.code == "RUNTIME_BUSY"
+        and error.details.get("reason") == "daemon_shutting_down"
+    )
 
 
 def _build_command_run_request(command: CliCommandPayload) -> CommandRunRequest:
