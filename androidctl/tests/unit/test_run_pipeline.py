@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -652,6 +653,98 @@ def test_run_command_uses_workspace_root_to_discover_daemon_and_returns_payload(
     assert daemon.run_requests[0].command.predicate.source_screen_id == "screen-live"
     assert outcome.payload["command"] == "wait"
     assert outcome.payload["nextScreenId"] == "screen-next"
+
+
+def test_run_command_rediscovers_daemon_when_runtime_get_loses_closing_daemon(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    runtime_request = httpx.Request("POST", "http://127.0.0.1:8765/runtime/get")
+
+    class ClosingDaemon(ScriptedRecordingDaemon):
+        def get_runtime(self) -> RuntimePayload:
+            raise httpx.ConnectError("daemon stopped", request=runtime_request)
+
+    stale_daemon = ClosingDaemon(root=workspace_root.resolve())
+    fresh_daemon = ScriptedRecordingDaemon(
+        root=workspace_root.resolve(),
+        command_handlers={"observe": _run_pipeline_result},
+    )
+    daemon_iter = iter([stale_daemon, fresh_daemon])
+    discovery_calls: list[Path] = []
+
+    def discover_for_test(resolved_workspace_root: Path) -> ScriptedRecordingDaemon:
+        discovery_calls.append(resolved_workspace_root)
+        return next(daemon_iter)
+
+    ctx = AppContext(
+        daemon=None,
+        cwd=workspace_root,
+        env={},
+        daemon_discovery=discover_for_test,
+    )
+
+    outcome = run_command(
+        CliCommandRequest(
+            public_command="observe",
+            command=ObserveCommandPayload(kind="observe"),
+        ),
+        ctx,
+    )
+
+    assert discovery_calls == [workspace_root.resolve(), workspace_root.resolve()]
+    assert stale_daemon.runtime_requests == 0
+    assert stale_daemon.run_requests == []
+    assert fresh_daemon.runtime_requests == 1
+    assert fresh_daemon.runs == [{"command": {"kind": "observe"}}]
+    assert outcome.payload["command"] == "observe"
+
+
+def test_run_command_rediscovers_daemon_when_runtime_get_reports_shutdown(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+
+    class ShuttingDownDaemon(ScriptedRecordingDaemon):
+        def get_runtime(self) -> RuntimePayload:
+            raise DaemonApiError(
+                code="RUNTIME_BUSY",
+                message="daemon is shutting down",
+                details={"reason": "daemon_shutting_down"},
+            )
+
+    stale_daemon = ShuttingDownDaemon(root=workspace_root.resolve())
+    fresh_daemon = ScriptedRecordingDaemon(
+        root=workspace_root.resolve(),
+        command_handlers={"observe": _run_pipeline_result},
+    )
+    daemon_iter = iter([stale_daemon, fresh_daemon])
+    discovery_calls: list[Path] = []
+
+    def discover_for_test(resolved_workspace_root: Path) -> ScriptedRecordingDaemon:
+        discovery_calls.append(resolved_workspace_root)
+        return next(daemon_iter)
+
+    ctx = AppContext(
+        daemon=None,
+        cwd=workspace_root,
+        env={},
+        daemon_discovery=discover_for_test,
+    )
+
+    outcome = run_command(
+        CliCommandRequest(
+            public_command="observe",
+            command=ObserveCommandPayload(kind="observe"),
+        ),
+        ctx,
+    )
+
+    assert discovery_calls == [workspace_root.resolve(), workspace_root.resolve()]
+    assert stale_daemon.run_requests == []
+    assert fresh_daemon.runtime_requests == 1
+    assert fresh_daemon.runs == [{"command": {"kind": "observe"}}]
+    assert outcome.payload["command"] == "observe"
 
 
 def test_run_command_returns_canonical_payload_for_explicit_null_result(
