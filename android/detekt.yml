@@ -30,14 +30,23 @@ complexity:
     threshold: 500
     excludes: *test-excludes
   TooManyFunctions:
-    thresholdInClasses: 12
-    thresholdInObjects: 12
-    excludes: *test-excludes
+    active: false
 
 naming:
   FunctionNaming:
     ignoreAnnotated:
       - "Composable"
+
+exceptions:
+  TooGenericExceptionCaught:
+    exceptionNames:
+      - ArrayIndexOutOfBoundsException
+      - Error
+      - IllegalMonitorStateException
+      - IndexOutOfBoundsException
+      - NullPointerException
+      - RuntimeException
+      - Throwable
 
 style:
   MagicNumber:

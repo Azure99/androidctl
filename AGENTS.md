@@ -22,7 +22,7 @@ Use the root `Taskfile.yml` when possible:
 - `task test:extended`: run process-level CLI e2e tests.
 - `task release:version-check`: verify all package and Android versions match `VERSION`.
 
-Python requires 3.10. If no environment is active, create one with `conda create -p ./.conda python=3.10` and install the root package editable with `python -m pip install -e ".[dev]"`.
+Python requires 3.12 or newer. If no environment is active, create one with `conda create -p ./.conda python=3.12` and install the root package editable with `python -m pip install -e ".[dev]"`.
 
 ## Coding Style & Naming Conventions
 
@@ -38,7 +38,7 @@ Run the narrow module test first, then `task quality` before submitting broad ch
 
 ## Commit & Pull Request Guidelines
 
-Recent history uses concise Conventional Commit style, for example `fix(androidctl): derive Windows owner identity` and `chore(repo): initial public release`. Use `type(scope): imperative summary` with a scope, keep commits focused, and explain contract or behavior changes in the commit body.
+Recent history uses concise Conventional Commit style, for example `fix(androidctl): derive Windows owner identity` and `chore(repo): initial public release`. Use `type(scope): imperative summary` with a scope and keep commits focused.
 
 Pull requests should include behavior changes, affected modules, test commands, and any device/ADB assumptions. Include screenshots or XML/result samples for CLI output, setup UI, or screen rendering changes.
 

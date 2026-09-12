@@ -24,7 +24,7 @@ androidctl observe
 
 ## Requirements
 
-- Python 3.10.
+- Python 3.12 or newer.
 - Android SDK platform tools, especially `adb`.
 - An Android 11+ device or emulator with USB debugging enabled.
 
@@ -54,7 +54,7 @@ distributions.
 Create a local Python environment and install AndroidCtl in editable mode:
 
 ```sh
-conda create -p ./.conda python=3.10
+conda create -p ./.conda python=3.12
 ./.conda/bin/python -m pip install -U pip
 ./.conda/bin/python -m pip install -e ".[dev]"
 export PATH="$PWD/.conda/bin:$PATH"

@@ -9,7 +9,7 @@ description = "A Playwright-like CLI for Android automation, built for AI agents
 authors = [{ name = "Azure99" }]
 keywords = ["agent", "android", "adb", "automation", "cli", "accessibility"]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 classifiers = [
@@ -18,10 +18,11 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
+    "cryptography>=50.0.1,<51",
     "click>=8.1,<9",
     "httpx>=0.27,<0.29",
     "pydantic>=2.11,<3",
@@ -66,12 +67,16 @@ pythonpath = [
     "contracts/src",
     "androidctld/src",
     "androidctl/src",
+    "androidctl/tests",
 ]
 testpaths = [
     "contracts/tests",
     "androidctld/tests",
     "androidctl/tests/unit",
     "androidctl/tests/integration",
+    "androidctl/tests/test_device_configuration.py",
+    "androidctl/tests/test_pairing_state.py",
+    "androidctl/tests/test_user_files.py",
 ]
 
 [tool.black]
@@ -119,7 +124,7 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 "tools/release/tests/**/*.py" = ["ARG001", "S101"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 files = [
     "contracts/src",
     "androidctld/src",
