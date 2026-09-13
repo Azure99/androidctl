@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">AndroidCtl</string>
+    <string name="gateway_channel">设备连接</string>
+    <string name="gateway_running">网关运行中</string>
+    <string name="gateway">网关</string>
+    <string name="gateway_starting">正在启动</string>
+    <string name="gateway_listening">正在监听</string>
+    <string name="gateway_stopping">正在停止</string>
+    <string name="gateway_stopped">已停止</string>
+    <string name="gateway_failed">失败</string>
+    <string name="authorize_shizuku">授权 Shizuku</string>
+    <string name="shizuku_authorized">Shizuku：已授权（shell UID 2000）</string>
+    <string name="shizuku_unauthorized">Shizuku：需要授权（shell UID 2000）</string>
+    <string name="refresh_status">刷新状态</string>
+    <string name="executor_attached">执行器已连接</string>
+    <string name="executor_unavailable">执行器不可用</string>
+    <string name="worker_identity">执行器 %1$s</string>
+    <string name="battery_unrestricted">电池优化：不受限</string>
+    <string name="battery_optimized">电池优化：已启用</string>
+    <string name="battery_unchecked">电池优化：未检查</string>
+    <string name="battery_settings">电池优化设置</string>
+    <string name="battery_settings_unavailable">请打开 Android 设置，查找 AndroidCtl 的电池优化设置。</string>
+    <string name="current_session">当前会话</string>
+    <string name="session_idle">空闲 %1$d 秒</string>
+    <string name="no_session">无当前会话</string>
+    <string name="session_unavailable">会话状态不可用</string>
+    <string name="stop_executor">停止空闲执行器</string>
+    <string name="pair_host">配对电脑</string>
+    <string name="pairing_expiry">配对码 %1$d 秒后或累计 %2$d 次错误后失效。首次连接信任所提供的证书，不能抵抗主动中间人。</string>
+    <string name="pairing_remaining">剩余 %1$d 秒</string>
+    <string name="candidate_addresses">本机地址：%1$s</string>
+    <string name="show_pairing">显示新配对码</string>
+    <string name="close_pairing">关闭配对码</string>
+    <string name="revoke">撤销</string>
+    <string name="pairing_revoked">凭据已撤销。</string>
+    <string name="pairing_revocations_pending">撤权请求待执行器确认：%1$d</string>
+</resources>

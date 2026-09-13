@@ -104,7 +104,9 @@ def connection_fault(
         phase = "authentication"
         code = "unauthorized"
         message += (
-            "; pairing window rejected" if pairing else "; pairing credential rejected"
+            "; pairing window rejected; show a new code on the device"
+            if pairing
+            else "; pairing credential rejected; check the device pairing"
         )
     return Fault(code, message, f"{source}.{phase}")
 
@@ -260,7 +262,7 @@ class Peer:
                 message = (
                     mismatch
                     if code == "protocolMismatch"
-                    else "Pairing credential was rejected"
+                    else "Pairing credential was rejected; check device pairing"
                 )
                 raise Fault(code, message, "authentication")
             if welcome.get("version") != VERSION or welcome.get("event") != "connected":

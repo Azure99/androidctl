@@ -1,0 +1,218 @@
+import asyncio
+import io
+import json
+import sys
+import time
+from urllib.parse import urlsplit
+
+import pytest
+import typer
+from typer.testing import CliRunner
+
+from androidctl import app as cli
+from androidctl.coordinator import Coordinator
+from androidctl.output import Output, display_name
+from androidctl.private_files import private_directory
+from androidctl.protocol import (
+    Result,
+    completed,
+)
+from androidctl.state import HostState
+from pairing_test_support import Gateway, save_active
+from ui_test_support import BrokenStream
+
+
+def test_display_names_keep_unicode_without_terminal_or_bidi_controls():
+    assert (
+        display_name("\u7535\u8bdd\n\u202e\u2066\x7f\x9b")
+        == '"\u7535\u8bdd\\n\\u202e\\u2066\\u007f\\u009b"'
+    )
+
+
+def test_device_listing_preserves_complete_ids_and_record_facts(capsys):
+    ids = [
+        "01234567-1111-4111-8111-111111111111",
+        "01234567-2222-4222-8222-222222222222",
+    ]
+    devices = [
+        {
+            "deviceId": identifier,
+            "alias": "phone\nnext",
+            "endpoint": f"wss://phone-{index}:18843/androidctl",
+            "selected": index == 0,
+            "confirmed": index == 0,
+            "pending": index == 1,
+        }
+        for index, identifier in enumerate(ids)
+    ]
+    devices.append({"path": "bad-record", "error": {"message": "unreadable"}})
+    result = completed(
+        "devices",
+        {"devices": devices, "selectionError": {"message": "choose a device"}},
+    )
+    original = result.wire()
+    with pytest.raises(typer.Exit) as stopped:
+        cli.emit(result, render=cli.render_devices)
+    assert stopped.value.exit_code == 0
+    text = capsys.readouterr().out
+    lines = text.splitlines()
+    assert lines[0] == "devices: done"
+    assert f'"phone\\nnext" [{ids[0]}] wss://phone-0:18843/androidctl selected' in lines
+    assert (
+        f'"phone\\nnext" [{ids[1]}] wss://phone-1:18843/androidctl '
+        "unconfirmed pending confirmation" in lines
+    )
+    assert "bad-record: unavailable; unreadable\n" in text
+    assert "Selection: choose a device\n" in text
+    assert result.wire() == original
+    with pytest.raises(typer.Exit):
+        cli.emit(result, as_json=True)
+    assert json.loads(capsys.readouterr().out) == original
+
+
+def test_session_names_are_escaped_only_in_human_output(capsys):
+    facts = {"name": "task\u202e", "pairingName": "desk\u2066", "idleSeconds": 0}
+    with pytest.raises(cli.typer.Exit) as result:
+        cli.emit(Result(command="session open", result="done", data=facts))
+    assert result.value.exit_code == 0
+    assert 'name="task\\u202e"' in capsys.readouterr().out
+    session = facts
+    value = Result(
+        command="status",
+        result="done",
+        data={"device": "device", "worker": "worker", "session": session},
+    )
+    with pytest.raises(cli.typer.Exit):
+        cli.emit(value, render=cli.render_status)
+    assert 'pairing="desk\\u2066"' in capsys.readouterr().out
+    with pytest.raises(cli.typer.Exit):
+        cli.emit(value, as_json=True)
+    assert json.loads(capsys.readouterr().out)["data"]["session"] == session
+
+
+@pytest.mark.parametrize(
+    ("alias", "display"),
+    [
+        ("phone", "phone"),
+        ("\u7535\u8bdd\u202e\u009b", "\u7535\u8bdd\\u202e\\u009b"),
+        ('desk"\\name', 'desk\\"\\\\name'),
+    ],
+)
+def test_device_alias_is_escaped_only_in_text(capsys, alias, display):
+    value = Result(
+        command="status",
+        result="done",
+        data={
+            "device": alias,
+            "worker": "ready",
+            "session": {},
+        },
+    )
+    original = value.wire()
+    with pytest.raises(cli.typer.Exit) as stopped:
+        cli.emit(
+            value,
+            render=cli.render_status,
+        )
+    assert stopped.value.exit_code == 0
+    text = capsys.readouterr().out
+    assert f"device={display} connected worker=ready\n" in text
+    assert value.wire() == original
+    with pytest.raises(cli.typer.Exit):
+        cli.emit(value, as_json=True)
+    assert json.loads(capsys.readouterr().out) == original
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_expected_write_errors_keep_known_result(monkeypatch, closed):
+    stream = io.StringIO() if closed else BrokenStream()
+    if closed:
+        stream.close()
+    monkeypatch.setattr(sys, "stdout", stream)
+    result = Result(command="pair", result="done", exit=3)
+    with pytest.raises(typer.Exit) as stopped:
+        cli.emit(result)
+    assert stopped.value.exit_code == 3
+    assert result.result == "done"
+    assert "stdout:" in result.data["deliveryError"]
+
+
+def test_output_does_not_swallow_program_value_error(monkeypatch):
+    def fail(*args, **kwargs):
+        raise ValueError("not a closed stream")
+
+    monkeypatch.setattr(typer, "echo", fail)
+    with pytest.raises(ValueError, match="not a closed stream"):
+        Output().echo("prepared text")
+
+
+async def test_connection_cleanup_renderer_uses_the_producer_string(
+    tmp_path, monkeypatch
+):
+    gateway = Gateway(tmp_path / "tls")
+    private_directory(tmp_path / "state")
+    state = HostState(tmp_path / "state")
+    async with gateway.listening():
+        save_active(
+            state,
+            {**gateway.identity, "alias": "phone", "credential": "old"},
+        )
+        coordinator = Coordinator(state, instance="cleanup-renderer")
+        device, _ = await coordinator.device(gateway.identity["deviceId"])
+
+        async def failed_close(**kwargs):
+            raise OSError("old connection cleanup failed")
+
+        close = device.close
+        monkeypatch.setattr(device, "close", failed_close)
+        try:
+            result = await coordinator.pair(
+                gateway.args(), deadline=time.monotonic() + 20
+            )
+            arguments = [
+                "pair",
+                urlsplit(gateway.identity["endpoint"]).netloc,
+                "000042",
+                "--name",
+                "phone",
+            ]
+        finally:
+            monkeypatch.setattr(device, "close", close)
+            await coordinator.close()
+
+    async def request(self, method, args, **kwargs):
+        assert method == "pair"
+        return result
+
+    monkeypatch.setattr(cli.LocalCall, "request", request)
+    response = await asyncio.to_thread(CliRunner().invoke, cli.app, arguments)
+    assert response.exit_code == 3, response.output
+    assert response.stdout.startswith(f"{result.command}: done")
+    assert "cleanupError=old connection cleanup failed\n" in response.stdout
+    for fact in ("registered", "confirmed", "activated"):
+        assert f"{fact}=true\n" in response.stdout
+    response = await asyncio.to_thread(
+        CliRunner().invoke, cli.app, ["--json", *arguments]
+    )
+    assert response.exit_code == 3, response.output
+    assert json.loads(response.stdout) == result.wire()
+    assert json.loads(response.stdout)["data"]["cleanupError"] == (
+        "old connection cleanup failed"
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "override", "expected"),
+    [
+        ("done", None, 0),
+        ("failed", None, 1),
+        ("not sent", None, 2),
+        ("UNKNOWN", None, 3),
+        ("still running", None, 4),
+        ("failed", 3, 3),
+    ],
+)
+def test_visible_result_exit(state, override, expected):
+    assert (
+        Result(command="fixture", result=state, exit=override).exit_code() == expected
+    )

@@ -1,1 +1,0 @@
-"""androidctl test package."""

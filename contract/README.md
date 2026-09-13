@@ -1,0 +1,28 @@
+# Shared Wire Contract
+
+`wire-contract.json` records the current message/JSON/pairing-name limits and the
+Gateway query-method set. Kotlin produces these facts; Python verifies its limits
+and its query set (the Gateway additionally accepts `pair.register`).
+
+Validate both sides from the repository root:
+
+```powershell
+& .\android\gradlew.bat -p .\android :app:testDebugUnitTest --tests 'com.rainng.androidctl.WireContractTest' --rerun-tasks
+conda run -p ./.conda python -m pytest androidctl/tests/test_wire_contract.py
+```
+
+For an intentional contract change, export to a separate candidate:
+
+```powershell
+$env:ANDROIDCTL_CONTRACT_OUTPUT = Join-Path (Get-Location) 'android/app/build/wire-contract.candidate.json'
+try {
+    & .\android\gradlew.bat -p .\android :app:testDebugUnitTest --tests 'com.rainng.androidctl.WireContractTest.deviceProjectionAndTransferMatchTheSharedContract' --rerun-tasks
+} finally {
+    Remove-Item Env:ANDROIDCTL_CONTRACT_OUTPUT
+}
+```
+
+Export intentionally fails after writing the candidate and does not validate the
+reviewed fixture. Read that failure, review the differences, then replace the
+fixture only when the producer and consumer change is intended. With the output
+variable unset, run both validations again.

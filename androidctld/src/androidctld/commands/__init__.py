@@ -1,1 +1,0 @@
-"""Command handling for androidctld."""

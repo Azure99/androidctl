@@ -10,8 +10,18 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.net.InetAddress
 
 class PairingsTest {
+    @Test fun allAddressFamiliesRemainCandidatesWithoutLoopbackDuplicates() {
+        val ipv4 = InetAddress.getByName("192.0.2.20")
+        val ipv6 = InetAddress.getByName("2001:db8::20")
+        assertEquals(
+            listOf("${ipv4.hostAddress}:18843", "[${ipv6.hostAddress}]:18843"),
+            candidateEndpoints(listOf(InetAddress.getByName("127.0.0.1"), ipv4, ipv6, ipv4, InetAddress.getByName("::1"))),
+        )
+    }
+
     @get:Rule val temporary = TemporaryFolder()
 
     @Test fun sameDigitsDoNotReviveAnOldAuthenticatedWindow() {

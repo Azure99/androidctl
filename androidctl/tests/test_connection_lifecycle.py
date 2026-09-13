@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import socket
 import time
@@ -8,10 +9,13 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from androidctl import transport
+from androidctl.coordinator import Coordinator
 from androidctl.identity import local_identity
 from androidctl.private_files import private_directory
-from androidctl.protocol import VERSION, Fault, completed
+from androidctl.protocol import VERSION, Fault, TransportFailure, completed
+from androidctl.state import HostState
 from androidctl.transport import Peer
+from connection_test_support import connections, local_server
 from pairing_test_support import Gateway
 
 
@@ -118,6 +122,207 @@ async def test_connect_tries_other_addresses_and_shares_dns_welcome_budget(
         assert acknowledgments == [{"ack": "hello"}]
         assert not requests
     assert not server.connections
+
+
+async def test_different_sessions_arriving_together_do_not_queue(tmp_path):
+    entered, leave = asyncio.Event(), asyncio.Event()
+    received = []
+
+    async def dispatch(method, args, deadline):
+        received.append(method)
+        entered.set()
+        await leave.wait()
+        return completed(method).wire()
+
+    async with local_server(tmp_path / "state", dispatch) as (material, _):
+        peer = await Peer.open(material, source="local")
+        first = asyncio.create_task(
+            peer.request("first", session="one", deadline=time.monotonic() + (5))
+        )
+        second = asyncio.create_task(
+            peer.request("second", session="two", deadline=time.monotonic() + (1))
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), 3)
+            with pytest.raises(Fault) as error:
+                await asyncio.wait_for(second, 3)
+            assert error.value.problem.code == "connectionBusy"
+            assert received == ["first"]
+            assert not leave.is_set()
+            assert not first.done()
+            leave.set()
+            assert (await first)["result"] == "done"
+        finally:
+            leave.set()
+            await asyncio.gather(first, second, return_exceptions=True)
+            await peer.close()
+
+
+async def test_coordinator_session_wait_and_per_peer_idle(tmp_path):
+    entered, leave = asyncio.Event(), asyncio.Event()
+    received = []
+
+    async def dispatch(method, args):
+        received.append(method)
+        if method == "session.open":
+            entered.set()
+            await leave.wait()
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (coordinator, _, _):
+
+        async def call(command, session="ours", timeout=5):
+            return await coordinator.dispatch(
+                "call",
+                {
+                    "device": "phone",
+                    "session": session,
+                    "command": command,
+                    "args": {"timeoutMs": int(timeout * 1000)},
+                },
+                deadline=time.monotonic() + timeout,
+            )
+
+        active = asyncio.create_task(call("session.open"))
+        waiting = None
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            waiting = asyncio.create_task(call("session.close"))
+            refused = await asyncio.wait_for(call("session.takeover", "other"), 3)
+            assert refused["result"] == "not sent"
+            assert "occupied" in refused["reason"]
+            assert not leave.is_set()
+            assert not active.done()
+            assert not waiting.done()
+            assert (await call("status"))["result"] == "done"
+            assert "session.close" not in received
+            leave.set()
+            assert (await active)["result"] == "done"
+            assert (await waiting)["result"] == "done"
+            device = next(iter(coordinator.devices.values()))
+            for peer in device._peers.values():
+                if peer.ack_task is not None:
+                    await peer.ack_task
+            mutation, query = device._peers["mutation"], device._peers["query"]
+            mutation.last_used = time.monotonic() - 46
+            query.last_used = time.monotonic()
+            await coordinator.expire_connections()
+            assert "mutation" not in device._peers
+            assert not mutation.opened
+            assert query.opened
+            assert (await call("session.close"))["result"] == "done"
+            assert received.count("session.open") == 1
+            assert "session.takeover" not in received
+        finally:
+            leave.set()
+            await asyncio.gather(
+                active, *([waiting] if waiting else []), return_exceptions=True
+            )
+
+
+@pytest.mark.parametrize("command", ["status", "session.close"])
+async def test_reused_peer_survives_idle_sweep_during_request_handoff(
+    tmp_path, monkeypatch, command
+):
+    received, sweeps = [], []
+
+    async def dispatch(method, args):
+        received.append(method)
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (coordinator, _, _):
+        arguments = {
+            "device": "phone",
+            "session": "ours",
+            "command": command,
+            "args": {"timeoutMs": 2000},
+        }
+        assert (
+            await coordinator.dispatch("call", arguments, deadline=time.monotonic() + 2)
+        )["result"] == "done"
+        device = next(iter(coordinator.devices.values()))
+        peer = next(iter(device._peers.values()))
+        if peer.ack_task is not None:
+            await peer.ack_task
+        peer.last_used = time.monotonic() - 46
+        role = "query" if command == "status" else "mutation"
+        gate = device._connection_gates[role]
+        release = gate.release
+
+        def handoff():
+            release()
+            monkeypatch.setattr(gate, "release", release)
+            # Sweep after the connection gate releases, before request ownership.
+            asyncio.get_running_loop().call_soon(
+                lambda: sweeps.append(
+                    asyncio.create_task(coordinator.expire_connections())
+                )
+            )
+
+        monkeypatch.setattr(gate, "release", handoff)
+        result = await coordinator.dispatch(
+            "call", arguments, deadline=time.monotonic() + 2
+        )
+        assert len(sweeps) == 1
+        await asyncio.gather(*sweeps)
+        assert result["result"] == "done"
+        assert received == [command, command]
+        assert peer.opened
+        assert peer in device._peers.values()
+
+
+async def test_closed_is_zero_send_but_lost_reply_is_unknown_and_close_obeys_budget(
+    tmp_path, monkeypatch
+):
+    commands = []
+    lost_entered, lost_release = asyncio.Event(), asyncio.Event()
+    ack_entered, ack_release = asyncio.Event(), asyncio.Event()
+
+    async def dispatch(method, args):
+        commands.append(method)
+        if method == "lost":
+            lost_entered.set()
+            await lost_release.wait()
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (_, material, _):
+        peer = await Peer.open(material)
+        try:
+            await peer.close()
+            with pytest.raises(Fault) as error:
+                await peer.request("never", deadline=time.monotonic() + (0.1))
+            assert not isinstance(error.value, TransportFailure)
+            assert error.value.problem.code == "connectionClosed"
+            assert not commands
+            peer = await Peer.open(material)
+            with pytest.raises(TransportFailure):
+                await peer.request("lost", deadline=time.monotonic() + (0.05))
+            assert commands == ["lost"]
+            assert lost_entered.is_set()
+            assert not lost_release.is_set()
+            lost_release.set()
+            await peer.close()
+            peer = await Peer.open(material)
+            original = peer.acknowledge
+
+            async def slow_ack(value):
+                ack_entered.set()
+                await ack_release.wait()
+                await original(value)
+
+            monkeypatch.setattr(peer, "acknowledge", slow_ack)
+            result = await peer.request("known", deadline=time.monotonic() + (30))
+            await asyncio.wait_for(ack_entered.wait(), 3)
+            await asyncio.wait_for(peer.close(deadline=time.monotonic() + 0.1), 3)
+            assert not ack_release.is_set()
+            assert peer.ack_task.done()
+            assert result["result"] == "done"
+            assert not peer.opened
+            assert not peer.busy
+        finally:
+            lost_release.set()
+            ack_release.set()
+            await peer.close()
 
 
 @pytest.mark.parametrize("field", ["deviceId", "name"])
@@ -242,3 +447,34 @@ async def test_connected_version_mismatch_guidance_does_not_dispatch(
         else:
             assert "androidctl apk" not in str(caught.value)
         assert not calls
+
+
+async def test_real_tls_authentication_and_validated_reply(tmp_path):
+    root = tmp_path / "state"
+    private_directory(root)
+    coordinator = Coordinator(HostState(root), instance="fixture")
+    async with local_server(
+        root,
+        coordinator.dispatch,
+        credential="credential",
+        stopped=asyncio.Event(),
+    ) as (saved, _):
+        try:
+            with pytest.raises(Fault):
+                await Peer.open({**saved, "credential": "wrong"}, source="local")
+            wrong = {
+                **saved,
+                "certificate": base64.b64encode(b"not a certificate").decode(),
+            }
+            with pytest.raises(Fault):
+                await Peer.open(wrong, source="local")
+            peer = await Peer.open(saved, source="local")
+            try:
+                result = await peer.request("devices", deadline=time.monotonic() + 10)
+                assert result["result"] == "done"
+                assert result["data"]["devices"] == []
+                assert json.loads(json.dumps(result)) == result
+            finally:
+                await peer.close()
+        finally:
+            await coordinator.close()

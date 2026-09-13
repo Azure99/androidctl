@@ -6,10 +6,95 @@ import pytest
 from websockets.asyncio.client import connect
 
 from androidctl.identity import trust_context
-from androidctl.protocol import VERSION, Fault, Result, TransportFailure, completed
+from androidctl.protocol import (
+    VERSION,
+    Fault,
+    Result,
+    TransportFailure,
+    completed,
+)
 from androidctl.transport import Peer
-from connection_test_support import local_server
+from connection_test_support import connections, local_server
 from pairing_test_support import Gateway
+
+
+async def test_other_session_is_rejected_during_ack_handoff(tmp_path, monkeypatch):
+    release_ack, entered, leave = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    received, competitors = [], []
+
+    async def dispatch(method, args):
+        received.append(method)
+        if method == "next":
+            entered.set()
+            await leave.wait()
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (_, material, _):
+        peer = await Peer.open(material)
+        original = peer.acknowledge
+        first_ack = True
+
+        async def acknowledge(value):
+            nonlocal first_ack
+            if first_ack:
+                first_ack = False
+                await release_ack.wait()
+                await original(value)
+                # Acquire between ACK release and the waiter's wakeup.
+                asyncio.get_running_loop().call_soon(
+                    lambda: competitors.append(
+                        asyncio.create_task(
+                            peer.request(
+                                "other",
+                                session="other",
+                                deadline=time.monotonic() + (1),
+                            )
+                        )
+                    )
+                )
+            else:
+                await original(value)
+
+        monkeypatch.setattr(peer, "acknowledge", acknowledge)
+        waiting = None
+        try:
+            assert (
+                await peer.request(
+                    "first", session="ours", deadline=time.monotonic() + 10
+                )
+            )["result"] == "done"
+            queued = asyncio.Event()
+            acquire = peer.lock.acquire
+
+            async def observed_acquire():
+                queued.set()
+                return await acquire()
+
+            monkeypatch.setattr(peer.lock, "acquire", observed_acquire)
+            waiting = asyncio.create_task(
+                peer.request("next", session="ours", deadline=time.monotonic() + (5))
+            )
+            await asyncio.wait_for(queued.wait(), 3)
+            release_ack.set()
+            await asyncio.wait_for(entered.wait(), 3)
+            assert len(competitors) == 1
+            with pytest.raises(Fault) as error:
+                await asyncio.wait_for(competitors[0], 3)
+            assert error.value.problem.code == "connectionBusy"
+            assert received == ["first", "next"]
+            leave.set()
+            assert (await waiting)["result"] == "done"
+        finally:
+            release_ack.set()
+            leave.set()
+            await asyncio.gather(
+                *competitors,
+                *([waiting] if waiting else []),
+                return_exceptions=True,
+            )
+            await peer.close()
+        assert not peer.busy
+        assert peer.owner is None
 
 
 async def test_local_replies_allow_pipelined_requests_without_ack(tmp_path):
@@ -45,6 +130,71 @@ async def test_local_replies_allow_pipelined_requests_without_ack(tmp_path):
             assert reply["result"]["result"] == "done"
             assert "blockId" not in reply
         assert calls == ["first", "second"]
+
+
+async def test_ack_owns_queue_across_mixed_sessions_and_cancelled_waiter(
+    tmp_path, monkeypatch
+):
+    received = []
+
+    async def dispatch(method, args):
+        received.append(method)
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (_, material, _):
+        peer = await Peer.open(material)
+        release = asyncio.Event()
+        waiting = asyncio.Queue()
+        acknowledge, acquire = peer.acknowledge, peer.lock.acquire
+
+        async def held_ack(value):
+            await release.wait()
+            await acknowledge(value)
+
+        async def observed_acquire():
+            waiting.put_nowait(True)
+            return await acquire()
+
+        monkeypatch.setattr(peer, "acknowledge", held_ack)
+        monkeypatch.setattr(peer.lock, "acquire", observed_acquire)
+        tasks = []
+        try:
+            await peer.request("first", session="A", deadline=time.monotonic() + 10)
+            await waiting.get()
+            tasks.append(
+                asyncio.create_task(
+                    peer.request(
+                        "B",
+                        session="B",
+                        wait_for_owner=True,
+                        deadline=time.monotonic() + 10,
+                    )
+                )
+            )
+            await asyncio.wait_for(waiting.get(), 1)
+            tasks.append(
+                asyncio.create_task(
+                    peer.request("A-next", session="A", deadline=time.monotonic() + 10)
+                )
+            )
+            await asyncio.wait_for(waiting.get(), 1)
+            tasks[0].cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await tasks[0]
+            assert peer.owner == "A"
+            with pytest.raises(Fault, match="occupied"):
+                await peer.request("C", session="C", deadline=time.monotonic() + 10)
+            assert received == ["first"]
+            release.set()
+            assert (await tasks[1])["result"] == "done"
+            await peer.ack_task
+            assert received == ["first", "A-next"]
+            assert not peer.busy
+            assert peer.owner is None
+        finally:
+            release.set()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await peer.close()
 
 
 @pytest.mark.parametrize("fault", ["ack", "wrong-id", "invalid-result", "welcome"])

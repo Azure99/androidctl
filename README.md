@@ -1,189 +1,87 @@
 # AndroidCtl
 
-AndroidCtl is a local Android automation toolkit for developer and agent
-workflows. It provides a host CLI, a host daemon, shared Python contracts, and an
-Android device agent that can observe the current UI, expose stable element refs,
-run actions, wait for screen changes, and collect artifacts such as screenshots.
+AndroidCtl connects a local CLI to an Android app through Shizuku.
+Daily use does not require ADB.
 
-The usual loop is:
+The App's Gateway accepts connections, and its shell-UID worker operates the
+device.
 
-```sh
-androidctl observe
-androidctl tap n3
-androidctl wait --until idle
-androidctl observe
-```
+The App uses these labels for that same worker:
 
-## Repository Layout
+| English App label | Chinese App label |
+| --- | --- |
+| Executor attached / Executor unavailable | 执行器已连接 / 执行器不可用 |
+| Stop idle executor | 停止空闲执行器 |
 
-- `contracts/`: shared Python wire models and command catalog.
-- `androidctl/`: public CLI, command parsing, daemon discovery, and XML output.
-- `androidctld/`: host daemon, runtime state, command execution, and device RPC.
-- `android/`: Kotlin Android device agent with a foreground RPC service and
-  Accessibility service.
+The [SKILL](skills/androidctl/SKILL.md) covers a session workflow, and the
+[command reference](skills/androidctl/reference.md) defines pairing, results and
+recovery. Each command also has `--help`.
 
 ## Requirements
 
-- Python 3.12 or newer.
-- Android SDK platform tools, especially `adb`.
-- An Android 11+ device or emulator with USB debugging enabled.
+- Python 3.12 or newer on Windows, macOS or Linux.
+- Android 11 (API 30) or newer, arm64-v8a or x86_64 userspace and Android user 0.
+- Shizuku running through ADB or wireless debugging as shell UID 2000, with
+  AndroidCtl authorized. Root mode is unsupported.
+- A reachable network route to the AndroidCtl app, and matching host/app versions.
 
-## Installing skills
+AndroidCtl does not restart a killed app or Shizuku. After device reboot, start
+Shizuku again, open AndroidCtl and enable **Gateway**.
 
-For agents that support skills, ask your agent to install the AndroidCtl skill:
+## Install And Pair
 
-```text
-Install this skill: https://github.com/Azure99/androidctl/tree/main/skills/androidctl
-```
+Before replacing the host package, including a same-version reinstall, finish
+active work and wait for the daemon's idle exit.
+Finish device work before upgrading the App: its first executor attachment
+replaces the old worker. Before reinstalling the same App version, use
+**Stop idle executor** first. See [upgrade and recovery
+rules](skills/androidctl/reference.md#connection-and-sessions).
 
-## Install From PyPI
-
-Install the released host tools with the single public distribution:
+Install the host package and obtain the matching Android APK, or build it from
+this checkout using the [development instructions](AGENTS.md#build-test-and-development-commands).
+Transfer and open the APK on Android. For an ADB installation, identify the device:
 
 ```sh
 pip install androidctl
-androidctl --help
-```
-
-The `androidctl` distribution includes the CLI, host daemon, and shared Python
-contracts. Do not install separate `androidctld` or `androidctl-contracts`
-distributions.
-
-## Install From Source
-
-Create a local Python environment and install AndroidCtl in editable mode:
-
-```sh
-conda create -p ./.conda python=3.12
-./.conda/bin/python -m pip install -U pip
-./.conda/bin/python -m pip install -e ".[dev]"
-export PATH="$PWD/.conda/bin:$PATH"
-```
-
-Check the CLI:
-
-```sh
 androidctl --version
-androidctl --help
+adb devices -l
+adb -s SERIAL install androidctl.apk
 ```
 
-## Build The Android Agent
-
-Released Python packages include the Android agent APK used by setup. When
-working from source and testing a locally built debug agent, build a debug APK
-and pass it to setup with `--apk`:
+Open Shizuku and follow its wireless debugging procedure or displayed ADB startup
+command. In AndroidCtl, authorize Shizuku and enable **Gateway**. Check **Listening**
+and **Executor attached**, then choose **Show new pairing code**.
 
 ```sh
-(cd android && ./gradlew :app:assembleDebug)
-androidctl setup --adb --apk android/app/build/outputs/apk/debug/app-debug.apk
+androidctl pair 192.168.1.20:18843 000042 --name phone
+androidctl --device phone status
 ```
 
-The debug APK is created at:
+Replace the address and code with the device's current values; keep leading zeros.
+Displayed addresses are candidates, not connectivity tests. First pairing trusts
+the presented certificate and cannot resist an active intermediary. Later
+connections pin that complete certificate. Routing, firewall and any port forwarding
+are your responsibility.
+
+For an emulator or device without a LAN route, follow the optional
+[ADB route setup](skills/androidctl/reference.md#device-setup-and-adb-route).
+
+## Use A Session
+
+Use the `deviceId` returned by `pair`, or find a paired UUID with `--json devices`.
+Global options precede the command. Keep a distinct session name for each task.
 
 ```sh
-android/app/build/outputs/apk/debug/app-debug.apk
+androidctl --json devices
+androidctl --device DEVICE_UUID -s trial session open
+androidctl --device DEVICE_UUID -s trial status
+androidctl --device DEVICE_UUID -s trial session close
 ```
 
-## Prepare A Device
-
-Connect a device with USB debugging enabled and confirm that ADB can see it:
-
-```sh
-adb devices
-```
-
-Run the onboarding helper:
-
-```sh
-androidctl setup --adb
-```
-
-If more than one device is connected, pass the ADB serial:
-
-```sh
-androidctl setup --adb --serial <adb-serial>
-```
-
-Setup installs the Android agent, starts its foreground RPC server, provisions a
-device token, attempts to enable the AndroidCtl Accessibility service, and checks
-that the daemon can talk to the device. If Android blocks automatic
-Accessibility enablement, follow the manual instructions printed by the command
-and rerun setup.
-
-## Optional Wireless ADB
-
-Pair and connect from the CLI if you prefer Android wireless debugging:
-
-```sh
-androidctl adb-pair --pair <host:pair-port> --code <pairing-code>
-androidctl adb-connect <host:connect-port>
-androidctl setup --adb --serial <host:connect-port>
-```
-
-## Basic Usage
-
-Observe the current screen:
-
-```sh
-androidctl observe
-```
-
-The output is XML intended for scripts and agents. Interactive elements receive
-refs such as `n1`, `n2`, and `n3`; use those refs in later commands.
-
-Common commands:
-
-```sh
-androidctl list-apps
-androidctl open app:com.android.settings
-androidctl open https://example.com
-androidctl tap n3
-androidctl long-tap n3
-androidctl focus n4
-androidctl type n4 "hello from androidctl"
-androidctl submit n4
-androidctl scroll n8 down
-androidctl back
-androidctl home
-androidctl recents
-androidctl notifications
-androidctl wait --until screen-change
-androidctl wait --until gone --ref n3
-androidctl wait --until text-present --text "Done"
-androidctl wait --until app --app com.android.settings
-androidctl screenshot
-androidctl close
-```
-
-Commands use the current workspace by default. For a dedicated runtime state
-directory, pass `--workspace-root <path>` or set `ANDROIDCTL_WORKSPACE_ROOT`.
+`status` observes the actual owner without creating or refreshing a lease. Respect
+`busy`; explicit takeover is limited to another session of the same pairing.
 
 ## Development
 
-Run the default verification suite from the repository root:
-
-```sh
-task test
-task lint
-task quality
-```
-
-Useful focused commands:
-
-```sh
-task androidctl:test
-task androidctld:test
-task contracts:test
-task android:test
-task format
-task --list
-```
-
-Source development additionally requires Conda, JDK 17 or newer for Android
-Gradle builds, and `task` for repository shortcuts.
-
-Process-level CLI checks are available through:
-
-```sh
-task test:extended
-```
+See [Repository Guidelines](AGENTS.md#build-test-and-development-commands) for
+environment setup, Host tests, JVM tests and direct Android builds.

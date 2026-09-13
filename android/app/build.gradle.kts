@@ -1,7 +1,8 @@
 import io.gitlab.arturbosch.detekt.Detekt
 import org.gradle.api.GradleException
+import org.gradle.process.ExecOperations
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.io.File
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,185 +11,154 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-private val canonicalReleaseVersionPattern = Regex("""\d+\.\d+\.\d+""")
-private val releaseSigningExemptTaskMarkers =
-    listOf(
-        "lint",
-        "test",
-        "ktlint",
-        "detekt",
-        "uninstall",
-    )
+private val canonicalReleaseVersionPattern = Regex("""([0-9]+)\.([0-9]+)\.([0-9]+)""")
 
-private val releaseSigningRequiredTaskMarkers =
-    listOf(
-        "assemble",
-        "bundle",
-        "package",
-        "publish",
-        "sign",
-        "extractapks",
-        "zipapks",
-    )
-
-private data class ReleaseSigningInputs(
-    val storeFile: File,
-    val storePassword: String,
-    val keyAlias: String,
-    val keyPassword: String,
+private data class ReleaseVersion(
+    val name: String,
+    val code: Int,
 )
 
-private fun readCanonicalReleaseVersion(): String {
-    val repoRoot =
-        rootProject.projectDir.parentFile
-            ?: throw GradleException(
-                "android root ${rootProject.projectDir} has no parent directory for repo root lookup",
-            )
-    val versionFile = repoRoot.resolve("VERSION")
+private fun readCanonicalReleaseVersion(): ReleaseVersion {
+    val versionFile = rootProject.file("../VERSION")
     if (!versionFile.isFile) {
         throw GradleException("canonical VERSION file not found at ${versionFile.absolutePath}")
     }
-    val rawVersion = versionFile.readText(Charsets.UTF_8)
-    val canonicalVersion =
-        when {
-            rawVersion.endsWith("\r\n") -> rawVersion.removeSuffix("\r\n")
-            rawVersion.endsWith("\n") -> rawVersion.removeSuffix("\n")
-            else -> rawVersion
-        }
-    if (!canonicalReleaseVersionPattern.matches(canonicalVersion)) {
-        throw GradleException(
-            "canonical VERSION at ${versionFile.absolutePath} must contain exactly MAJOR.MINOR.PATCH with at most one terminating newline",
-        )
-    }
-    return canonicalVersion
-}
-
-private fun deriveAndroidVersionCode(canonicalVersion: String): Int {
-    val segments = canonicalVersion.split(".")
-    if (segments.size != 3) {
-        throw GradleException(
-            "Android versionCode requires canonical VERSION to be MAJOR.MINOR.PATCH, got $canonicalVersion",
-        )
-    }
-
-    val major =
-        segments[0].toLongOrNull()
+    val canonicalVersion = versionFile.readText(Charsets.UTF_8).trim()
+    val parts =
+        canonicalReleaseVersionPattern.matchEntire(canonicalVersion)
             ?: throw GradleException(
-                "Android versionCode requires numeric major version, got ${segments[0]}",
+                "canonical VERSION at ${versionFile.absolutePath} must contain MAJOR.MINOR.PATCH after trimming surrounding whitespace",
             )
-    val minor =
-        segments[1].toLongOrNull()
-            ?: throw GradleException(
-                "Android versionCode requires numeric minor version, got ${segments[1]}",
-            )
-    val patch =
-        segments[2].toLongOrNull()
-            ?: throw GradleException(
-                "Android versionCode requires numeric patch version, got ${segments[2]}",
-            )
-
-    if (minor !in 0L..999L) {
-        throw GradleException(
-            "Android versionCode requires minor in 0..999, got $minor for $canonicalVersion",
-        )
-    }
-    if (patch !in 0L..999L) {
-        throw GradleException(
-            "Android versionCode requires patch in 0..999, got $patch for $canonicalVersion",
-        )
-    }
-
+    val major = parts.groupValues[1].toLong()
+    val minor = parts.groupValues[2].toLong()
+    val patch = parts.groupValues[3].toLong()
     val versionCode = (major * 1_000_000L) + (minor * 1_000L) + patch
-    if (versionCode < 1L || versionCode > 2_100_000_000L) {
+    if (major !in 0L..2100L || minor !in 0L..999L || patch !in 0L..999L || versionCode !in 1L..2_100_000_000L) {
         throw GradleException(
-            "Android versionCode must be in 1..2_100_000_000, got $versionCode for $canonicalVersion",
+            "Android versionCode requires major in 0..2100, minor/patch in 0..999 and code in 1..2_100_000_000; got $canonicalVersion",
         )
     }
-    return versionCode.toInt()
+    return ReleaseVersion(name = canonicalVersion, code = versionCode.toInt())
 }
 
-private fun readReleaseSigningInputsIfRequested(
-    taskNames: List<String>,
-    fileResolver: (String) -> File,
-): ReleaseSigningInputs? {
-    if (!taskNames.any(::isReleasePackagingTask)) {
-        return null
-    }
-
-    val storeFilePath = readRequiredEnv("ANDROIDCTL_RELEASE_STORE_FILE")
-    val storeFile = fileResolver(storeFilePath)
-    if (!storeFile.isFile) {
-        throw GradleException(
-            "ANDROIDCTL_RELEASE_STORE_FILE must point to an existing keystore file: ${storeFile.absolutePath}",
-        )
-    }
-
-    return ReleaseSigningInputs(
-        storeFile = storeFile,
-        storePassword = readRequiredEnv("ANDROIDCTL_RELEASE_STORE_PASSWORD"),
-        keyAlias = readRequiredEnv("ANDROIDCTL_RELEASE_KEY_ALIAS"),
-        keyPassword = readRequiredEnv("ANDROIDCTL_RELEASE_KEY_PASSWORD"),
-    )
-}
-
-private fun isReleasePackagingTask(taskName: String): Boolean = requiresReleaseSigning(taskName.substringAfterLast(':').lowercase())
-
-private fun requiresReleaseSigning(taskName: String): Boolean {
-    if ("release" !in taskName) {
-        return false
-    }
-    if (releaseSigningExemptTaskMarkers.any(taskName::contains)) {
-        return false
-    }
-    if (taskName.startsWith("buildrelease")) {
-        return true
-    }
-    if (taskName.startsWith("installrelease")) {
-        return true
-    }
-    return releaseSigningRequiredTaskMarkers.any(taskName::contains)
-}
-
-private fun readRequiredEnv(name: String): String {
-    val value = System.getenv(name)
-    if (value.isNullOrBlank()) {
-        throw GradleException(
-            "Missing required environment variable $name for Android release signing.",
-        )
-    }
-    return value
-}
-
-private val canonicalReleaseVersion = readCanonicalReleaseVersion()
-private val canonicalReleaseVersionCode = deriveAndroidVersionCode(canonicalReleaseVersion)
+private val canonicalRelease = readCanonicalReleaseVersion()
 private val releaseSigningInputs =
-    readReleaseSigningInputsIfRequested(gradle.startParameter.taskNames, ::file)
+    listOf(
+        "ANDROIDCTL_RELEASE_STORE_FILE",
+        "ANDROIDCTL_RELEASE_STORE_PASSWORD",
+        "ANDROIDCTL_RELEASE_KEY_ALIAS",
+        "ANDROIDCTL_RELEASE_KEY_PASSWORD",
+    ).associateWith { System.getenv(it).orEmpty() }
 
+val validateReleaseSigningInputs by tasks.registering {
+    doLast {
+        val missing = releaseSigningInputs.filterValues(String::isBlank).keys
+        check(missing.isEmpty()) { "Missing Android release signing variables: ${missing.joinToString()}" }
+        val storeFile = file(releaseSigningInputs.getValue("ANDROIDCTL_RELEASE_STORE_FILE"))
+        check(storeFile.isFile) { "ANDROIDCTL_RELEASE_STORE_FILE must name an existing keystore: $storeFile" }
+    }
+}
+
+tasks.matching { it.name in setOf("packageRelease", "packageReleaseBundle") }.configureEach {
+    dependsOn(validateReleaseSigningInputs)
+}
+
+interface NativeTools {
+    @get:Inject
+    val execOperations: ExecOperations
+}
+
+val nativeTools = objects.newInstance<NativeTools>()
+val minimumAndroidApi = 30
+val nativeTargets = mapOf("arm64-v8a" to "aarch64-linux-android", "x86_64" to "x86_64-linux-android")
+val ndkRevision = providers.gradleProperty("androidctlNdkVersion").get()
 val javaTarget = JavaVersion.VERSION_11
+val nativeLibraries = objects.directoryProperty()
+val compileNative by tasks.registering {
+    val ndk = androidComponents.sdkComponents.ndkDirectory
+    inputs.dir("src/main/c")
+    inputs.property("ndkRoot", ndk.map { it.asFile.absolutePath })
+    inputs.property("minimumAndroidApi", minimumAndroidApi)
+    inputs.property("nativeTargets", nativeTargets)
+    outputs.dir(nativeLibraries)
+    doLast {
+        val root = ndk.get().asFile
+        val osName = System.getProperty("os.name")
+        val windows = osName.startsWith("Windows")
+        val platform =
+            if (windows) {
+                "windows-x86_64"
+            } else if (osName == "Mac OS X") {
+                "darwin-x86_64"
+            } else {
+                "linux-x86_64"
+            }
+        val toolchain = root.resolve("toolchains/llvm/prebuilt/$platform")
+        val clang = toolchain.resolve("bin/clang${if (windows) ".exe" else ""}")
+        for ((abi, target) in nativeTargets) {
+            val destination =
+                nativeLibraries
+                    .get()
+                    .dir(abi)
+                    .asFile
+                    .apply { mkdirs() }
+
+            fun compile(
+                source: String,
+                output: String,
+                flags: List<String>,
+            ) {
+                nativeTools.execOperations.exec {
+                    commandLine(
+                        listOf(
+                            clang.absolutePath,
+                            "--target=$target$minimumAndroidApi",
+                            "--sysroot=${toolchain.resolve("sysroot")}",
+                            "-std=c17",
+                            "-O2",
+                            "-Wall",
+                            "-Wextra",
+                            "-Werror",
+                            "-fstack-protector-strong",
+                            "-D_FORTIFY_SOURCE=2",
+                            "-Wl,-z,relro,-z,now",
+                            "-Wl,-z,max-page-size=16384",
+                            "-Wl,-z,common-page-size=16384",
+                        ) + flags + listOf(file("src/main/c/$source").absolutePath, "-o", destination.resolve(output).absolutePath),
+                    )
+                }
+            }
+            // NativeFiles loads this JNI shared library with System.loadLibrary("androidctl_files").
+            compile("files.c", "libandroidctl_files.so", listOf("-fPIC", "-shared"))
+        }
+    }
+}
 
 android {
     namespace = "com.rainng.androidctl"
+    ndkVersion = ndkRevision
     compileSdk {
         version = release(36)
     }
 
     signingConfigs {
         create("release") {
-            if (releaseSigningInputs != null) {
-                storeFile = releaseSigningInputs.storeFile
-                storePassword = releaseSigningInputs.storePassword
-                keyAlias = releaseSigningInputs.keyAlias
-                keyPassword = releaseSigningInputs.keyPassword
+            if (releaseSigningInputs.values.all(String::isNotBlank)) {
+                storeFile = file(releaseSigningInputs.getValue("ANDROIDCTL_RELEASE_STORE_FILE"))
+                storePassword = releaseSigningInputs.getValue("ANDROIDCTL_RELEASE_STORE_PASSWORD")
+                keyAlias = releaseSigningInputs.getValue("ANDROIDCTL_RELEASE_KEY_ALIAS")
+                keyPassword = releaseSigningInputs.getValue("ANDROIDCTL_RELEASE_KEY_PASSWORD")
             }
         }
     }
 
     defaultConfig {
+        ndk.abiFilters.addAll(nativeTargets.keys)
         applicationId = "com.rainng.androidctl"
-        minSdk = 30
+        minSdk = minimumAndroidApi
         targetSdk = 36
-        versionCode = canonicalReleaseVersionCode
-        versionName = canonicalReleaseVersion
+        versionCode = canonicalRelease.code
+        versionName = canonicalRelease.name
     }
 
     buildTypes {
@@ -206,22 +176,17 @@ android {
     buildFeatures {
         buildConfig = true
         compose = true
+        aidl = true
     }
-    lint {
-        abortOnError = true
-        checkAllWarnings = true
-        warningsAsErrors = true
-        checkDependencies = true
-        informational +=
-            setOf(
-                "AndroidGradlePluginVersion",
-                "GradleDependency",
-                "NewerVersionAvailable",
-            )
-    }
+    sourceSets.getByName("test").resources.srcDir(rootProject.file("../contract"))
+    // Extract native artifacts for the worker.
+    packaging.jniLibs.useLegacyPackaging = true
 }
 
 androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(compileNative) { nativeLibraries }
+    }
     beforeVariants(selector().all()) { variantBuilder ->
         variantBuilder.enableAndroidTest = false
     }
@@ -235,9 +200,7 @@ kotlin {
 
 detekt {
     buildUponDefaultConfig = true
-    allRules = false
     parallel = true
-    autoCorrect = false
     config.setFrom("$rootDir/detekt.yml")
     basePath = rootDir.absolutePath
 }
@@ -246,9 +209,9 @@ tasks.withType<Detekt>().configureEach {
     jvmTarget = javaTarget.toString()
     reports {
         html.required.set(true)
-        sarif.required.set(true)
+        sarif.required.set(false)
         txt.required.set(false)
-        xml.required.set(true)
+        xml.required.set(false)
     }
 }
 
@@ -279,10 +242,13 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.nanohttpd)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
     // The patched files JAR has no POM to bring its SLF4J dependency.
     implementation(libs.slf4j)
+    implementation(libs.bcprov)
+    implementation(libs.bcutil)
+    implementation(libs.bcpkix)
     testImplementation(libs.json)
     testImplementation(libs.junit)
-    testImplementation(libs.mockito.core)
 }

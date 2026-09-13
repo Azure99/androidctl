@@ -1,0 +1,8 @@
+{
+  "limits": {
+    "MESSAGE_BYTES": 262144,
+    "JSON_UTF8_BYTES": 98304,
+    "PAIRING_NAME_UNITS": 100
+  },
+  "queryMethods": ["pair.register", "status"]
+}

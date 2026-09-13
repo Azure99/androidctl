@@ -1,15 +1,24 @@
 import asyncio
+import base64
+import datetime as dt
+import ssl
 import time
 import uuid
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import ExtendedKeyUsageOID
 from websockets.asyncio.server import ServerConnection, serve
 
 from androidctl import transport
-from androidctl.identity import trust_context, trusted_certificate
-from androidctl.private_files import private_directory
+from androidctl.coordinator import Coordinator
+from androidctl.identity import local_identity, trust_context, trusted_certificate
+from androidctl.local_server import LocalServer
+from androidctl.private_files import atomic_write, private_directory
 from androidctl.protocol import VERSION, Fault
+from androidctl.state import HostState
 from androidctl.transport import Peer, encode_message, send
 from certificate_test_support import certificate, tls_context
 from pairing_test_support import Gateway
@@ -147,3 +156,66 @@ async def test_real_tls_certificate_time_errors_are_actionable_before_credential
         assert "check" in str(failure.value)
         assert "clock" in str(failure.value)
         assert not requests
+
+
+async def test_same_key_renewed_certificate_requires_new_trust(tmp_path):
+    root = tmp_path / "state"
+    private_directory(root)
+    tls_a, identity_a = local_identity(root)
+    old = x509.load_pem_x509_certificate((root / "ipc.pem").read_bytes())
+    key = serialization.load_pem_private_key(
+        (root / "ipc.key").read_bytes(), password=None
+    )
+    now = dt.datetime.now(dt.UTC)
+    renewed = (
+        x509.CertificateBuilder()
+        .subject_name(old.subject)
+        .issuer_name(old.issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(minutes=1))
+        .not_valid_after(now + dt.timedelta(days=3650))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            old.extensions.get_extension_for_class(x509.SubjectAlternativeName).value,
+            critical=False,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False
+        )
+        .sign(key, hashes.SHA256())
+    )
+    atomic_write(root / "renewed.pem", renewed.public_bytes(serialization.Encoding.PEM))
+    tls_b = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls_b.load_cert_chain(root / "renewed.pem", root / "ipc.key")
+    identity_b = {
+        **identity_a,
+        "certificate": base64.b64encode(
+            renewed.public_bytes(serialization.Encoding.DER)
+        ).decode(),
+    }
+    coordinator = Coordinator(HostState(root), instance="fixture")
+    for tls, trust, expected in (
+        (tls_a, identity_a, True),
+        (tls_b, identity_a, False),
+        (tls_b, identity_b, True),
+    ):
+        server = LocalServer(tls, "credential", coordinator.dispatch, asyncio.Event())
+        server.start()
+        try:
+            saved = {
+                **trust,
+                "credential": "credential",
+                "endpoint": f"wss://127.0.0.1:{server.port}/ipc",
+            }
+            if expected:
+                peer = await Peer.open(saved, source="local")
+                await peer.close()
+            else:
+                with pytest.raises(Fault) as caught:
+                    await Peer.open(saved, source="local")
+                assert caught.value.problem.code == "tlsIdentity"
+                assert caught.value.problem.stage == "local.tls"
+        finally:
+            await server.stop()
+    await coordinator.close()

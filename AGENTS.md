@@ -2,46 +2,48 @@
 
 ## Project Structure & Module Organization
 
-AndroidCtl is split into four surfaces:
-
-- `contracts/`: shared Python wire models, command catalog, result schemas, and public screen contracts.
-- `androidctl/`: host CLI package. Source lives in `androidctl/src/androidctl`; tests live in `androidctl/tests`.
-- `androidctld/`: host daemon package. Source lives in `androidctld/src/androidctld`; tests live in `androidctld/tests`.
-- `android/`: Kotlin Android agent app. Source is under `android/app/src/main`; JVM tests are under `android/app/src/test`.
-
-Release tooling lives in `tools/`; version lockstep is anchored by root `VERSION`.
+AndroidCtl has one host package and one Android app. Host source lives in
+`androidctl/src/androidctl`; tests live in `androidctl/tests`. Android source is
+under `android/app/src/main`; JVM tests are under `android/app/src/test`.
+Public instructions live in `skills/androidctl`. The shared
+`contract/wire-contract.json` records current wire limits and query methods.
+Root `VERSION` anchors host/app version lockstep.
 
 ## Build, Test, and Development Commands
 
-Use the root `Taskfile.yml` when possible:
+Python requires 3.12 or newer. Use the existing `.conda` environment; otherwise
+create it with `conda create -p ./.conda python=3.12`. Install Task to use Taskfiles.
+Use JDK 21, the Gradle wrapper, Android SDK platform 36 and SDK build-tools. Set
+the SDK location in `android/local.properties` or `ANDROID_HOME`. APK builds need
+the NDK revision named by `androidctlNdkVersion` in `android/gradle.properties`.
 
-- `task test`: run Python module tests and Android unit tests.
-- `task lint`: run Ruff, Black checks, mypy, ktlint, detekt, and Android lint.
-- `task format`: apply Python and Kotlin formatting fixes.
-- `task quality`: run the full local quality gate.
-- `task test:extended`: run process-level CLI e2e tests.
-- `task release:version-check`: verify all package and Android versions match `VERSION`.
+Run from the repository root:
 
-Python requires 3.12 or newer. If no environment is active, create one with `conda create -p ./.conda python=3.12` and install the root package editable with `python -m pip install -e ".[dev]"`.
+```sh
+conda run -p ./.conda python -m pip install -e ".[dev]"
+conda run -p ./.conda python -m pytest androidctl/tests
+conda run -p ./.conda task --list
+```
 
-## Coding Style & Naming Conventions
+On Windows, run JVM tests with `android/gradlew.bat -p android :app:testDebugUnitTest`.
+`task android:build:release` invokes Gradle directly. Release signing requires
+`ANDROIDCTL_RELEASE_STORE_FILE`, `ANDROIDCTL_RELEASE_STORE_PASSWORD`,
+`ANDROIDCTL_RELEASE_KEY_ALIAS` and `ANDROIDCTL_RELEASE_KEY_PASSWORD`.
 
-Python uses Black and Ruff with line length 88 and strict mypy. Prefer typed functions and snake_case identifiers. Wire models expose camelCase aliases; construct them with snake_case fields.
+## Coding Style & Testing
 
-Kotlin uses ktlint, detekt, and Android lint. Keep RPC/action/snapshot tokens aligned with shared conformance fixtures.
+Prefer typed Python functions and snake_case identifiers. Wire models expose
+camelCase aliases; construct them with snake_case fields. Keep Kotlin and Python
+wire results aligned. Test observable behavior and affected cross-language contracts.
+See [contract instructions](contract/README.md) for intentional fixture changes.
 
-## Testing Guidelines
-
-Python tests use pytest and `test_*.py` names. Android tests use JVM classes named `*Test.kt`. Add contract tests when changing shared models, command catalog entries, result shapes, public screen fields, or Android RPC tokens.
-
-Run the narrow module test first, then `task quality` before submitting broad changes.
-
-## Commit & Pull Request Guidelines
-
-Recent history uses concise Conventional Commit style, for example `fix(androidctl): derive Windows owner identity` and `chore(repo): initial public release`. Use `type(scope): imperative summary` with a scope and keep commits focused.
-
-Pull requests should include behavior changes, affected modules, test commands, and any device/ADB assumptions. Include screenshots or XML/result samples for CLI output, setup UI, or screen rendering changes.
+Use concise Conventional Commit style, for example
+`fix(core): preserve publication facts`. Describe behavior, validation and relevant
+device/Shizuku assumptions when reviewing changes.
 
 ## Security & Configuration Tips
 
-Daemon state and tokens are workspace-local under `.androidctl/`. Do not commit generated runtime state, screenshots, staged release artifacts, keystores, or device tokens. Android release signing requires environment variables such as `ANDROIDCTL_RELEASE_STORE_FILE`; keep them out of source control.
+Credentials are private to the OS user under `%LOCALAPPDATA%/AndroidCtl` on Windows
+or `~/.local/state/androidctl` on macOS/Linux. Sessions live in worker memory.
+Do not commit generated runtime state, keystores or device credentials. Keep
+release signing values out of source control.

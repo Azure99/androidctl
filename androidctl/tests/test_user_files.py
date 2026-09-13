@@ -1,3 +1,4 @@
+import ctypes
 import errno
 import os
 import sys
@@ -5,8 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from androidctl import private_files
-from androidctl.private_files import LifetimeLock, PublishedWriteError, atomic_write
+from androidctl import private_files, user_files
+from androidctl.private_files import (
+    LifetimeLock,
+    PublishedWriteError,
+    atomic_write,
+)
 
 
 def test_lock_error_is_propagated_after_closing_file(tmp_path, monkeypatch):
@@ -58,3 +63,37 @@ def test_post_replace_io_error_carries_publication_fact(tmp_path, monkeypatch):
     with pytest.raises(PublishedWriteError):
         atomic_write(path, b"new")
     assert path.read_bytes() == b"new"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows shared replacement")
+def test_shared_replacement_failure_preserves_target_and_cleans_temporary(tmp_path):
+    path = tmp_path / "target"
+    path.mkdir()
+    with pytest.raises(PermissionError):
+        atomic_write(path, b"new", publish=user_files.replace_shared)
+    assert path.is_dir()
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows publisher handle")
+def test_shared_replacement_release_error_carries_publication_fact(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "target"
+    atomic_write(path, b"old")
+    kernel = user_files._kernel()
+
+    class ReleaseError:
+        def __getattr__(self, name):
+            return getattr(kernel, name)
+
+        def CloseHandle(self, handle):
+            assert kernel.CloseHandle(handle)
+            ctypes.set_last_error(6)
+            return 0
+
+    monkeypatch.setattr(user_files, "_kernel", ReleaseError)
+    with pytest.raises(PublishedWriteError):
+        atomic_write(path, b"new", publish=user_files.replace_shared)
+    assert path.read_bytes() == b"new"
+    assert list(tmp_path.iterdir()) == [path]

@@ -177,18 +177,18 @@ class HostState:
             if any(isinstance(value, Fault) for value in records):
                 raise Fault(
                     "pairingInvalid",
-                    "Unusable saved pairing",
+                    "Unusable saved pairing; run devices and select "
+                    "explicitly with --device",
                 )
             if not records:
                 raise Fault(
                     "deviceRequired",
-                    "No paired devices",
+                    "No paired devices; install the matching APK, start Shizuku "
+                    "and Gateway, then show a code and run "
+                    "androidctl pair HOST:PORT CODE --name NAME",
                 )
             if len(records) != 1:
-                raise Fault(
-                    "deviceRequired",
-                    "Multiple paired devices require an explicit selection",
-                )
+                raise Fault("deviceRequired", "Select one paired device with --device")
             return cast(PairingRecord, records[0])
         matches = [
             v
@@ -203,7 +203,8 @@ class HostState:
         if len(matches) != 1:
             raise Fault(
                 "deviceNotFound",
-                f"No unique paired device: {identifier}",
+                f"No unique paired device: {identifier}; run androidctl devices "
+                "then use --device NAME",
             )
         return matches[0]
 
@@ -239,7 +240,9 @@ class HostState:
             )
         ]
         if len(matches) != 1:
-            raise Fault("deviceNotFound", f"No unique saved pairing: {identifier}")
+            raise Fault(
+                "deviceNotFound", "Use an exact device name or bad record from devices"
+            )
         return matches[0]
 
     def forget(self, key: str) -> dict[str, Any]:
@@ -305,7 +308,8 @@ def require_active(record: PairingRecord) -> PairingRecord:
     if record.active is None:
         raise Fault(
             "pairingUnconfirmed",
-            "Pairing is unconfirmed",
+            "Pairing is unconfirmed; run pair again with a current code. "
+            "The saved credential is checked first",
         )
     return record
 
