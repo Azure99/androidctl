@@ -29,6 +29,7 @@ dependencies = [
     "pydantic-core>=2.33,<3",
     "typing-extensions>=4.12,<5",
     "typer>=0.16,<1",
+    "websockets>=15.0.1,<16",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +78,11 @@ testpaths = [
     "androidctl/tests/test_device_configuration.py",
     "androidctl/tests/test_pairing_state.py",
     "androidctl/tests/test_user_files.py",
+    "androidctl/tests/test_certificate.py",
+    "androidctl/tests/test_connection_lifecycle.py",
+    "androidctl/tests/test_connection_ack.py",
+    "androidctl/tests/test_local_calls.py",
+    "androidctl/tests/test_request_budgets.py",
 ]
 
 [tool.black]

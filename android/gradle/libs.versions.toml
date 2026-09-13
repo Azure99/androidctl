@@ -11,6 +11,8 @@ composeBom = "2026.03.00"
 nanoHttpd = "2.3.1"
 json = "20251224"
 mockito = "5.23.0"
+slf4j = "2.0.13"
+websocket = "1.6.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -22,6 +24,8 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanoHttpd" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
+slf4j = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
+websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "websocket" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
