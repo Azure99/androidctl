@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import socket
 import time
 from collections.abc import Callable
@@ -13,6 +14,7 @@ from .identity import DeviceIdentity
 from .private_files import PublishedWriteError
 from .protocol import (
     UNCERTAIN_EXIT,
+    VERSION,
     Fault,
     Result,
     TransportFailure,
@@ -535,6 +537,12 @@ class Coordinator:
     async def dispatch(
         self, method: str, args: dict[str, Any], deadline: float
     ) -> dict[str, Any]:
+        if method == "daemon.stop":
+            if self.active_work():
+                raise Fault(
+                    "busy", "Active requests or I/O must finish before stopping"
+                )
+            return completed("daemon stop", {"instance": self.instance}).wire()
         task = asyncio.create_task(self.run(method, args, deadline))
         self.tasks.add(task)
 
@@ -554,6 +562,19 @@ class Coordinator:
         if method == "devices":
             return completed(
                 "devices", await self.io(self.state.devices, args.get("device"))
+            )
+        if method == "daemon.status":
+            return completed(
+                "daemon status",
+                {
+                    "pid": os.getpid(),
+                    "version": VERSION,
+                    "connected": sum(
+                        device.connected() for device in self.devices.values()
+                    ),
+                    # dispatch already owns the current status request.
+                    "active": max(0, len(self.tasks) - 1),
+                },
             )
         raise Fault("method", "Unsupported local method")
 

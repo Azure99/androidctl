@@ -125,7 +125,9 @@ async def _connect_local(*, start: bool, deadline: float) -> Peer:
                     f"version={material.get('version', 'unknown')}; "
                     f"CLI version={VERSION}. "
                     "The daemon exits after about five continuous idle minutes "
-                    "with no local work or connections.",
+                    "with no local work or connections. "
+                    "If a CLI matching the daemon version is still installed, "
+                    "use it to stop the daemon after its active work finishes.",
                     "local.version",
                 )
             instance = material["instance"]
@@ -163,6 +165,49 @@ async def _connect_local(*, start: bool, deadline: float) -> Peer:
 class BoundDevice:
     device_id: str
     source: str
+
+
+async def confirm_stop(result: Result, deadline: float) -> Result:
+    root = state_directory()
+    instance = result.data["instance"]
+    lock = LifetimeLock(root / "daemon.lock")
+    try:
+        while True:
+            ended = lock.acquire()
+            if not ended:
+                material = descriptor(root)
+                if material is not None:
+                    ended = material["instance"] != instance
+            if ended:
+                record = diagnostic(root)
+                if record.get("instance") != instance:
+                    raise ValueError("No completion record for this daemon instance")
+                if record.get("phase") == "stopped":
+                    return result
+                if record.get("phase") != "cleanup":
+                    raise ValueError("Daemon cleanup completion is unconfirmed")
+                problem = Problem.model_validate(record["problem"])
+                return Result(
+                    command=result.command,
+                    result="failed",
+                    reason=problem.message,
+                    error=problem,
+                )
+            if time.monotonic() >= deadline:
+                return Result(
+                    command=result.command,
+                    result="still running",
+                    reason="Stop requested; daemon shutdown has not been confirmed",
+                )
+            await asyncio.sleep(0.05)
+    except (OSError, ValueError, KeyError, Fault) as error:
+        return Result(
+            command=result.command,
+            result="failed",
+            reason=f"Stop requested; shutdown confirmation failed: {error}",
+        )
+    finally:
+        lock.close()
 
 
 class LocalCall:

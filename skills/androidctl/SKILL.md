@@ -38,6 +38,7 @@ takeover only on explicit user instruction.
 | `failed` | Read the reason and retained registration or confirmation facts. |
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
+| `still running` | For `daemon stop`, recheck with `daemon status`. |
 
 ## Recover And Finish
 

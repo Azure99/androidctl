@@ -5,7 +5,9 @@ import time
 import pytest
 from websockets.asyncio.client import connect
 
+from androidctl.coordinator import Coordinator
 from androidctl.identity import trust_context
+from androidctl.private_files import private_directory
 from androidctl.protocol import (
     VERSION,
     Fault,
@@ -13,9 +15,10 @@ from androidctl.protocol import (
     TransportFailure,
     completed,
 )
+from androidctl.state import HostState
 from androidctl.transport import Peer
 from connection_test_support import connections, local_server
-from pairing_test_support import Gateway
+from pairing_test_support import Gateway, save_active
 
 
 async def test_other_session_is_rejected_during_ack_handoff(tmp_path, monkeypatch):
@@ -272,3 +275,105 @@ async def test_real_tls_preserves_only_validated_facts_before_ack(
         finally:
             if peer is not None:
                 await peer.close()
+
+
+async def test_real_two_hops_forward_fact_while_ack_remains_owned(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "private"
+    private_directory(root)
+    calls = []
+
+    async def action(method, args):
+        calls.append((method, args))
+        return {"command": "click", "result": "done", "data": {}}
+
+    device = Gateway(root / "gateway", dispatch=action)
+    device.credentials["test"] = "pair"
+    async with device.listening():
+        private_directory(root / "state")
+        state = HostState(root / "state")
+        save_active(
+            state,
+            {
+                **device.identity,
+                "credential": "test",
+                "alias": "fixture",
+            },
+        )
+        coordinator = Coordinator(state, instance="test")
+        entered, release = asyncio.Event(), asyncio.Event()
+        held = []
+        original_ack = Peer.acknowledge
+
+        async def acknowledge(self, value):
+            if (
+                self.source == "device"
+                and value.get("result", {}).get("command") == "click"
+            ):
+                held.append(self)
+                entered.set()
+                await release.wait()
+                self.connection.transport.abort()
+                await self.connection.wait_closed()
+                raise OSError("controlled ACK disconnect")
+            await original_ack(self, value)
+
+        monkeypatch.setattr(Peer, "acknowledge", acknowledge)
+        async with local_server(
+            root,
+            coordinator.dispatch,
+            credential="test",
+        ) as (material, daemon):
+            caller = await Peer.open(material, source="local")
+            inspector = await Peer.open(material, source="local")
+            try:
+                result = await asyncio.wait_for(
+                    caller.request(
+                        "call",
+                        {"command": "click", "args": {"timeoutMs": 2000}},
+                        deadline=time.monotonic() + (2),
+                        validate=Result.model_validate,
+                    ),
+                    3,
+                )
+                await asyncio.wait_for(entered.wait(), 3)
+                assert result.result == "done"
+                assert len(calls) == 1
+                assert held[0].busy
+                with pytest.raises(Fault, match="occupied"):
+                    await held[0].request(
+                        "snapshot",
+                        {"timeoutMs": 30},
+                        deadline=time.monotonic() + (0.03),
+                    )
+                assert len(calls) == 1
+                device_state = next(iter(coordinator.devices.values()))
+                held[0].last_used = time.monotonic() - 61
+                await coordinator.expire_connections()
+                assert held[0].busy
+                assert coordinator.occupied()
+                with pytest.raises(Fault, match="active|Active"):
+                    await inspector.request(
+                        "daemon.stop", deadline=time.monotonic() + 10
+                    )
+                released_at = time.monotonic()
+                release.set()
+                await held[0].ack_task
+                assert not held[0].busy
+                assert not held[0].opened
+                assert released_at <= held[0].last_used <= time.monotonic()
+                await coordinator.expire_connections()
+                assert device_state._peers
+                await caller.close()
+                assert (
+                    await inspector.request(
+                        "daemon.stop", deadline=time.monotonic() + 10
+                    )
+                )["result"] == "done"
+                assert len(calls) == 1
+            finally:
+                release.set()
+                await caller.close()
+                await inspector.close()
+                await coordinator.close()

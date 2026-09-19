@@ -12,7 +12,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 | Purpose | Commands | Details |
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `status` | [Connections](#connection-and-sessions) |
-| Ownership | `session open/close/takeover` | [Sessions](#connection-and-sessions) |
+| Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 
 ## Connection And Sessions
 
@@ -97,13 +97,21 @@ management state may still show the previous worker.
 Unused device connections close after 45 seconds; the daemon exits after about
 five continuous idle minutes with no local work or connections.
 
-Finish active work and wait for that exit before replacing the host package,
-including a same-version reinstall. On a new App version's first executor
+Finish active work and run `androidctl daemon stop` before replacing the host
+package, including a same-version reinstall. On a new App version's first executor
 attachment, Shizuku replaces the old worker, interrupting unfinished work; finish
 that work before upgrading. Before reinstalling the same App version, use
 **Stop idle executor** first.
 
-`daemonVersion` rejects a running daemon with another version.
+`daemonVersion` rejects a running daemon with another version before connection,
+including `daemon stop`. Wait for the idle exit above, or, if a CLI matching that
+daemon version is still installed, use it to stop the daemon after active work
+finishes.
+
+With no daemon present, `daemon stop` returns done, reason `already stopped`,
+exit 0 without starting one. An accepted stop of a running daemon still requires
+confirmed shutdown of the same instance. Busy, configuration/version errors and
+cleanup failures keep their own results.
 
 ### Device Setup And ADB Route
 
@@ -152,6 +160,7 @@ and deleting a file does not stop its owner.
 | `failed` | 1 | A known failure; partial effects can remain. |
 | `not sent` | 2 | The request was not dispatched. |
 | `UNKNOWN` | 3 | Dispatch or its final outcome is uncertain. |
+| `still running` | 4 | `daemon stop` has not confirmed shutdown. Recheck the daemon with `daemon status`. |
 
 Text headings use the same fixed command path as JSON `command`.
 

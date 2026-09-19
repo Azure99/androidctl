@@ -31,7 +31,7 @@ Shizuku again, open AndroidCtl and enable **Gateway**.
 ## Install And Pair
 
 Before replacing the host package, including a same-version reinstall, finish
-active work and wait for the daemon's idle exit.
+active work and run `androidctl daemon stop` with the installed version.
 Finish device work before upgrading the App: its first executor attachment
 replaces the old worker. Before reinstalling the same App version, use
 **Stop idle executor** first. See [upgrade and recovery

@@ -21,9 +21,17 @@ from .cli_options import (
     parse_duration,
 )
 from .identity import pairing_endpoint
-from .local_call import LocalCall
+from .local_call import LocalCall, confirm_stop
 from .output import Output, display_name
-from .protocol import VERSION, Fault, Result, TransportFailure, rejected, uncertain
+from .protocol import (
+    VERSION,
+    Fault,
+    Result,
+    TransportFailure,
+    completed,
+    rejected,
+    uncertain,
+)
 
 LOCAL_REQUEST_SECONDS = 20
 
@@ -33,7 +41,9 @@ app = typer.Typer(
     "Durations use integer ms/s/m/h; only 0 may omit the unit.",
 )
 session_app = typer.Typer(no_args_is_help=True, help="Own this device for a task.")
+daemon_app = typer.Typer(help="Inspect or stop the local daemon.")
 app.add_typer(session_app, name="session")
+app.add_typer(daemon_app, name="daemon")
 
 
 def version_callback(value: bool) -> None:
@@ -318,6 +328,46 @@ def session_close(ctx: typer.Context) -> None:
 )
 def session_takeover(ctx: typer.Context) -> None:
     device_call(ctx, "session.takeover")
+
+
+@daemon_app.command(
+    "status", cls=CliCommand, help="Inspect the local daemon without starting it."
+)
+def daemon_status(ctx: typer.Context) -> None:
+    context = options(ctx)
+    command = command_name(ctx)
+    local = LocalCall()
+    result = request_local(
+        command,
+        local,
+        lambda deadline: local.request("daemon.status", deadline=deadline, start=False),
+    )
+    if result.error is not None and result.error.code == "daemonStopped":
+        result = completed(command, reason="stopped")
+    emit(result, as_json=context.as_json, render=render_fields)
+
+
+@daemon_app.command(
+    "stop",
+    cls=CliCommand,
+    help="Request shutdown and confirm the local daemon instance has stopped.",
+)
+def daemon_stop(ctx: typer.Context) -> None:
+    context = options(ctx)
+    command = command_name(ctx)
+    deadline = time.monotonic() + LOCAL_REQUEST_SECONDS
+    local = LocalCall()
+    result = request_local(
+        command,
+        local,
+        lambda deadline: local.request("daemon.stop", deadline=deadline, start=False),
+        deadline=deadline,
+    )
+    if result.error is not None and result.error.code == "daemonStopped":
+        result = completed(command, reason="already stopped")
+    elif result.result == "done":
+        result = asyncio.run(confirm_stop(result, deadline))
+    emit(result, as_json=context.as_json, render=render_summary)
 
 
 def error_json(args: list[str]) -> bool:

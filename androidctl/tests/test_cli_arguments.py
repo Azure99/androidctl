@@ -161,7 +161,7 @@ def test_pair_syntax_is_checked_before_daemon_and_preserves_leading_zeros(
     async def request(self, method, args, **kwargs):
         assert method == "pair"
         invoked.append(args)
-        return completed("pair")
+        return cli.completed("pair")
 
     monkeypatch.setattr(cli.LocalCall, "request", request)
     runner = CliRunner()

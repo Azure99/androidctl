@@ -5,6 +5,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+from typer.testing import CliRunner
 
 from androidctl import app as cli
 from androidctl import local_call
@@ -40,6 +41,36 @@ def test_default_local_request_shares_its_budget_with_close(monkeypatch):
     monkeypatch.setattr(local, "close", close)
     assert cli.request_local("devices", local, operation).result == "done"
     assert received == [("request", 120), ("close", 120)]
+
+
+def test_stop_request_close_and_confirmation_share_one_budget(monkeypatch):
+    clock = [100.0]
+    received = []
+    monkeypatch.setattr(cli, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+
+    async def request(self, method, *, deadline, start):
+        assert method == "daemon.stop"
+        assert start is False
+        received.append(("request", deadline))
+        clock[0] += 7
+        return completed(method, {"instance": "stopped-instance"})
+
+    async def close(self, *, deadline):
+        received.append(("close", deadline))
+        clock[0] += 3
+
+    async def confirm_stop(result, deadline):
+        received.append(("confirm", deadline))
+        assert deadline - clock[0] == 10
+        assert result.data["instance"] == "stopped-instance"
+        return result
+
+    monkeypatch.setattr(local_call.LocalCall, "request", request)
+    monkeypatch.setattr(local_call.LocalCall, "close", close)
+    monkeypatch.setattr(cli, "confirm_stop", confirm_stop)
+    response = CliRunner().invoke(cli.app, ["daemon", "stop"])
+    assert response.exit_code == 0, response.output
+    assert received == [("request", 120), ("close", 120), ("confirm", 120)]
 
 
 @pytest.mark.parametrize("budget", [None, True, 0, -1, 1.5, "1000"])
