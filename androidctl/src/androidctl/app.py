@@ -20,7 +20,7 @@ from .cli_options import (
     options,
     parse_duration,
 )
-from .identity import pairing_endpoint
+from .identity import device_endpoint, pairing_endpoint
 from .local_call import LocalCall, confirm_stop
 from .output import Output, display_name
 from .protocol import (
@@ -41,8 +41,10 @@ app = typer.Typer(
     "Durations use integer ms/s/m/h; only 0 may omit the unit.",
 )
 session_app = typer.Typer(no_args_is_help=True, help="Own this device for a task.")
+device_app = typer.Typer(help="Select, forget or update a local device pairing.")
 daemon_app = typer.Typer(help="Inspect or stop the local daemon.")
 app.add_typer(session_app, name="session")
+app.add_typer(device_app, name="device")
 app.add_typer(daemon_app, name="daemon")
 
 
@@ -149,6 +151,21 @@ def render_fields(result: Result, output: Output) -> None:
     emit_diagnostics(result, output)
 
 
+def render_forget(result: Result, output: Output) -> None:
+    output.heading(result)
+    emit_fields(
+        {
+            key: value
+            for key, value in result.data.items()
+            if key not in ("cleanupError", "context", "selectionError")
+        },
+        output,
+    )
+    if result.data.get("selectionError"):
+        output.echo("Selection: " + result.data["selectionError"]["message"])
+    emit_diagnostics(result, output)
+
+
 def render_devices(result: Result, output: Output) -> None:
     if result.result != "done":
         render_summary(result, output)
@@ -184,6 +201,12 @@ def render_status(result: Result, output: Output) -> None:
         )
 
     emit_diagnostics(result, output)
+
+
+def render_selection(result: Result, output: Output) -> None:
+    render_summary(result, output)
+    if result.result == "done" and result.error is not None:
+        output.echo(result.error.message)
 
 
 def emit(
@@ -292,6 +315,67 @@ def devices(ctx: typer.Context) -> None:
 )
 def status(ctx: typer.Context) -> None:
     device_call(ctx, "status", render=render_status)
+
+
+@device_app.command(
+    "select", cls=CliCommand, help="Save DEVICE as the user-wide default device."
+)
+def device_select(
+    ctx: typer.Context, device: Annotated[str, typer.Argument(metavar="DEVICE")]
+) -> None:
+    context = options(ctx)
+    local = LocalCall()
+    result = request_local(
+        command_name(ctx),
+        local,
+        lambda deadline: local.request(
+            "device.select", {"device": device}, deadline=deadline
+        ),
+    )
+    emit(result, as_json=context.as_json, render=render_selection)
+
+
+@device_app.command(
+    "forget",
+    cls=CliCommand,
+    help="Remove one local pairing; does not revoke or stop device work.",
+)
+def device_forget(
+    ctx: typer.Context, device: Annotated[str, typer.Argument(metavar="DEVICE")]
+) -> None:
+    context = options(ctx)
+    local = LocalCall()
+    result = request_local(
+        command_name(ctx),
+        local,
+        lambda deadline: local.request(
+            "device.forget", {"device": device}, deadline=deadline
+        ),
+    )
+    emit(result, as_json=context.as_json, render=render_forget)
+
+
+@device_app.command(
+    "address",
+    cls=CliCommand,
+    help="Update DEVICE's local pairing address without changing certificate trust.",
+)
+def device_address(
+    ctx: typer.Context,
+    device: Annotated[str, typer.Argument(metavar="DEVICE")],
+    address: Annotated[str, typer.Argument(metavar="HOST:PORT")],
+) -> None:
+    address = device_endpoint(address)
+    context = options(ctx)
+    local = LocalCall()
+    result = request_local(
+        command_name(ctx),
+        local,
+        lambda deadline: local.request(
+            "device.address", {"device": device, "endpoint": address}, deadline=deadline
+        ),
+    )
+    emit(result, as_json=context.as_json, render=render_summary)
 
 
 @session_app.command("open", cls=CliCommand, help="Open a session.")

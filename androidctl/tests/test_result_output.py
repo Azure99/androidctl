@@ -12,13 +12,13 @@ from typer.testing import CliRunner
 from androidctl import app as cli
 from androidctl.coordinator import Coordinator
 from androidctl.output import Output, display_name
-from androidctl.private_files import private_directory
+from androidctl.private_files import private_directory, write_json
 from androidctl.protocol import (
     Result,
     completed,
 )
 from androidctl.state import HostState
-from pairing_test_support import Gateway, save_active
+from pairing_test_support import Gateway, new_device_identity, paired, save_active
 from ui_test_support import BrokenStream
 
 
@@ -90,6 +90,7 @@ def test_session_names_are_escaped_only_in_human_output(capsys):
     assert json.loads(capsys.readouterr().out)["data"]["session"] == session
 
 
+@pytest.mark.parametrize("command", ["status", "device select"])
 @pytest.mark.parametrize(
     ("alias", "display"),
     [
@@ -98,10 +99,11 @@ def test_session_names_are_escaped_only_in_human_output(capsys):
         ('desk"\\name', 'desk\\"\\\\name'),
     ],
 )
-def test_device_alias_is_escaped_only_in_text(capsys, alias, display):
+def test_device_alias_is_escaped_only_in_text(capsys, command, alias, display):
     value = Result(
-        command="status",
+        command=command,
         result="done",
+        reason=alias if command == "device select" else None,
         data={
             "device": alias,
             "worker": "ready",
@@ -112,11 +114,17 @@ def test_device_alias_is_escaped_only_in_text(capsys, alias, display):
     with pytest.raises(cli.typer.Exit) as stopped:
         cli.emit(
             value,
-            render=cli.render_status,
+            render={
+                "status": cli.render_status,
+                "device select": cli.render_selection,
+            }[command],
         )
     assert stopped.value.exit_code == 0
     text = capsys.readouterr().out
-    assert f"device={display} connected worker=ready\n" in text
+    if command == "device select":
+        assert text == f"device select: done; {display}\n"
+    else:
+        assert f"device={display} connected worker=ready\n" in text
     assert value.wire() == original
     with pytest.raises(cli.typer.Exit):
         cli.emit(value, as_json=True)
@@ -146,8 +154,73 @@ def test_output_does_not_swallow_program_value_error(monkeypatch):
         Output().echo("prepared text")
 
 
+@pytest.mark.parametrize("reply_command", ["device select", "apps"])
+def test_command_renderer_uses_leaf_command_and_ignores_unrelated_data_keys(
+    monkeypatch, reply_command
+):
+    collision = completed(
+        reply_command,
+        {"apps": [], "devices": [], "session": {}, "pid": 4, "checks": [], "apk": {}},
+    )
+
+    async def request(self, method, args, **kwargs):
+        assert method == "device.select"
+        assert args == {"device": "phone"}
+        return collision
+
+    monkeypatch.setattr(cli.LocalCall, "request", request)
+    selected = CliRunner().invoke(cli.app, ["device", "select", "phone"])
+    assert selected.exit_code == 0
+    assert len(selected.stdout.splitlines()) == 1
+    assert selected.stdout == "device select: done\n"
+    assert not any(
+        key in selected.stdout
+        for key in ("apps=", "devices=", "pid=", "checks=", "apk=")
+    )
+
+
+async def test_forget_renderer_keeps_failed_facts(tmp_path, monkeypatch):
+    private_directory(tmp_path / "state")
+    state = HostState(tmp_path / "state")
+    saved = paired(state, new_device_identity(), "phone")
+    write_json(state.selection, {})
+    coordinator = Coordinator(state, instance="forget-renderer")
+    try:
+        forgotten = await coordinator.forget("phone")
+    finally:
+        await coordinator.close()
+
+    async def forget(self, method, args, **kwargs):
+        assert method == "device.forget"
+        assert args == {"device": "phone"}
+        return forgotten
+
+    monkeypatch.setattr(cli.LocalCall, "request", forget)
+    stopped = await asyncio.to_thread(
+        CliRunner().invoke, cli.app, ["device", "forget", "phone"]
+    )
+    assert stopped.exit_code == 1
+    output = stopped.stdout
+    assert output.startswith("device forget: failed; Local pairing removed;")
+    assert "workspace=" not in output
+    assert "session=" not in output
+    assert f"forgotten={saved['deviceId']}\n" in output
+    assert "selectionCleared=false\n" in output
+    assert "Selection: " + forgotten.data["selectionError"]["message"] + "\n" in output
+    assert "selectionError=" not in output
+    assert forgotten.data["selectionError"]["code"] == "selectionInvalid"
+    assert forgotten.data["selectionError"]["stage"] == "local.configuration"
+    assert str(state.selection) in forgotten.data["selectionError"]["message"]
+    response = await asyncio.to_thread(
+        CliRunner().invoke, cli.app, ["--json", "device", "forget", "phone"]
+    )
+    assert response.exit_code == 1
+    assert json.loads(response.stdout) == forgotten.wire()
+
+
+@pytest.mark.parametrize("command", ["pair", "address"])
 async def test_connection_cleanup_renderer_uses_the_producer_string(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, command
 ):
     gateway = Gateway(tmp_path / "tls")
     private_directory(tmp_path / "state")
@@ -166,22 +239,31 @@ async def test_connection_cleanup_renderer_uses_the_producer_string(
         close = device.close
         monkeypatch.setattr(device, "close", failed_close)
         try:
-            result = await coordinator.pair(
-                gateway.args(), deadline=time.monotonic() + 20
-            )
-            arguments = [
-                "pair",
-                urlsplit(gateway.identity["endpoint"]).netloc,
-                "000042",
-                "--name",
-                "phone",
-            ]
+            if command == "pair":
+                result = await coordinator.pair(
+                    gateway.args(), deadline=time.monotonic() + 20
+                )
+                arguments = [
+                    "pair",
+                    urlsplit(gateway.identity["endpoint"]).netloc,
+                    "000042",
+                    "--name",
+                    "phone",
+                ]
+            elif command == "address":
+                result = await coordinator.address(
+                    {
+                        "device": "phone",
+                        "endpoint": "wss://updated.example:443/androidctl",
+                    }
+                )
+                arguments = ["device", "address", "phone", "updated.example:443"]
         finally:
             monkeypatch.setattr(device, "close", close)
             await coordinator.close()
 
     async def request(self, method, args, **kwargs):
-        assert method == "pair"
+        assert method == ("pair" if command == "pair" else f"device.{command}")
         return result
 
     monkeypatch.setattr(cli.LocalCall, "request", request)
@@ -189,8 +271,9 @@ async def test_connection_cleanup_renderer_uses_the_producer_string(
     assert response.exit_code == 3, response.output
     assert response.stdout.startswith(f"{result.command}: done")
     assert "cleanupError=old connection cleanup failed\n" in response.stdout
-    for fact in ("registered", "confirmed", "activated"):
-        assert f"{fact}=true\n" in response.stdout
+    if command == "pair":
+        for fact in ("registered", "confirmed", "activated"):
+            assert f"{fact}=true\n" in response.stdout
     response = await asyncio.to_thread(
         CliRunner().invoke, cli.app, ["--json", *arguments]
     )

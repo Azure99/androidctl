@@ -10,8 +10,8 @@ from typing import Any, Literal, TypeVar, cast
 
 from websockets.exceptions import ConnectionClosed
 
-from .identity import DeviceIdentity
-from .private_files import PublishedWriteError
+from .identity import DeviceIdentity, endpoint
+from .private_files import PublishedWriteError, write_json
 from .protocol import (
     UNCERTAIN_EXIT,
     VERSION,
@@ -19,6 +19,7 @@ from .protocol import (
     Result,
     TransportFailure,
     completed,
+    rejected,
     uncertain,
 )
 from .state import (
@@ -192,6 +193,10 @@ class Device:
             )
         outcome.data.update(timings)
         return outcome
+
+    async def replace_record(self, record: PairingRecord) -> None:
+        self._record = record
+        await self.close()
 
     async def expire_connections(self) -> None:
         for role, gate in self._connection_gates.items():
@@ -534,6 +539,72 @@ class Coordinator:
         outcome.data["device"] = device.active.alias
         return outcome
 
+    async def address(self, args: dict[str, Any]) -> Result:
+        endpoint(args["endpoint"])
+        return await self.update_connection(args, args["endpoint"])
+
+    async def forget(self, identifier: str) -> Result:
+        key = await self.io(self.state.resolve_forget_key, identifier)
+        device = self.devices.get(key)
+        if key in self.changing or device is not None and device.in_use():
+            raise Fault("busy", "Finish local device requests before forgetting")
+        self.changing.add(key)
+        try:
+            if device is not None:
+                await device.close()
+            try:
+                data = await self.io(self.state.forget, key)
+            except OSError as error:
+                return rejected("device forget", local_configuration(str(error)))
+            self.devices.pop(key, None)
+            return Result(
+                command="device forget",
+                result="failed" if data.get("selectionError") else "done",
+                reason="Local pairing removed; device credentials were not revoked",
+                data=data,
+            )
+        finally:
+            self.changing.discard(key)
+
+    async def update_connection(
+        self,
+        args: dict[str, Any],
+        value: str,
+    ) -> Result:
+        record, _ = await self.io(self.state.resolve_selection, args.get("device"))
+        key = record.device_id
+        device = self.devices.get(key)
+        if key in self.changing or device is not None and device.in_use():
+            raise Fault("busy", "Finish device requests before changing its connection")
+        result = completed(
+            "device address",
+            {"context": {"deviceId": key, "deviceSource": "args"}},
+        )
+        self.changing.add(key)
+        try:
+            for slot in (record.active, record.candidate):
+                if slot is not None:
+                    slot.endpoint = value
+            try:
+                await self.io(self.state.save_record, record)
+            except PublishedWriteError as error:
+                result.error = local_configuration(str(error)).problem
+                result.reason = (
+                    "Configuration updated; final file synchronization "
+                    "or cleanup failed"
+                )
+                result.exit = UNCERTAIN_EXIT
+            except OSError as error:
+                raise local_configuration(str(error)) from error
+            if device is not None:
+                try:
+                    await device.replace_record(record)
+                except (OSError, Fault, ConnectionClosed) as error:
+                    connection_cleanup(result, error)
+        finally:
+            self.changing.discard(key)
+        return result
+
     async def dispatch(
         self, method: str, args: dict[str, Any], deadline: float
     ) -> dict[str, Any]:
@@ -559,6 +630,45 @@ class Coordinator:
             return await self.remote(args, deadline=deadline)
         if method == "pair":
             return await self.pair(args, deadline)
+        if method == "device.address":
+            return await self.address(args)
+        if method == "device.forget":
+            result = await self.forget(args["device"])
+            if "forgotten" in result.data:
+                result.data["context"] = {
+                    "deviceId": result.data["forgotten"],
+                    "deviceSource": "args",
+                }
+            return result
+        if method == "device.select":
+
+            def select() -> Result:
+                selected, _ = self.state.resolve_selection(args["device"])
+                require_active(selected)
+                result = completed(
+                    "device select",
+                    {
+                        "context": {
+                            "deviceId": selected.device_id,
+                            "deviceSource": "args",
+                        }
+                    },
+                    reason=selected.current_slot.alias,
+                )
+                try:
+                    write_json(self.state.selection, {"deviceId": selected.device_id})
+                except PublishedWriteError as error:
+                    result.error = local_configuration(
+                        "Selection saved; final file synchronization "
+                        f"or cleanup failed: {error}"
+                    ).problem
+                    result.exit = UNCERTAIN_EXIT
+                return result
+
+            try:
+                return await self.io(select)
+            except OSError as error:
+                raise local_configuration(str(error)) from error
         if method == "devices":
             return completed(
                 "devices", await self.io(self.state.devices, args.get("device"))

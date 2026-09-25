@@ -54,14 +54,18 @@ and **Executor attached**, then choose **Show new pairing code**.
 
 ```sh
 androidctl pair 192.168.1.20:18843 000042 --name phone
+androidctl device select phone
 androidctl --device phone status
 ```
 
 Replace the address and code with the device's current values; keep leading zeros.
-Displayed addresses are candidates, not connectivity tests. First pairing trusts
-the presented certificate and cannot resist an active intermediary. Later
-connections pin that complete certificate. Routing, firewall and any port forwarding
-are your responsibility.
+Displayed addresses are candidates, not connectivity tests. The
+[connection reference](skills/androidctl/reference.md#connection-and-sessions)
+covers pairing recovery, device management and IPv6 addresses.
+
+First pairing trusts the presented certificate and cannot resist an active
+intermediary. Later connections pin that complete certificate. Routing, firewall
+and any port forwarding are your responsibility.
 
 For an emulator or device without a LAN route, follow the optional
 [ADB route setup](skills/androidctl/reference.md#device-setup-and-adb-route).

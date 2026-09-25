@@ -35,7 +35,7 @@ async def test_ordinary_status_call_keeps_failed_checks_without_a_selected_devic
         raise AssertionError("Unpaired status must not dispatch device work")
 
     async with connections(tmp_path, unexpected) as (coordinator, _, connect):
-        coordinator.state.forget(coordinator.state.resolve_forget_key("phone"))
+        await coordinator.forget("phone")
         monkeypatch.setattr(local_call, "connect_local", connect)
 
         def invoke():

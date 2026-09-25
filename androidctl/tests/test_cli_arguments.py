@@ -199,10 +199,11 @@ def test_pair_syntax_is_checked_before_daemon_and_preserves_leading_zeros(
         }
 
 
+@pytest.mark.parametrize("command", ["pair", "address"])
 @pytest.mark.parametrize(
     "address", ["phone:18843", "127.0.0.1:1", "[::1]:65535", "[fe80::1%eth0]:18843"]
 )
-def test_device_address_syntax_is_shared(monkeypatch, address):
+def test_device_address_syntax_is_shared(monkeypatch, command, address):
     calls = []
 
     async def request(self, method, args, **kwargs):
@@ -210,15 +211,20 @@ def test_device_address_syntax_is_shared(monkeypatch, address):
         return completed(method)
 
     monkeypatch.setattr(cli.LocalCall, "request", request)
-    args = ["pair", address, "012345", "--name", "phone"]
+    args = (
+        ["pair", address, "012345", "--name", "phone"]
+        if command == "pair"
+        else ["device", "address", "phone", address]
+    )
     result = CliRunner().invoke(cli.app, ["--device", "phone", *args])
     assert result.exit_code == 0, result.output
     assert len(calls) == 1
     method, parameters = calls[0]
-    assert method == "pair"
+    assert method == ("pair" if command == "pair" else "device.address")
     assert parameters["endpoint"] == f"wss://{address}/androidctl"
 
 
+@pytest.mark.parametrize("command", ["pair", "address"])
 @pytest.mark.parametrize(
     "address",
     [
@@ -230,10 +236,45 @@ def test_device_address_syntax_is_shared(monkeypatch, address):
         "wss://phone:18843/androidctl",
     ],
 )
-def test_bad_device_address_rejects_before_connection(monkeypatch, capsys, address):
-    args = ["pair", address, "012345", "--name", "phone"]
+def test_bad_device_address_rejects_before_connection(
+    monkeypatch, capsys, command, address
+):
+    args = (
+        ["pair", address, "012345", "--name", "phone"]
+        if command == "pair"
+        else ["device", "address", "phone", address]
+    )
     run_main(monkeypatch, ["--json", *args])
     value = json.loads(capsys.readouterr().out)
     assert value["result"] == "not sent"
-    assert value["command"] == "pair"
+    assert value["command"] == ("pair" if command == "pair" else "device address")
     assert value["error"]["code"] == "endpoint"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["select"],
+        ["forget"],
+        ["address"],
+        ["address", "phone:18843"],
+    ],
+)
+def test_device_management_requires_positionals_without_connection(
+    monkeypatch, capsys, args
+):
+    monkeypatch.setenv("ANDROIDCTL_DEVICE", "environment-device")
+    run_main(monkeypatch, ["--json", "--device", "default-device", "device", *args])
+    value = json.loads(capsys.readouterr().out)
+    assert value["command"] == "device " + args[0]
+    assert value["result"] == "not sent"
+    assert value["error"]["code"] == "arguments"
+    assert "Missing argument" in value["reason"]
+
+
+@pytest.mark.parametrize("command", ["select", "forget", "address"])
+def test_device_management_help_requires_device(command):
+    response = CliRunner().invoke(cli.app, ["device", command, "--help"])
+    assert response.exit_code == 0, response.output
+    assert "DEVICE" in response.output
+    assert "[required]" in response.output

@@ -11,7 +11,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 
 | Purpose | Commands | Details |
 | --- | --- | --- |
-| Device access | `pair`, `devices`, `status` | [Connections](#connection-and-sessions) |
+| Device access | `pair`, `devices`, `device select/address/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 
 ## Connection And Sessions
@@ -47,15 +47,45 @@ file was saved but final synchronization or cleanup failed. Preserve that
 record: the next explicit `pair` checks it first. Provably unsent or explicitly
 rejected registration also retains the candidate for that check.
 Failed replacement keeps the old active credential and connection.
-When `pair` activates a credential, failure to close an old connection appears as
-a string `data.cleanupError` with exit 3. Completed facts and updated configuration
-remain available. A file synchronization error remains in `error` if closing the
-old connection also fails.
+When `pair` activates a credential or `device address` updates configuration,
+failure to close an old connection appears as a string `data.cleanupError` with
+exit 3. The completed facts and updated configuration remain available. A file
+synchronization error remains in `error` if closing the old connection also fails.
 
-`devices` lists complete UUIDs and active pairingIds.
+`devices` lists complete UUIDs, active pairingIds, local records, selection, pending
+confirmation and broken-record identifiers. A pending-only record has no pairingId.
+Broken records provide their deviceId, path and error; they have no alias or endpoint.
+The list and its selection use the same saved records. Selection source is reported
+in `data.context.deviceSource`. `data.selectionDevice` retains the requested or
+resolved identifier even when unusable; a list item's `selected` flag and
+`context.deviceId` require a confirmed active pairing. Selection errors remain
+in `data.selectionError`, while the listing itself returns done with exit 0.
 
-`pair HOST:PORT CODE --name NAME` requires a port from 1 to 65535;
-enclose IPv6 hosts in brackets.
+Device management requires a positional complete UUID or unique alias:
+`device select DEVICE`, `device forget DEVICE`, `device address DEVICE HOST:PORT`.
+The global `--device` option and `ANDROIDCTL_DEVICE` do not supply this target.
+For a broken record, `device forget` also accepts its exact path reported by `devices`.
+`device select DEVICE` returns done when the new user-wide default is saved. If
+final file synchronization or cleanup fails, it retains the new selection and reports the
+error with exit 3. A failure before replacement is not sent and keeps the previous
+selection.
+UUIDs can be used directly with `--device`; no prefix
+matching is performed. `pair` and `device address` require `HOST:PORT`, with a port
+from 1 to 65535; enclose IPv6 hosts in brackets. `device address DEVICE HOST:PORT`
+changes the route, not trust. `device forget DEVICE`
+works offline, refuses active local work, and removes that local record; it does
+not revoke device credentials or stop remote work.
+If unlinking the pairing file fails with an OS error, the result is not sent with
+exit 2 and a `localConfiguration` Problem at `local.configuration`; local preparation
+may already have closed the connection. A failure before removing the pairing
+does not report `forgotten`.
+If the pairing was removed but its global selection could not be read or cleared,
+the result is failed with exit 1. It retains `forgotten` and `selectionCleared`,
+with a `data.selectionError` Problem containing `code`,
+`message` and any `stage`. A malformed selection file is preserved. Text displays
+`Selection: <message>`; JSON retains the complete Problem.
+Management text uses lowercase `true`/`false` for boolean fields and does not add
+absent fields.
 
 Device-local revocation rejects new requests. Requests already admitted by the
 worker may still complete. Revocations made while Gateway is off take effect in
@@ -131,9 +161,10 @@ adb -s SERIAL forward --no-rebind tcp:18879 tcp:18843
 androidctl pair 127.0.0.1:18879 000042 --name phone
 ```
 
-Replace the serial, ports and code with prepared values. Restore the same route
-after disconnect; AndroidCtl neither maintains mappings nor falls back to LAN.
-Remove only your mapping when finished:
+Replace the serial, ports and code with the prepared values. For an existing
+pairing, use `androidctl device address UUID 127.0.0.1:18879` instead of
+pairing again. Restore the same serial/route after disconnect; AndroidCtl neither
+maintains mappings nor falls back to LAN. Remove only your mapping when finished:
 `adb -s SERIAL forward --remove tcp:18879`. After reboot, the user starts Shizuku,
 opens AndroidCtl and enables Gateway again.
 

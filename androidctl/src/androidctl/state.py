@@ -136,7 +136,8 @@ class HostState:
         ) as error:
             raise Fault(
                 "pairingInvalid",
-                f"{path}: {error}",
+                f"{path}: {error}; run androidctl devices, then androidctl device "
+                "forget with this exact record path before pairing again",
                 "local.configuration",
             ) from error
         return value
@@ -204,7 +205,7 @@ class HostState:
             raise Fault(
                 "deviceNotFound",
                 f"No unique paired device: {identifier}; run androidctl devices "
-                "then use --device NAME",
+                "then androidctl device select NAME or use --device NAME",
             )
         return matches[0]
 
@@ -222,7 +223,8 @@ class HostState:
         except (OSError, ValueError, KeyError, TypeError, Fault) as error:
             raise Fault(
                 "selectionInvalid",
-                f"{self.selection}: {error}",
+                f"{self.selection}: {error}; run androidctl devices, then "
+                "androidctl device select NAME to replace this selection",
                 "local.configuration",
             ) from error
 
