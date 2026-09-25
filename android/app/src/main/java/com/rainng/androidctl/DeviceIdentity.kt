@@ -38,6 +38,9 @@ internal class DeviceIdentity(
     private val keys = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     private var cert: X509Certificate
     val certificate: String get() = Base64.getEncoder().encodeToString(cert.encoded)
+    val pem: String get() =
+        "-----BEGIN CERTIFICATE-----\n" + certificate.chunked(PEM_WIDTH).joinToString("\n") +
+            "\n-----END CERTIFICATE-----\n"
     val tls: SSLContext
         get() {
             try {
@@ -47,7 +50,7 @@ internal class DeviceIdentity(
             } catch (_: CertificateExpiredException) {
                 throw Rejected(
                     "certificateExpired",
-                    "Certificate expired; check the device clock",
+                    "Certificate expired; check the device clock, renew the certificate and update host trust",
                 )
             }
             val managers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()).apply { init(keys, null) }
@@ -71,6 +74,11 @@ internal class DeviceIdentity(
         cert = keys.getCertificate(ALIAS) as X509Certificate
         cert.verify(cert.publicKey)
         check(keys.getKey(ALIAS, null).encoded == null)
+    }
+
+    fun renew() {
+        issue(keys.getKey(ALIAS, null) as PrivateKey, cert.publicKey)
+        cert = keys.getCertificate(ALIAS) as X509Certificate
     }
 
     private fun generate() {
@@ -117,6 +125,7 @@ internal class DeviceIdentity(
 
     private companion object {
         const val ALIAS = "androidctl-device"
+        const val PEM_WIDTH = 64
         const val SERIAL_BITS = 159
         const val DAY_MS = 86400000L
         const val CERTIFICATE_MS = 3650L * DAY_MS

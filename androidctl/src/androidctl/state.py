@@ -285,7 +285,9 @@ class HostState:
         if self._record_path(device_id).exists():
             record = self.record(device_id)
             if record.certificate != identity.certificate:
-                raise Fault("identityChanged", "Device identity changed")
+                raise Fault(
+                    "identityChanged", "Use device trust with a trusted certificate"
+                )
             if record.candidate is not None:
                 record.candidate.endpoint = address
                 self.save_record(record)

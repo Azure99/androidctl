@@ -6,6 +6,7 @@ import sys
 import time
 from collections.abc import Awaitable, Callable
 from copy import copy
+from pathlib import Path
 from typing import Annotated, Any, NoReturn
 
 import typer
@@ -373,6 +374,35 @@ def device_address(
         local,
         lambda deadline: local.request(
             "device.address", {"device": device, "endpoint": address}, deadline=deadline
+        ),
+    )
+    emit(result, as_json=context.as_json, render=render_summary)
+
+
+@device_app.command(
+    "trust",
+    cls=CliCommand,
+    help="Import a certificate obtained through a trusted path.",
+)
+def device_trust(
+    ctx: typer.Context,
+    device: Annotated[str, typer.Argument(metavar="DEVICE")],
+    file: Annotated[Path, typer.Argument(readable=False)],
+) -> None:
+    file = file.absolute()
+    try:
+        if not file.exists() or file.is_dir():
+            raise Fault("arguments", f"Certificate must be an existing file: {file}")
+        pem = file.read_text(encoding="ascii")
+    except (OSError, ValueError) as error:
+        raise Fault("certificate", f"{file}: {error}") from error
+    context = options(ctx)
+    local = LocalCall()
+    result = request_local(
+        command_name(ctx),
+        local,
+        lambda deadline: local.request(
+            "device.trust", {"device": device, "pem": pem}, deadline=deadline
         ),
     )
     emit(result, as_json=context.as_json, render=render_summary)

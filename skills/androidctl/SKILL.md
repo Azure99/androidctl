@@ -46,7 +46,8 @@ takeover only on explicit user instruction.
 Use the reference's [connection
 recovery](reference.md#connection-and-sessions), [ADB route setup](reference.md#device-setup-and-adb-route)
 or [device diagnostics](reference.md#device-diagnostics) for those specific failures.
-Forgetting a pairing does not stop remote work.
+Certificate changes require a trusted export. Forgetting a pairing does not stop
+remote work.
 
 Close the session when finished:
 

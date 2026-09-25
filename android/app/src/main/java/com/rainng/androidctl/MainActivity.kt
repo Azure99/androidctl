@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -20,8 +21,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import rikka.shizuku.Shizuku
+import java.io.IOException
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.NetworkInterface
@@ -88,6 +92,16 @@ class MainActivity : ComponentActivity() {
     private fun Management() {
         val facts by GatewayService.status.collectAsState()
         val notification = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        var material by rememberSaveable { mutableStateOf("") }
+        var exportMessage by remember { mutableStateOf<String?>(null) }
+        val save =
+            rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-pem-file")) { uri ->
+                try {
+                    exportMessage = writeCertificate(uri, material)
+                } finally {
+                    material = ""
+                }
+            }
         ManagementScreen(
             facts = facts,
             readings =
@@ -98,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     pairs = localPairs,
                     candidateAddresses = candidateAddresses,
                 ),
+            exportMessage = exportMessage,
             onGatewayEnabled = { enabled ->
                 setGatewayEnabled(enabled) { notification.launch(Manifest.permission.POST_NOTIFICATIONS) }
             },
@@ -108,6 +123,14 @@ class MainActivity : ComponentActivity() {
             onOpenPairingWindow = ::openPairingWindow,
             onClosePairingWindow = ::closePairingWindow,
             onRevokePairing = ::revokePairing,
+            onExportCertificate = {
+                requestCertificateExport { value ->
+                    exportMessage = null
+                    material = value
+                    save.launch("androidctl-device.pem")
+                }
+            },
+            onRenewCertificate = { GatewayService.current?.renewCertificate() },
         )
     }
 
@@ -162,6 +185,29 @@ class MainActivity : ComponentActivity() {
             getString(R.string.pairing_revoked)
         } catch (error: Exception) {
             rootCause(error).toString()
+        }
+
+    private fun requestCertificateExport(ready: (String) -> Unit) {
+        GatewayService.current?.requestCertificate { value ->
+            runOnUiThread { ready(value) }
+        }
+    }
+
+    // Document providers report I/O and access failures through the export result.
+    private fun writeCertificate(
+        uri: Uri?,
+        material: String,
+    ): String =
+        try {
+            if (uri == null) {
+                getString(R.string.certificate_export_cancelled)
+            } else {
+                contentResolver.openOutputStream(uri)?.use { it.write(material.toByteArray()) }
+                    ?: throw IOException(getString(R.string.certificate_export_unavailable))
+                getString(R.string.certificate_export_saved)
+            }
+        } catch (error: Exception) {
+            getString(R.string.certificate_export_failed, rootCause(error).toString())
         }
 
     private fun closePairingWindow() {

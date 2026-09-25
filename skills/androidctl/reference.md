@@ -11,7 +11,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 
 | Purpose | Commands | Details |
 | --- | --- | --- |
-| Device access | `pair`, `devices`, `device select/address/forget`, `status` | [Connections](#connection-and-sessions) |
+| Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 
 ## Connection And Sessions
@@ -47,10 +47,11 @@ file was saved but final synchronization or cleanup failed. Preserve that
 record: the next explicit `pair` checks it first. Provably unsent or explicitly
 rejected registration also retains the candidate for that check.
 Failed replacement keeps the old active credential and connection.
-When `pair` activates a credential or `device address` updates configuration,
-failure to close an old connection appears as a string `data.cleanupError` with
-exit 3. The completed facts and updated configuration remain available. A file
-synchronization error remains in `error` if closing the old connection also fails.
+When `pair` activates a credential or `device address`/`device trust` updates
+configuration, failure to close an old connection appears as a string
+`data.cleanupError` with exit 3. The completed facts and updated configuration
+remain available. A file synchronization error remains in `error` if closing the
+old connection also fails.
 
 `devices` lists complete UUIDs, active pairingIds, local records, selection, pending
 confirmation and broken-record identifiers. A pending-only record has no pairingId.
@@ -62,9 +63,10 @@ resolved identifier even when unusable; a list item's `selected` flag and
 in `data.selectionError`, while the listing itself returns done with exit 0.
 
 Device management requires a positional complete UUID or unique alias:
-`device select DEVICE`, `device forget DEVICE`, `device address DEVICE HOST:PORT`.
-The global `--device` option and `ANDROIDCTL_DEVICE` do not supply this target.
-For a broken record, `device forget` also accepts its exact path reported by `devices`.
+`device select DEVICE`, `device forget DEVICE`, `device address DEVICE HOST:PORT`
+and `device trust DEVICE PATH`. The global `--device` option and `ANDROIDCTL_DEVICE`
+do not supply this target. For a broken record, `device forget` also accepts its
+exact path reported by `devices`.
 `device select DEVICE` returns done when the new user-wide default is saved. If
 final file synchronization or cleanup fails, it retains the new selection and reports the
 error with exit 3. A failure before replacement is not sent and keeps the previous
@@ -90,6 +92,13 @@ absent fields.
 Device-local revocation rejects new requests. Requests already admitted by the
 worker may still complete. Revocations made while Gateway is off take effect in
 the worker when Gateway is next enabled and the worker reconnects.
+
+Certificate renewal keeps the device key and pairings but invalidates old host
+pins. With Gateway enabled, use **Renew certificate**, export through a trusted
+channel, then `androidctl device trust UUID certificate.pem` on each host.
+Export/renewal remain available when expiration prevents listening. Renewal
+restarts the listener; if cleanup blocks it, the App reports no renewal. Finish
+cleanup, use **Refresh status**, then explicitly renew again.
 
 One device has one owner; different devices can run concurrently.
 Use `session open`, `session close` or `session takeover`; inspect state with `status`.

@@ -125,7 +125,10 @@ def validate_certificate(certificate: x509.Certificate, name: str) -> str:
                 "Certificate is not yet valid; check the host and device clocks"
             )
         if now > certificate.not_valid_after_utc:
-            raise ValueError("Certificate expired; check clocks")
+            raise ValueError(
+                "Certificate expired; check clocks, renew on the device "
+                "and import its trusted export with device trust"
+            )
         names = certificate.extensions.get_extension_for_class(
             x509.SubjectAlternativeName
         ).value.get_values_for_type(x509.DNSName)

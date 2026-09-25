@@ -184,6 +184,25 @@ class GatewayService : Service() {
         }
     }
 
+    fun requestCertificate(received: (String) -> Unit) = enqueueManagement { received(requireNotNull(identity).pem) }
+
+    // Only a failure before renewal may claim the certificate was not renewed.
+    fun renewCertificate() =
+        enqueueManagementCommand {
+            val previous = network
+            try {
+                previous?.stop()
+            } catch (failure: Exception) {
+                throw Rejected(
+                    "gatewayStopping",
+                    "Certificate not renewed: ${message(failure)}",
+                )
+            }
+            network = null
+            requireNotNull(identity).renew()
+            startNetwork()
+        }
+
     private fun startNetwork() {
         val candidate = NetworkGateway(requireNotNull(identity), requireNotNull(pairings), requireNotNull(worker)) { publishStatus() }
         synchronized(lifecycleGate) {

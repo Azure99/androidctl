@@ -2,6 +2,7 @@ import json
 import time
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from androidctl import app as cli
 from androidctl.coordinator import Coordinator
@@ -12,6 +13,7 @@ from androidctl.private_files import (
 )
 from androidctl.protocol import Fault, completed
 from androidctl.state import HostState
+from certificate_test_support import certificate
 from connection_test_support import connections
 from pairing_test_support import (
     Gateway,
@@ -19,6 +21,82 @@ from pairing_test_support import (
     new_device_identity,
     save_active,
 )
+
+
+@pytest.mark.parametrize("close_fails", [False, True])
+async def test_connection_publication_survives_sync_failure_and_closes_old_peer(
+    tmp_path, monkeypatch, close_fails
+):
+    calls = []
+
+    async def dispatch(method, args):
+        calls.append(method)
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (coordinator, material, _):
+        state = coordinator.state
+        before, _ = state.prepare_pairing(
+            DeviceIdentity(material["deviceId"], material["certificate"]),
+            material["endpoint"],
+            "pending-name",
+        )
+        device, _ = await coordinator.device(material["deviceId"])
+        assert (
+            await device.request(
+                "snapshot", {}, session="test", deadline=time.monotonic() + 3
+            )
+        ).result == "done"
+        peer = device._peers["mutation"]
+        await peer.ack_task
+        assert peer.opened
+        save = state.save_record
+
+        def sync_failure(record):
+            save(record)
+            raise PublishedWriteError("controlled directory sync failure")
+
+        monkeypatch.setattr(state, "save_record", sync_failure)
+        endpoint = "wss://updated.example:18843/androidctl"
+        with monkeypatch.context() as close_patch:
+            if close_fails:
+                close = device.close
+
+                async def failed_close(**kwargs):
+                    await close(**kwargs)
+                    raise OSError("controlled old connection close failure")
+
+                close_patch.setattr(device, "close", failed_close)
+            result = await coordinator.address(
+                {"device": "phone", "endpoint": endpoint}
+            )
+        assert result.result == "done"
+        assert result.exit_code() == 3
+        assert result.error.code == "localConfiguration"
+        assert result.error.stage == "local.configuration"
+        assert result.error.message == "controlled directory sync failure"
+        assert "final file synchronization or cleanup failed" in result.reason
+        assert result.data["context"] == {
+            "deviceId": material["deviceId"],
+            "deviceSource": "args",
+        }
+        if close_fails:
+            assert (
+                result.data["cleanupError"] == "controlled old connection close failure"
+            )
+        else:
+            assert "cleanupError" not in result.data
+        current = state.record(material["deviceId"])
+        assert current.active.endpoint == current.candidate.endpoint == endpoint
+        assert current.active.credential == before.active.credential
+        assert current.candidate.credential == before.candidate.credential
+        assert device.record == current
+        assert not peer.opened
+        assert peer.connection.state.name == "CLOSED"
+        assert not device._peers
+        assert not device.in_use()
+        assert not coordinator.changing
+        assert not coordinator.io_task
+        assert calls == ["snapshot"]
 
 
 def test_device_summary_reports_only_the_active_pairing_id(tmp_path, capsys):
@@ -159,82 +237,6 @@ async def test_configuration_failures_preserve_actual_publication_fact(
             await coordinator.close()
 
 
-@pytest.mark.parametrize("close_fails", [False, True])
-async def test_connection_publication_survives_sync_failure_and_closes_old_peer(
-    tmp_path, monkeypatch, close_fails
-):
-    calls = []
-
-    async def dispatch(method, args):
-        calls.append(method)
-        return completed(method).wire()
-
-    async with connections(tmp_path, dispatch) as (coordinator, material, _):
-        state = coordinator.state
-        before, _ = state.prepare_pairing(
-            DeviceIdentity(material["deviceId"], material["certificate"]),
-            material["endpoint"],
-            "pending-name",
-        )
-        device, _ = await coordinator.device(material["deviceId"])
-        assert (
-            await device.request(
-                "snapshot", {}, session="test", deadline=time.monotonic() + 3
-            )
-        ).result == "done"
-        peer = device._peers["mutation"]
-        await peer.ack_task
-        assert peer.opened
-        save = state.save_record
-
-        def sync_failure(record):
-            save(record)
-            raise PublishedWriteError("controlled directory sync failure")
-
-        monkeypatch.setattr(state, "save_record", sync_failure)
-        endpoint = "wss://updated.example:18843/androidctl"
-        with monkeypatch.context() as close_patch:
-            if close_fails:
-                close = device.close
-
-                async def failed_close(**kwargs):
-                    await close(**kwargs)
-                    raise OSError("controlled old connection close failure")
-
-                close_patch.setattr(device, "close", failed_close)
-            result = await coordinator.address(
-                {"device": "phone", "endpoint": endpoint}
-            )
-        assert result.result == "done"
-        assert result.exit_code() == 3
-        assert result.error.code == "localConfiguration"
-        assert result.error.stage == "local.configuration"
-        assert result.error.message == "controlled directory sync failure"
-        assert "final file synchronization or cleanup failed" in result.reason
-        assert result.data["context"] == {
-            "deviceId": material["deviceId"],
-            "deviceSource": "args",
-        }
-        if close_fails:
-            assert (
-                result.data["cleanupError"] == "controlled old connection close failure"
-            )
-        else:
-            assert "cleanupError" not in result.data
-        current = state.record(material["deviceId"])
-        assert current.active.endpoint == current.candidate.endpoint == endpoint
-        assert current.active.credential == before.active.credential
-        assert current.candidate.credential == before.candidate.credential
-        assert device.record == current
-        assert not peer.opened
-        assert peer.connection.state.name == "CLOSED"
-        assert not device._peers
-        assert not device.in_use()
-        assert not coordinator.changing
-        assert not coordinator.io_task
-        assert calls == ["snapshot"]
-
-
 async def test_connection_updates_keep_candidate_and_published_result_on_close_failure(
     tmp_path, monkeypatch, capsys
 ):
@@ -289,6 +291,16 @@ async def test_connection_updates_keep_candidate_and_published_result_on_close_f
                 **candidate,
                 "endpoint": endpoint,
             }
+            pem, der = certificate(ec.generate_private_key(ec.SECP256R1()), old["name"])
+            result = await coordinator.trust({"device": "phone", "pem": pem})
+            assert result.result == "done"
+            assert result.exit_code() == 3
+            assert result.data["cleanupError"] == "injected connection close"
+            assert result.error is None
+            record = state.record(old["deviceId"])
+            assert record.certificate == der
+            assert record == device.record
+            assert record.candidate.credential == candidate["credential"]
         finally:
             monkeypatch.setattr(device, "close", close)
         assert (await coordinator.forget("phone")).result == "done"

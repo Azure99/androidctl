@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 import pytest
 import typer
+from cryptography.hazmat.primitives.asymmetric import ec
 from typer.testing import CliRunner
 
 from androidctl import app as cli
@@ -18,6 +19,7 @@ from androidctl.protocol import (
     completed,
 )
 from androidctl.state import HostState
+from certificate_test_support import certificate
 from pairing_test_support import Gateway, new_device_identity, paired, save_active
 from ui_test_support import BrokenStream
 
@@ -218,7 +220,7 @@ async def test_forget_renderer_keeps_failed_facts(tmp_path, monkeypatch):
     assert json.loads(response.stdout) == forgotten.wire()
 
 
-@pytest.mark.parametrize("command", ["pair", "address"])
+@pytest.mark.parametrize("command", ["pair", "address", "trust"])
 async def test_connection_cleanup_renderer_uses_the_producer_string(
     tmp_path, monkeypatch, command
 ):
@@ -258,6 +260,14 @@ async def test_connection_cleanup_renderer_uses_the_producer_string(
                     }
                 )
                 arguments = ["device", "address", "phone", "updated.example:443"]
+            else:
+                pem, _ = certificate(
+                    ec.generate_private_key(ec.SECP256R1()), device.record.name
+                )
+                path = tmp_path / "certificate.pem"
+                path.write_text(pem, encoding="ascii")
+                result = await coordinator.trust({"device": "phone", "pem": pem})
+                arguments = ["device", "trust", "phone", str(path)]
         finally:
             monkeypatch.setattr(device, "close", close)
             await coordinator.close()

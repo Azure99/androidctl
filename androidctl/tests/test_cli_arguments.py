@@ -1,6 +1,7 @@
 import json
 import re
 import sys
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -257,7 +258,9 @@ def test_bad_device_address_rejects_before_connection(
         ["select"],
         ["forget"],
         ["address"],
+        ["trust"],
         ["address", "phone:18843"],
+        ["trust", "certificate.pem"],
     ],
 )
 def test_device_management_requires_positionals_without_connection(
@@ -272,9 +275,51 @@ def test_device_management_requires_positionals_without_connection(
     assert "Missing argument" in value["reason"]
 
 
-@pytest.mark.parametrize("command", ["select", "forget", "address"])
+@pytest.mark.parametrize("command", ["select", "forget", "address", "trust"])
 def test_device_management_help_requires_device(command):
     response = CliRunner().invoke(cli.app, ["device", command, "--help"])
     assert response.exit_code == 0, response.output
     assert "DEVICE" in response.output
     assert "[required]" in response.output
+
+
+@pytest.mark.parametrize("kind", ["trust"])
+def test_path_stat_permission_error_keeps_structured_absolute_result(
+    tmp_path, monkeypatch, capsys, kind
+):
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "blocked"
+    original_stat = Path.stat
+
+    def denied_stat(path, *args, **kwargs):
+        if path == target:
+            raise PermissionError(13, "Permission denied", str(path))
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", denied_stat)
+    args, command, code = {
+        "trust": (
+            ["device", "trust", "phone", "blocked"],
+            "device trust",
+            "certificate",
+        ),
+    }[kind]
+    run_main(monkeypatch, ["--json", *args])
+    value = json.loads(capsys.readouterr().out)
+    assert value["command"] == command
+    assert value["result"] == "not sent"
+    assert value["error"]["code"] == code
+    assert str(target) in value["reason"]
+    assert "Permission denied" in value["reason"]
+
+
+def test_certificate_read_error_preserves_device_trust_command(
+    tmp_path, monkeypatch, capsys
+):
+    path = tmp_path / "certificate.pem"
+    path.write_bytes(b"\xff")
+    run_main(monkeypatch, ["--json", "device", "trust", "phone", str(path)])
+    value = json.loads(capsys.readouterr().out)
+    assert value["command"] == "device trust"
+    assert value["result"] == "not sent"
+    assert value["error"]["code"] == "certificate"

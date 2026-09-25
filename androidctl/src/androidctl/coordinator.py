@@ -10,7 +10,7 @@ from typing import Any, Literal, TypeVar, cast
 
 from websockets.exceptions import ConnectionClosed
 
-from .identity import DeviceIdentity, endpoint
+from .identity import DeviceIdentity, endpoint, trusted_certificate
 from .private_files import PublishedWriteError, write_json
 from .protocol import (
     UNCERTAIN_EXIT,
@@ -282,7 +282,7 @@ class Coordinator:
                 if record.certificate != value.certificate:
                     raise Fault(
                         "tlsIdentity",
-                        "Device certificate changed",
+                        "Device certificate changed; import trusted certificate",
                         "tls",
                     )
                 raise known
@@ -541,7 +541,7 @@ class Coordinator:
 
     async def address(self, args: dict[str, Any]) -> Result:
         endpoint(args["endpoint"])
-        return await self.update_connection(args, args["endpoint"])
+        return await self.update_connection(args, "endpoint", args["endpoint"])
 
     async def forget(self, identifier: str) -> Result:
         key = await self.io(self.state.resolve_forget_key, identifier)
@@ -566,9 +566,13 @@ class Coordinator:
         finally:
             self.changing.discard(key)
 
+    async def trust(self, args: dict[str, Any]) -> Result:
+        return await self.update_connection(args, "certificate", args["pem"])
+
     async def update_connection(
         self,
         args: dict[str, Any],
+        field: Literal["endpoint", "certificate"],
         value: str,
     ) -> Result:
         record, _ = await self.io(self.state.resolve_selection, args.get("device"))
@@ -576,15 +580,20 @@ class Coordinator:
         device = self.devices.get(key)
         if key in self.changing or device is not None and device.in_use():
             raise Fault("busy", "Finish device requests before changing its connection")
+        if field == "certificate":
+            value = trusted_certificate(value, record.name)
         result = completed(
-            "device address",
+            "device trust" if field == "certificate" else "device address",
             {"context": {"deviceId": key, "deviceSource": "args"}},
         )
         self.changing.add(key)
         try:
-            for slot in (record.active, record.candidate):
-                if slot is not None:
-                    slot.endpoint = value
+            if field == "certificate":
+                record.certificate = value
+            else:
+                for slot in (record.active, record.candidate):
+                    if slot is not None:
+                        slot.endpoint = value
             try:
                 await self.io(self.state.save_record, record)
             except PublishedWriteError as error:
@@ -632,6 +641,8 @@ class Coordinator:
             return await self.pair(args, deadline)
         if method == "device.address":
             return await self.address(args)
+        if method == "device.trust":
+            return await self.trust(args)
         if method == "device.forget":
             result = await self.forget(args["device"])
             if "forgotten" in result.data:

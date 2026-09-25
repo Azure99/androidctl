@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 from typer.testing import CliRunner
 
 from androidctl import app as cli
@@ -27,6 +28,7 @@ from androidctl.protocol import (
 )
 from androidctl.state import HostState
 from androidctl.transport import Peer
+from certificate_test_support import certificate
 from connection_test_support import connections, local_server
 from pairing_test_support import (
     active_material,
@@ -106,9 +108,14 @@ async def test_pending_pairing_can_be_repaired_but_not_executed_or_selected(tmp_
         assert (
             await coordinator.address({"device": "pending", "endpoint": endpoint})
         ).result == "done"
+        pem, der = certificate(ec.generate_private_key(ec.SECP256R1()), record.name)
+        assert (
+            await coordinator.trust({"device": "pending", "pem": pem})
+        ).result == "done"
         saved = state.record(record.device_id)
         assert saved.active is None
         assert saved.candidate.endpoint == endpoint
+        assert saved.certificate == der
     finally:
         await coordinator.close()
 
@@ -191,7 +198,7 @@ def test_device_selection_keeps_its_publication_fact(
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("command", ["select", "forget", "address"])
+@pytest.mark.parametrize("command", ["select", "forget", "address", "trust"])
 async def test_device_management_changes_only_the_positional_target(
     tmp_path, monkeypatch, command
 ):
@@ -209,6 +216,12 @@ async def test_device_management_changes_only_the_positional_target(
     identifier = "second"
     if command == "address":
         arguments = ["127.0.0.1:18879"]
+    elif command == "trust":
+        pem, der = certificate(ec.generate_private_key(ec.SECP256R1()), second["name"])
+        path = tmp_path / "certificate.pem"
+        path.write_text(pem, encoding="ascii")
+        arguments = [str(path)]
+        identifier = second["deviceId"]
 
     coordinator = Coordinator(state, instance="positional-target")
     try:
@@ -248,6 +261,8 @@ async def test_device_management_changes_only_the_positional_target(
                     active_material(state, "second")["endpoint"]
                     == "wss://127.0.0.1:18879/androidctl"
                 )
+            else:
+                assert state.record(second["deviceId"]).certificate == der
     finally:
         await coordinator.close()
 

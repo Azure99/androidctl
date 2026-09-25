@@ -94,9 +94,15 @@ def connection_fault(
         if error.verify_code == CERTIFICATE_NOT_YET_VALID:
             message += "; certificate not yet valid; check host and device clocks"
         elif error.verify_code == CERTIFICATE_EXPIRED:
-            message += "; certificate expired; check clocks"
+            message += (
+                "; certificate expired; check clocks, renew on the device, "
+                "then import its trusted export with device trust"
+            )
         else:
-            message += "; verify device identity"
+            message += (
+                "; verify device identity and import a certificate "
+                "obtained through a trusted path"
+            )
     if isinstance(error, InvalidStatus) and error.response.status_code in (
         401,
         403,
@@ -210,7 +216,7 @@ class Peer:
                 ):
                     raise Fault(
                         "tlsIdentity",
-                        "Device certificate changed",
+                        "Device certificate changed; import trusted certificate",
                         "tls",
                     )
                 phase = "websocket"

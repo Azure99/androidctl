@@ -16,12 +16,54 @@ from androidctl import transport
 from androidctl.coordinator import Coordinator
 from androidctl.identity import local_identity, trust_context, trusted_certificate
 from androidctl.local_server import LocalServer
-from androidctl.private_files import atomic_write, private_directory
+from androidctl.private_files import atomic_write, private_directory, write_json
 from androidctl.protocol import VERSION, Fault
 from androidctl.state import HostState
 from androidctl.transport import Peer, encode_message, send
 from certificate_test_support import certificate, tls_context
-from pairing_test_support import Gateway
+from pairing_test_support import Gateway, active_material, paired
+
+
+async def test_certificate_update_preserves_pairing(
+    tmp_path,
+):
+    private_directory(tmp_path / "state")
+    state = HostState(tmp_path / "state")
+    key = ec.generate_private_key(ec.SECP256R1())
+    device_id = str(uuid.uuid4())
+    name = f"{device_id}.androidctl.local"
+    _, old = certificate(key, name)
+    pem, new = certificate(key, name)
+    saved = paired(
+        state,
+        {
+            "deviceId": device_id,
+            "name": name,
+            "certificate": old,
+            "endpoint": "wss://127.0.0.1:18843/androidctl",
+        },
+        "phone",
+    )
+    write_json(
+        state.selection, {"deviceId": state.resolve_selection("phone")[0].device_id}
+    )
+    coordinator = Coordinator(state, instance="fixture")
+    device, _ = await coordinator.device(device_id)
+    for invalid in (
+        "not PEM",
+        certificate(key, "other.androidctl.local")[0],
+        certificate(key, expired=True)[0],
+    ):
+        with pytest.raises(Fault):
+            await coordinator.trust({"pem": invalid})
+        assert active_material(state, None) == saved
+    assert (await coordinator.trust({"pem": pem})).result == "done"
+    assert active_material(state, None) == {
+        **saved,
+        "certificate": new,
+    }
+    assert device.record == state.resolve_selection(None)[0]
+    await coordinator.close()
 
 
 async def test_leaf_pin_is_checked_before_any_websocket_credentials(

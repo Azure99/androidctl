@@ -44,6 +44,7 @@ import java.util.concurrent.TimeUnit
 internal fun ManagementScreen(
     facts: ManagementState,
     readings: LocalManagementReadings,
+    exportMessage: String?,
     onGatewayEnabled: (Boolean) -> Unit,
     onAuthorize: () -> String?,
     onRefresh: () -> Unit,
@@ -52,6 +53,8 @@ internal fun ManagementScreen(
     onOpenPairingWindow: () -> Unit,
     onClosePairingWindow: () -> Unit,
     onRevokePairing: (String) -> String,
+    onExportCertificate: () -> Unit,
+    onRenewCertificate: () -> Unit,
 ) {
     MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFF256C54), secondary = Color(0xFF526466))) {
         Surface(Modifier.fillMaxSize()) {
@@ -74,6 +77,8 @@ internal fun ManagementScreen(
                 SessionControls(facts, onStopExecutor)
                 HorizontalDivider()
                 PairingControls(facts, readings, onOpenPairingWindow, onClosePairingWindow, onRevokePairing)
+                HorizontalDivider()
+                CertificateControls(facts, exportMessage, onExportCertificate, onRenewCertificate)
             }
         }
     }
@@ -239,6 +244,41 @@ private fun PairingControls(
                 revokeMessage = onRevokePairing(pair.id)
             }, enabled = facts.controlsEnabled) { Text(stringResource(R.string.revoke)) }
         }
+    }
+}
+
+@Composable
+private fun CertificateControls(
+    facts: ManagementState,
+    exportMessage: String?,
+    onExportCertificate: () -> Unit,
+    onRenewCertificate: () -> Unit,
+) {
+    var renewing by remember { mutableStateOf(false) }
+    val available = facts.deviceId != null && facts.controlsEnabled
+    Text(stringResource(R.string.device_certificate), style = MaterialTheme.typography.titleMedium)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(onClick = onExportCertificate, enabled = available) { Text(stringResource(R.string.export_certificate)) }
+        TextButton(onClick = { renewing = true }, enabled = available) { Text(stringResource(R.string.renew_certificate)) }
+    }
+    exportMessage?.let { Text(it) }
+    if (renewing) {
+        AlertDialog(
+            onDismissRequest = { renewing = false },
+            title = { Text(stringResource(R.string.renew_certificate_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.renew_certificate_body),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    renewing = false
+                    onRenewCertificate()
+                }, enabled = facts.controlsEnabled) { Text(stringResource(R.string.renew)) }
+            },
+            dismissButton = { TextButton(onClick = { renewing = false }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
 }
 

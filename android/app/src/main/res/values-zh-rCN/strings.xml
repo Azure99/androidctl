@@ -25,6 +25,7 @@
     <string name="no_session">无当前会话</string>
     <string name="session_unavailable">会话状态不可用</string>
     <string name="stop_executor">停止空闲执行器</string>
+    <string name="cancel">取消</string>
     <string name="pair_host">配对电脑</string>
     <string name="pairing_expiry">配对码 %1$d 秒后或累计 %2$d 次错误后失效。首次连接信任所提供的证书，不能抵抗主动中间人。</string>
     <string name="pairing_remaining">剩余 %1$d 秒</string>
@@ -34,4 +35,14 @@
     <string name="revoke">撤销</string>
     <string name="pairing_revoked">凭据已撤销。</string>
     <string name="pairing_revocations_pending">撤权请求待执行器确认：%1$d</string>
+    <string name="device_certificate">设备证书</string>
+    <string name="export_certificate">导出证书</string>
+    <string name="certificate_export_cancelled">证书导出已取消。</string>
+    <string name="certificate_export_saved">证书已保存。</string>
+    <string name="certificate_export_unavailable">文档提供方未打开目标文件。</string>
+    <string name="certificate_export_failed">证书导出失败：%1$s</string>
+    <string name="renew_certificate">续期证书</string>
+    <string name="renew_certificate_title">续期设备证书？</string>
+    <string name="renew_certificate_body">连接将关闭。请导出新证书，并在每台电脑上更新信任。配对和设备密钥保留。</string>
+    <string name="renew">续期</string>
 </resources>

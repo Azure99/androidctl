@@ -25,6 +25,7 @@
     <string name="no_session">No current session</string>
     <string name="session_unavailable">Session status unavailable</string>
     <string name="stop_executor">Stop idle executor</string>
+    <string name="cancel">Cancel</string>
     <string name="pair_host">Pair host</string>
     <string name="pairing_expiry" tools:ignore="PluralsCandidate">The code expires in %1$d seconds or after %2$d incorrect attempts. The first connection trusts the presented certificate and cannot detect an active intermediary.</string>
     <string name="pairing_remaining">Expires in %1$ds</string>
@@ -34,4 +35,14 @@
     <string name="revoke">Revoke</string>
     <string name="pairing_revoked">Credentials revoked.</string>
     <string name="pairing_revocations_pending">Revocation requests awaiting worker confirmation: %1$d</string>
+    <string name="device_certificate">Device certificate</string>
+    <string name="export_certificate">Export certificate</string>
+    <string name="certificate_export_cancelled">Certificate export cancelled.</string>
+    <string name="certificate_export_saved">Certificate saved.</string>
+    <string name="certificate_export_unavailable">The document provider did not open the destination.</string>
+    <string name="certificate_export_failed">Certificate export failed: %1$s</string>
+    <string name="renew_certificate">Renew certificate</string>
+    <string name="renew_certificate_title">Renew device certificate?</string>
+    <string name="renew_certificate_body">Connections will close. Export the new certificate and update trust on each host. Pairings and the device key are retained.</string>
+    <string name="renew">Renew</string>
 </resources>
