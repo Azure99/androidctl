@@ -70,3 +70,16 @@ JNIEXPORT jboolean JNICALL Java_com_rainng_androidctl_NativeFiles_tryExclusiveLo
     if (errno != EWOULDBLOCK) error(env, "worker lock");
     return JNI_FALSE;
 }
+
+JNIEXPORT jintArray JNICALL Java_com_rainng_androidctl_NativeFiles_slotOwners(JNIEnv *env, jobject self, jint fd) {
+    (void)self;
+    jint values[HELPER_SLOTS];
+    for (int i = 0; i < HELPER_SLOTS; ++i) {
+        struct flock lock = {.l_type = F_WRLCK, .l_whence = SEEK_SET, .l_start = i, .l_len = 1};
+        if (fcntl(fd, F_GETLK, &lock)) { error(env, "inspect helper slots"); return NULL; }
+        values[i] = lock.l_type == F_UNLCK ? 0 : lock.l_pid;
+    }
+    jintArray output = (*env)->NewIntArray(env, HELPER_SLOTS);
+    if (output) (*env)->SetIntArrayRegion(env, output, 0, HELPER_SLOTS, values);
+    return output;
+}

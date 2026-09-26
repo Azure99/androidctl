@@ -8,16 +8,16 @@ from urllib.parse import urlsplit
 import pytest
 import typer
 from cryptography.hazmat.primitives.asymmetric import ec
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from androidctl import app as cli
+from androidctl import job_commands
+from androidctl.cli_options import CliOptions
 from androidctl.coordinator import Coordinator
 from androidctl.output import Output, display_name
 from androidctl.private_files import private_directory, write_json
-from androidctl.protocol import (
-    Result,
-    completed,
-)
+from androidctl.protocol import Result, completed
 from androidctl.state import HostState
 from certificate_test_support import certificate
 from pairing_test_support import Gateway, new_device_identity, paired, save_active
@@ -78,7 +78,7 @@ def test_session_names_are_escaped_only_in_human_output(capsys):
         cli.emit(Result(command="session open", result="done", data=facts))
     assert result.value.exit_code == 0
     assert 'name="task\\u202e"' in capsys.readouterr().out
-    session = facts
+    session = {**facts, "shell": 0}
     value = Result(
         command="status",
         result="done",
@@ -109,7 +109,7 @@ def test_device_alias_is_escaped_only_in_text(capsys, command, alias, display):
         data={
             "device": alias,
             "worker": "ready",
-            "session": {},
+            "session": {"shell": 0},
         },
     )
     original = value.wire()
@@ -147,6 +147,35 @@ def test_expected_write_errors_keep_known_result(monkeypatch, closed):
     assert "stdout:" in result.data["deliveryError"]
 
 
+def test_early_job_output_error_follows_real_wait_to_new_result(monkeypatch, capsys):
+    first = Result(command="shell", result="still running", data={"job": "j1"})
+    final = completed("shell", {"job": "j1", "output": {"state": "expired"}})
+    assert first is not final
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append(command)
+        return first if command == "shell.start" else final
+
+    monkeypatch.setattr(job_commands.JobClient, "call", call)
+    monkeypatch.setattr(sys, "stderr", BrokenStream())
+    context = typer.Context(
+        get_command(cli.app).commands["shell"],
+        info_name="shell",
+        parent=typer.Context(get_command(cli.app)),
+        obj=CliOptions(None, "default", True),
+    )
+    with pytest.raises(typer.Exit) as stopped:
+        job_commands.run(context, "shell.start", {}, wait_ms=1000)
+    value = json.loads(capsys.readouterr().out)
+    assert stopped.value.exit_code == 0
+    assert value["command"] == "shell"
+    assert value["result"] == "done"
+    assert "stderr:" in value["data"]["deliveryError"]
+    assert "deliveryError" not in first.data
+    assert calls == ["shell.start", "job.get"]
+
+
 def test_output_does_not_swallow_program_value_error(monkeypatch):
     def fail(*args, **kwargs):
         raise ValueError("not a closed stream")
@@ -154,6 +183,31 @@ def test_output_does_not_swallow_program_value_error(monkeypatch):
     monkeypatch.setattr(typer, "echo", fail)
     with pytest.raises(ValueError, match="not a closed stream"):
         Output().echo("prepared text")
+
+
+def test_terminal_fields_escape_controls_without_changing_json_or_bytes(capsys):
+    label = "\u7535\u8bdd\nnext\r\x1b]0;title\x07\x9b\t\u202e"
+    job = Result(
+        command="job cancel",
+        result="failed",
+        exit=3,
+        data={"signalErrors": [{"pid": 42, "uid": 2000, "errno": 1, "command": label}]},
+    )
+    with pytest.raises(typer.Exit) as stopped:
+        job_commands.show(job, {}, False, Output())
+    assert stopped.value.exit_code == 3
+    signal = next(
+        line for line in capsys.readouterr().out.splitlines() if line.startswith("pid=")
+    )
+    assert signal == (
+        'pid=42 uid=2000 errno=1 "\u7535\u8bdd\\nnext\\r'
+        '\\u001b]0;title\\u0007\\u009b\\t\\u202e"'
+    )
+    with pytest.raises(typer.Exit):
+        job_commands.show(job, {"stdout": b"\0\x1b\xff"}, True, Output())
+    facts = json.loads(capsys.readouterr().out)["data"]
+    assert facts["signalErrors"][0]["command"] == label
+    assert facts["outputBytes"] == {"stdout": "ABv/"}
 
 
 @pytest.mark.parametrize("reply_command", ["device select", "apps"])
@@ -292,6 +346,46 @@ async def test_connection_cleanup_renderer_uses_the_producer_string(
     assert json.loads(response.stdout)["data"]["cleanupError"] == (
         "old connection cleanup failed"
     )
+
+
+@pytest.mark.parametrize("done", [False, True])
+def test_status_renders_failure_checks_or_successful_state(capsys, done):
+    checks = [{"check": "workerStatus", "result": "done" if done else "failed"}]
+    facts = {}
+    if done:
+        facts.update(
+            device="phone",
+            worker="ready",
+            workerId="worker-1",
+            session={
+                "name": "held-task",
+                "pairingName": "another-host",
+                "idleSeconds": 12,
+                "callerState": "none",
+                "shell": 0,
+            },
+            helpers={"pids": [42], "active": ["j1"]},
+            diagnostics={"maintenance": {}},
+            gateway={"state": "listening"},
+        )
+    else:
+        facts["checks"] = checks
+    with pytest.raises(typer.Exit):
+        cli.emit(
+            Result(command="status", result="done" if done else "failed", data=facts),
+            render=cli.render_status,
+        )
+    output = capsys.readouterr().out
+    assert ("workerStatus:" in output) is not done
+    assert output.splitlines()[0] == ("status: " + ("done" if done else "failed"))
+    assert ("device=phone connected worker=ready\n" in output) is done
+    if done:
+        assert 'session="held-task" pairing="another-host" idle=12s\n' in output
+        assert "callerSession=none\n" in output
+        assert "workerId=worker-1\n" in output
+        assert 'gateway={"state": "listening"}\n' in output
+        assert "shell=0\n" in output
+        assert "helper pids=42\njobs=j1\n" in output
 
 
 @pytest.mark.parametrize(

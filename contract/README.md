@@ -1,8 +1,15 @@
 # Shared Wire Contract
 
 `wire-contract.json` records the current message/JSON/pairing-name limits and the
-Gateway query-method set. Kotlin produces these facts; Python verifies its limits
+Gateway query-method set, plus retained shell output and cleanup facts. Kotlin produces these facts; Python verifies its limits
 and its query set (the Gateway additionally accepts `pair.register`).
+
+The fixture records `OutputStore` metadata and bounded chunks for both shell
+streams, consumed by Python `JobClient.output`. `shellCleanupFailure` comes from
+`ShellProtocol`; Python verifies its explicit public exit while preserving execution
+and cleanup facts. Native output/frame constants are checked directly because C
+does not participate in the JVM producer. Actual helper execution and cleanup
+require the separate device checks.
 
 Validate both sides from the repository root:
 

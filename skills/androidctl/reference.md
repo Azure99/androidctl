@@ -13,6 +13,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
+| Jobs | `shell`, `job get/cancel` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
 
@@ -46,7 +47,7 @@ If saving the candidate fails, registration is not sent (exit 2), including when
 file was saved but final synchronization or cleanup failed. Preserve that
 record: the next explicit `pair` checks it first. Provably unsent or explicitly
 rejected registration also retains the candidate for that check.
-Failed replacement keeps the old active credential and connection.
+Failed replacement keeps the old active credential, connection and original job facts.
 When `pair` activates a credential or `device address`/`device trust` updates
 configuration, failure to close an old connection appears as a string
 `data.cleanupError` with exit 3. The completed facts and updated configuration
@@ -61,6 +62,7 @@ in `data.context.deviceSource`. `data.selectionDevice` retains the requested or
 resolved identifier even when unusable; a list item's `selected` flag and
 `context.deviceId` require a confirmed active pairing. Selection errors remain
 in `data.selectionError`, while the listing itself returns done with exit 0.
+A job command keeps its selected device across its requests.
 
 Device management requires a positional complete UUID or unique alias:
 `device select DEVICE`, `device forget DEVICE`, `device address DEVICE HOST:PORT`
@@ -71,7 +73,8 @@ exact path reported by `devices`.
 final file synchronization or cleanup fails, it retains the new selection and reports the
 error with exit 3. A failure before replacement is not sent and keeps the previous
 selection.
-UUIDs can be used directly with `--device`; no prefix
+A new registration may create a new pairingId, which cannot take over the old
+pairing's jobs. UUIDs can be used directly with `--device`; no prefix
 matching is performed. `pair` and `device address` require `HOST:PORT`, with a port
 from 1 to 65535; enclose IPv6 hosts in brackets. `device address DEVICE HOST:PORT`
 changes the route, not trust. `device forget DEVICE`
@@ -89,9 +92,11 @@ with a `data.selectionError` Problem containing `code`,
 Management text uses lowercase `true`/`false` for boolean fields and does not add
 absent fields.
 
-Device-local revocation rejects new requests. Requests already admitted by the
-worker may still complete. Revocations made while Gateway is off take effect in
-the worker when Gateway is next enabled and the worker reconnects.
+Device revocation rejects new requests. Queries or cancellations already admitted
+by the worker may still complete. Revocation confirmation does not confirm that
+all old work ended; inspect the original jobs and cleanup facts.
+Revocations made while Gateway is off take effect in the worker when Gateway is
+next enabled and the worker reconnects.
 
 Certificate renewal keeps the device key and pairings but invalidates old host
 pins. With Gateway enabled, use **Renew certificate**, export through a trusted
@@ -108,15 +113,15 @@ whole seconds from `1s` to `24h` (for example `10m`); fractional seconds are rej
 `busy` identifies the current holder. Explicit `session takeover` can take a
 session of the same pairing only when no foreground resources remain. It is not
 permission to interrupt another task.
-Device-side **Release current session** releases the displayed lease without
-revoking its pairing. The released caller must explicitly reopen before new work.
+Device-side **Release current session** does not kill active work;
+the released caller must explicitly reopen before new work.
 
 `connectionBusy` reports another session occupying the connection. Same-session
 calls can wait within their original budget. `status` separates the
 active owner (`session.name` and `session.pairingName`) from the caller state
 (`session.callerState`, with values `active`, `released` or `none`).
 
-Successful `status` reports worker, actual session holder and Gateway
+Successful `status` reports worker, actual session holder, resources and Gateway
 state without duplicate checks. A failed observation includes local pairing,
 actual authentication (new or reused) and worker checks; later checks stay not
 checked after an earlier failure. A valid device `UNKNOWN` remains `UNKNOWN`.
@@ -128,18 +133,20 @@ Device `protocolMismatch` reports this CLI's release and requires a matching App
 Rejection does not always include the peer's version.
 
 **Gateway off** stops new requests; stopping/failed may still have live work.
-After that work ends, **Refresh status** can confirm completion.
-**Stop idle executor** requests worker shutdown; Refresh then attaches a new worker.
+After that work ends, **Refresh status** can confirm completion. **Stop idle executor**
+refuses live helpers; Refresh then attaches a new worker.
 Wait for stopping to finish; if it fails, use **Refresh status** after the work ends.
 **Force executor exit** is a separate device-local confirmation bound to the shown
-worker ID and session. It can also confirm that the captured worker is already
-dead. Completion confirms that worker ended; Gateway and pairings survive, and
-calls can become UNKNOWN. Use Refresh to attach a new worker. There is no remote
-force command.
+worker ID, session and jobs. It can also confirm that the captured worker is already
+dead. Completion confirms that worker ended; helper descendants and temporary
+files may remain. Gateway/pairings survive; calls can become
+UNKNOWN. Refresh does not recover old jobs or replay actions. There is no
+remote force command.
 
 Use **Refresh status** to reconnect when the worker is unavailable. Cached
 management state may still show the previous worker.
 
+Worker restart loses device `j...` jobs.
 Unused device connections close after 45 seconds; the daemon exits after about
 five continuous idle minutes with no local work or connections.
 
@@ -195,9 +202,10 @@ adb -s SERIAL shell dumpsys activity service com.rainng.androidctl/com.rainng.an
 This dump does not request fresh worker status or prove an operation completed;
 worker state is cached, while the pairing list is read when dumping. Missing
 management facts are null, including gateway traffic when no network instance
-exists. Do not start a service just to obtain it. The worker lock is
-`/data/local/tmp/androidctl/worker.lock`. File existence does not prove a held lock,
-and deleting a file does not stop its owner.
+exists. Do not start a service just to obtain it. The shared lock paths are
+`/data/local/tmp/androidctl/worker.lock` and
+`/data/local/tmp/androidctl/helpers.lock`. File existence does not prove a held
+lock, and deleting a file does not stop its owner.
 
 ## Results And Budgets
 
@@ -207,9 +215,14 @@ and deleting a file does not stop its owner.
 | `failed` | 1 | A known failure; partial effects can remain. |
 | `not sent` | 2 | The request was not dispatched. |
 | `UNKNOWN` | 3 | Dispatch or its final outcome is uncertain. |
-| `still running` | 4 | `daemon stop` has not confirmed shutdown. Recheck the daemon with `daemon status`. |
+| `still running` | 4 | A shell job has no final result yet, or `daemon stop` has not confirmed shutdown. Query or cancel the original job ID, or recheck the daemon with `daemon status`, respectively. |
+
+Cleanup failure, uncertainty or signal failure overrides exit to 3 while retaining
+the known main result. Known shell cancellation with only ordinary pending cleanup
+remains exit 1.
 
 Text headings use the same fixed command path as JSON `command`.
+Raw shell output retains its own lines.
 
 ### JSON Field Guide
 
@@ -217,18 +230,90 @@ Fields depend on the command and outcome; absence does not mean false.
 Top-level `command` is the fixed public command path, including on failure and
 pre-dispatch rejection. Targets and flags do not become part of that field.
 Argument errors preserve an identified command path; without one they use `arguments`.
+Nested job facts keep their original meanings.
 
 | Location | Interpretation |
 | --- | --- |
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
+| `data.job` | Original job ID. [Jobs](#jobs-and-files) |
+| `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
+| `data.queryError`, `outputError` | Failure to query a job or retrieve its output, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
+| `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
 
 Durations use nonnegative integers with `ms`, `s`, `m` or `h`; only `0` may
 omit its unit. Each option retains its own range. Requests share one finite
 budget across local lookup, connection, authentication and device work.
+Use `--run` for shell execution limits and `--wait` for shell or `job get` waiting.
+
+| Budget | Default / limit |
+| --- | --- |
+| Ordinary shell execution / initial wait | 10000 ms each. |
+| `shell --background` execution / initial wait | 600000 ms / 0 ms. |
+| Shell execution | `--run` accepts `1ms`–`10m`. |
+| Shell and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
+
+## Jobs And Files
+
+Shell receives one complete non-interactive script, from either SCRIPT after `--`
+or `--script-file PATH`, never both. The file reader checks valid UTF-8, no NUL and
+at most 64 KiB before any RPC. Any CRLF in either source rejects locally as not
+sent/2 with an LF conversion hint. BOM and standalone CR are sent unchanged;
+no input conversion occurs. Prefer UTF-8 without BOM and LF line endings.
+The local CLI-to-daemon message is limited to 256 KiB. The complete encoded JSON
+request sent to the device also has a 96-KiB budget. It may reject a file within
+64 KiB as not sent/2 after daemon connection, device selection or device connection,
+but before business dispatch. The device keeps its existing script limits for argv input.
+
+Both modes supervise descendants, including `&`, `nohup` and `setsid`; work
+delegated to apps or system services is outside that supervision. Background
+execution releases only this shell's session foreground resource after permission
+to execute. The device's four helper slots are separate: releasing this foreground
+resource does not release a live helper's capacity, which remains occupied until
+that helper exits.
+
+For a completed script, a nonzero exit or signal termination gives `failed` and
+CLI exit 1. Nonzero exits have reason `exit=N` and preserve N in
+`data.execution.exitCode`; signal termination has reason `signal=N` and preserves
+N in `data.execution.signal`. `exitCode` supplies the normal exit status only after
+the root process has been reaped with a normal exit; otherwise it is -1, including
+signal termination, an unconfirmed root termination or a root that was never
+created. `signal` supplies a signal number only after confirmed signal termination.
+The value -1 is neither a CLI exit code nor by itself an UNKNOWN result; later
+helper cleanup reports do not replace these execution values. Cleanup uncertainty
+or signal failure can make the CLI exit 3; inspect execution and cleanup separately.
+
+Cancellation attempts TERM then KILL. Cleanup can finish after the first result.
+Query the original shell job and read `helperAlive`, `cleanup`, `cleanupError`
+and `signalErrors`. `helperAlive=false` does not resolve `cleanup=unknown`;
+processes may still change data, and cleanup uncertainty can produce exit 3 while
+retaining the known execution result. The CLI can return a known result with
+available output while helper cleanup is still pending.
+
+Shell output retains at most 128 KiB per stream, up to eight cached
+outputs for 120 seconds. Displayed size and SHA-256 cover retained bytes,
+not discarded data. Preview controls are escaped. Truncation, binary data and missing final newlines are identified. Output
+expiry does not change execution results; output retrieval does not repeat the script.
+`data.queryError` and `data.outputError` use the Problem shape: `code`, `message`,
+and optional `stage`/`diagnosticTruncated`. Text shows only the short message.
+They preserve known execution results and cleanup exits.
+Existing specific error codes are preserved; other local output failures use
+code `output`. In `shell`, `job get` and `job cancel` JSON, `data.outputBytes` maps
+stream names to base64-encoded retained original bytes retrieved by this call.
+
+### Shell Without An Initial Job ID
+
+For a shell UNKNOWN with no initial job ID, inspect `status` on the original
+device/session: `jobs=` is JSON `data.helpers.active`. It lists unfinished jobs,
+which may already be cleaning up. A sole ID is not proof of association. Recover
+that ID only with independent facts establishing the same worker, no prior jobs
+or outstanding starts, and that only this request could have created it. These
+are sufficient evidence examples, not a required preflight for every shell call.
+Multiple candidates, an already-ended job or uncertain association leaves UNKNOWN;
+do not resend the script. Querying an identified job does not rewrite the lost reply.
 
 ## Support And Storage
 
 Credentials are private to the current OS user, under `%LOCALAPPDATA%/AndroidCtl`
-on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions live in worker
-memory; restarting the worker loses them. There is no durable operation history.
+on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions and job facts
+are in memory; there is no durable operation history.
 Preserve pairing and recovery materials when outcomes are uncertain.

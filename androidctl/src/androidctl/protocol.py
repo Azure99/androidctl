@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from importlib.metadata import version
 from typing import Any, Literal
 
@@ -9,6 +10,9 @@ from pydantic.alias_generators import to_camel
 VERSION = version("androidctl")
 MAX_MESSAGE = 256 * 1024
 JSON_UTF8_BYTES = 96 * 1024
+CHUNK_BYTES = 32 * 1024
+OUTPUT_BYTES = 128 * 1024
+MAX_RUN_MS = 600000
 MAX_CONNECTIONS = 16
 PAIRING_NAME_UNITS = 100
 CONNECT_SECONDS = 5.0
@@ -66,6 +70,21 @@ class Fault(Exception):
 
 class TransportFailure(Fault):
     """The request may have arrived; a missing reply never permits resending it."""
+
+
+def decode_chunk(encoded: str, offset: int, size: int, *, code: str) -> bytes:
+    try:
+        chunk = base64.b64decode(encoded, validate=True)
+    except ValueError as error:
+        raise Fault(code, "Invalid base64 chunk") from error
+    if (
+        len(chunk) > CHUNK_BYTES
+        or offset + len(chunk) > size
+        or not chunk
+        and offset < size
+    ):
+        raise Fault(code, "Invalid chunk length")
+    return chunk
 
 
 def completed(

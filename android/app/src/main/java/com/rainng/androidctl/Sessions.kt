@@ -19,6 +19,17 @@ internal class Lease(
     val idleMs: Long,
 )
 
+internal enum class ResourceKind(
+    val wire: String,
+) {
+    SHELL("shell"),
+}
+
+internal class Resource(
+    val lease: Lease,
+    val kind: ResourceKind,
+)
+
 internal class Sessions(
     private val now: () -> Long,
 ) {
@@ -26,6 +37,7 @@ internal class Sessions(
     private var current: Lease? = null
     private val released = mutableSetOf<Pair<String, String>>()
     private val revoked = mutableSetOf<String>()
+    private val resources = mutableSetOf<Resource>()
 
     @get:Synchronized var stopped = false
         private set
@@ -53,6 +65,7 @@ internal class Sessions(
         expire()
         val held = current
         if (held != null && !held.owner.sameSession(owner)) busy(held)
+        requireIdle()
         if (held != null) invalidateLease()
         val lease = Lease(++sequence, owner, now(), idleMs)
         current = lease
@@ -65,6 +78,7 @@ internal class Sessions(
         validate(owner)
         val held = current ?: return
         if (!held.owner.sameSession(owner)) busy(held)
+        requireIdle()
         invalidateLease()
     }
 
@@ -76,6 +90,7 @@ internal class Sessions(
         }
         val held = current
         if (held != null && held.owner.pairing != owner.pairing) busy(held)
+        requireIdle()
         val previous = held?.owner?.name
         if (held != null) invalidateLease()
         acquire(owner)
@@ -89,11 +104,29 @@ internal class Sessions(
         invalidateLease()
     }
 
-    @Synchronized fun retainedPairings(): Set<String> = listOfNotNull(current?.owner?.pairing).toSet()
+    @Synchronized fun retainedPairings(): Set<String> =
+        resources.map { it.lease.owner.pairing }.toSet() +
+            listOfNotNull(current?.owner?.pairing)
 
     @Synchronized fun revoke(pairing: String) {
         revoked.add(pairing)
         current?.takeIf { it.owner.pairing == pairing }?.let { invalidateLease() }
+    }
+
+    @Synchronized fun reserve(
+        lease: Lease,
+        kind: ResourceKind,
+        changing: Boolean,
+    ): Resource {
+        requireCurrent(lease)
+        if (changing && resources.isNotEmpty()) {
+            throw Rejected("busy", "Active ${resources.joinToString { it.kind.wire }} must finish")
+        }
+        return Resource(lease, kind).also { resources.add(it) }
+    }
+
+    @Synchronized fun finished(resource: Resource) {
+        if (resources.remove(resource)) current?.touched = now()
     }
 
     @Synchronized fun requireCurrent(lease: Lease) {
@@ -104,9 +137,22 @@ internal class Sessions(
 
     @Synchronized fun isCurrent(lease: Lease): Boolean = current === lease
 
+    @Synchronized fun <T> withCurrentLease(
+        lease: Lease,
+        action: () -> T,
+    ): T {
+        requireCurrent(lease)
+        return action()
+    }
+
     @Synchronized fun requireAuthorized(owner: SessionOwner) = validate(owner)
 
+    @Synchronized fun requireIdle() {
+        if (resources.isNotEmpty()) throw Rejected("busy", "Active ${resources.joinToString { it.kind.wire }} must finish")
+    }
+
     @Synchronized fun stop() {
+        requireIdle()
         stopped = true
     }
 
@@ -116,7 +162,7 @@ internal class Sessions(
 
     @Synchronized fun expire() {
         val held = current ?: return
-        if (now() - held.touched >= held.idleMs) invalidateLease()
+        if (resources.isEmpty() && now() - held.touched >= held.idleMs) invalidateLease()
     }
 
     @Synchronized fun localStatus(): JSONObject {
@@ -134,7 +180,8 @@ internal class Sessions(
         return json(
             "name" to held?.owner?.name,
             "pairingName" to held?.owner?.pairingName,
-            "idleSeconds" to if (held == null) 0L else (now() - held.touched) / SECOND_MS,
+            "idleSeconds" to if (held == null || resources.isNotEmpty()) 0L else (now() - held.touched) / SECOND_MS,
+            "shell" to resources.count { it.kind == ResourceKind.SHELL },
         )
     }
 
@@ -160,7 +207,7 @@ internal class Sessions(
         throw Rejected(
             "busy",
             "busy: ${displayName(held.owner.pairingName)}/${displayName(held.owner.name)} " +
-                "idle=${(now() - held.touched) / SECOND_MS}s",
+                "idle=${if (resources.isEmpty()) (now() - held.touched) / SECOND_MS else 0}s",
         )
 
     companion object {

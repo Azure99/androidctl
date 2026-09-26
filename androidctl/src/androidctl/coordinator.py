@@ -34,7 +34,7 @@ from .transport import Peer
 T = TypeVar("T")
 PeerRole = Literal["mutation", "query"]
 PEER_IDLE_SECONDS = 45.0
-QUERY_METHODS = frozenset({"status"})
+QUERY_METHODS = frozenset({"status", "job.get", "job.cancel", "output.read"})
 
 
 def local_configuration(message: str) -> Fault:

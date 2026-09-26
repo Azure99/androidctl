@@ -22,6 +22,7 @@ from .cli_options import (
     parse_duration,
 )
 from .identity import device_endpoint, pairing_endpoint
+from .job_commands import register as register_jobs
 from .local_call import LocalCall, confirm_stop
 from .output import Output, display_name
 from .protocol import (
@@ -47,6 +48,7 @@ daemon_app = typer.Typer(help="Inspect or stop the local daemon.")
 app.add_typer(session_app, name="session")
 app.add_typer(device_app, name="device")
 app.add_typer(daemon_app, name="daemon")
+register_jobs(app)
 
 
 def version_callback(value: bool) -> None:
@@ -63,7 +65,7 @@ def global_options(
         typer.Option(
             "--device",
             envvar="ANDROIDCTL_DEVICE",
-            help="Default device for devices, status and sessions.",
+            help="Default device for devices/status, sessions, shell and jobs.",
         ),
     ] = None,
     session: Annotated[
@@ -72,7 +74,7 @@ def global_options(
             "-s",
             "--session",
             envvar="ANDROIDCTL_SESSION",
-            help="Default session for status and session commands.",
+            help="Default session for status, session, shell and jobs.",
         ),
     ] = "default",
     as_json: Annotated[
@@ -116,6 +118,14 @@ def emit_status(facts: dict[str, Any], output: Output) -> None:
         output.echo("session=none")
     if held.get("callerState"):
         output.echo("callerSession=" + held["callerState"])
+    output.echo(f"shell={held['shell']}")
+    helpers = facts.get("helpers", {})
+    if helpers.get("pids"):
+        output.echo("helper pids=" + ",".join(map(str, helpers["pids"])))
+    if helpers.get("active"):
+        output.echo("jobs=" + ",".join(helpers["active"]))
+    if helpers.get("error"):
+        output.echo("Shell unavailable: " + helpers["error"])
     emit_fields(facts.get("diagnostics", {}), output)
     emit_fields({key: facts.get(key) for key in ("workerId", "gateway")}, output)
 
@@ -312,7 +322,7 @@ def devices(ctx: typer.Context) -> None:
 
 @app.command(
     cls=CliCommand,
-    help="Inspect the selected device, worker and session.",
+    help="Inspect the selected device, worker, session and active resources.",
 )
 def status(ctx: typer.Context) -> None:
     device_call(ctx, "status", render=render_status)

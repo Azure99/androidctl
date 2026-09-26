@@ -196,6 +196,7 @@ private fun SessionControls(
         AlertDialog(
             onDismissRequest = { releasing = null },
             title = { Text(stringResource(R.string.release_session_title)) },
+            text = { Text(stringResource(R.string.release_session_body)) },
             confirmButton = {
                 TextButton(onClick = {
                     releasing = null
@@ -213,6 +214,7 @@ private fun SessionSummary(session: SessionStatus) {
         Text("${displayName(session.pairingName.orEmpty())} / ${displayName(session.name.orEmpty())}")
         Text(stringResource(R.string.session_idle, session.idleSeconds))
     }
+    Text(stringResource(R.string.session_resources, session.shell))
 }
 
 @Composable
@@ -237,6 +239,7 @@ private fun ForceExecutorControls(
                     Text(stringResource(R.string.worker_identity, worker.workerId))
                     if (worker.session.leaseId == null) Text(stringResource(R.string.no_session))
                     SessionSummary(worker.session)
+                    Text(stringResource(R.string.helper_jobs, worker.helpers.active.joinToString(prefix = "[", postfix = "]")))
                     Text(stringResource(R.string.force_executor_body))
                 }
             },

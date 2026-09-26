@@ -125,11 +125,43 @@ class SessionsTest {
         assertTrue(sessions.localStatus().isNull("name"))
     }
 
-    @Test fun stoppingRejectsNewAcquisition() {
+    @Test fun idleStartsAfterActualResourceEnds() {
+        var time = 0L
+        val sessions = Sessions { time }
+        val lease = sessions.open(first, idleMs = 1000)
+        val task = sessions.reserve(lease, ResourceKind.SHELL, changing = true)
+        time = 9000
+        sessions.expire()
+        assertEquals(first.name, sessions.callerStatus(first)["name"])
+        assertEquals("active", sessions.callerStatus(first)["callerState"])
+        assertEquals(lease.id, sessions.localStatus()["leaseId"])
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.close(first) }.code)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.takeover(second) }.code)
+        sessions.finished(task)
+        time = 9999
+        sessions.expire()
+        assertEquals(first.name, sessions.callerStatus(first)["name"])
+        assertEquals("active", sessions.callerStatus(first)["callerState"])
+        assertEquals(lease.id, sessions.localStatus()["leaseId"])
+        time = 10000
+        sessions.expire()
+        assertEquals("none", sessions.callerStatus(first)["callerState"])
+        assertTrue(sessions.callerStatus(first).isNull("name"))
+        assertTrue(sessions.localStatus().isNull("leaseId"))
+    }
+
+    @Test fun stoppingRejectsAlreadyAcquiredButNotReservedWork() {
         val sessions = Sessions { 0L }
         val lease = sessions.acquire(first)
+        val resource = sessions.reserve(lease, ResourceKind.SHELL, changing = true)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.stop() }.code)
+        sessions.finished(resource)
         sessions.stop()
         assertEquals("stopping", assertThrows(Rejected::class.java) { sessions.acquire(first) }.code)
+        assertEquals("stopping", assertThrows(Rejected::class.java) { sessions.reserve(lease, ResourceKind.SHELL, changing = true) }.code)
+        var sent = false
+        assertEquals("stopping", assertThrows(Rejected::class.java) { sessions.withCurrentLease(lease) { sent = true } }.code)
+        assertFalse(sent)
         sessions.requireAuthorized(first)
         assertEquals(first.name, sessions.callerStatus(second)["name"])
         assertEquals("none", sessions.callerStatus(second)["callerState"])

@@ -17,5 +17,7 @@ internal object NativeFiles {
 
     external fun tryExclusiveLock(fd: Int): Boolean
 
+    external fun slotOwners(fd: Int): IntArray
+
     external fun close(fd: Int)
 }

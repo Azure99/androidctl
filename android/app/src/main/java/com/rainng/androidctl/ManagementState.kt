@@ -71,6 +71,7 @@ internal data class WorkerStatus(
     val uid: Int,
     val workerId: String,
     val session: SessionStatus,
+    val helpers: HelperStatus,
     val diagnostics: WorkerDiagnostics,
 ) {
     fun toJson(): JSONObject = JSONObject(raw)
@@ -83,6 +84,7 @@ internal data class WorkerStatus(
                 value.getInt("uid"),
                 value.getString("workerId"),
                 SessionStatus.fromJson(value.getJSONObject("session")),
+                HelperStatus.fromJson(value.getJSONObject("helpers")),
                 WorkerDiagnostics.fromJson(value.getJSONObject("diagnostics")),
             )
     }
@@ -92,6 +94,7 @@ internal data class SessionStatus(
     val name: String?,
     val pairingName: String?,
     val idleSeconds: Long,
+    val shell: Int,
     val leaseId: Long?,
 ) {
     companion object {
@@ -100,8 +103,18 @@ internal data class SessionStatus(
                 value.nullableString("name"),
                 value.nullableString("pairingName"),
                 value.getLong("idleSeconds"),
+                value.getInt("shell"),
                 if (value.isNull("leaseId")) null else value.getLong("leaseId"),
             )
+    }
+}
+
+internal data class HelperStatus(
+    val active: List<String>,
+) {
+    companion object {
+        fun fromJson(value: JSONObject): HelperStatus =
+            HelperStatus(value.getJSONArray("active").let { active -> List(active.length(), active::getString) })
     }
 }
 

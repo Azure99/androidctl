@@ -15,26 +15,33 @@ class ManagementStateTest {
         assertEquals("0.3.0", value.version)
         assertEquals(2000, value.uid)
         assertEquals("worker", value.workerId)
-        assertEquals(SessionStatus("task", "host", 3, 7), value.session)
+        assertEquals(SessionStatus("task", "host", 3, 1, 7), value.session)
+        assertEquals(listOf("job"), value.helpers.active)
         assertEquals(mapOf("session-expiry" to "failed"), value.diagnostics.maintenance)
         value.toJson().getJSONObject("session").put("leaseId", 999)
         assertEquals(7L, value.session.leaseId)
         assertEquals(value, WorkerStatus.fromJson(worker()))
         source.getJSONObject("session").put("name", "replacement")
+        source.getJSONObject("helpers").getJSONArray("active").put("new-job")
         source.getJSONObject("diagnostics").getJSONObject("maintenance").put("new-cleanup", "failed")
         assertJson(worker(), value.toJson())
         assertNotEquals(value, WorkerStatus.fromJson(source))
     }
 
-    @Test fun idleRetainsNullAndAbsentFields() {
+    @Test fun idleAndHelperFailureRetainNullAndAbsentFields() {
         val source =
             worker().apply {
                 getJSONObject("session").put("name", JSONObject.NULL).put("leaseId", JSONObject.NULL).remove("pairingName")
+                getJSONObject("helpers").remove("pids")
+                getJSONObject("helpers").put("error", JSONObject.NULL)
             }
         val result = WorkerStatus.fromJson(source).toJson()
         assertJson(source, result)
         assertTrue(result.getJSONObject("session").has("leaseId"))
         assertTrue(result.getJSONObject("session").isNull("leaseId"))
+        assertFalse(result.getJSONObject("helpers").has("pids"))
+        assertTrue(result.getJSONObject("helpers").has("error"))
+        assertTrue(result.getJSONObject("helpers").isNull("error"))
         assertFalse(result.getJSONObject("session").has("pairingName"))
     }
 
@@ -90,7 +97,8 @@ class ManagementStateTest {
         JSONObject(
             """
             {"version":"0.3.0","uid":2000,"workerId":"worker","worker":"ready",
-             "session":{"name":"task","pairingName":"host","idleSeconds":3,"leaseId":7},
+             "session":{"name":"task","pairingName":"host","idleSeconds":3,"shell":1,"leaseId":7},
+             "helpers":{"pids":[1234],"active":["job"]},
              "diagnostics":{"maintenance":{"session-expiry":"failed"}}}
             """.trimIndent(),
         )

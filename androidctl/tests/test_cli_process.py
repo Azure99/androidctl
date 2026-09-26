@@ -26,7 +26,7 @@ def test_piped_help_preserves_copyable_options_and_action_values(
     environment = dict(os.environ, COLUMNS="40")
     for name in ("NO_COLOR", "FORCE_COLOR", "TYPER_USE_RICH"):
         environment.pop(name, None)
-    for args in ([],):
+    for args in ([], ["shell"]):
         value = subprocess.run(
             [sys.executable, "-m", "androidctl", *args, "--help"],
             cwd=tmp_path,

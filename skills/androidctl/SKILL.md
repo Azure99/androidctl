@@ -1,6 +1,6 @@
 ---
 name: androidctl
-description: Use when pairing with an Android device and managing its AndroidCtl session through the CLI.
+description: Use when pairing with an Android device and managing its AndroidCtl session and running supervised device shell scripts through the CLI.
 ---
 
 # AndroidCtl
@@ -39,19 +39,43 @@ open again only when continuing is intended.
 | `failed` | Read the reason and retained registration or confirmation facts. |
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
-| `still running` | For `daemon stop`, recheck with `daemon status`. |
+| `still running` | For a shell job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
+
+## Run Jobs
+
+```sh
+androidctl --device DEVICE -s task shell --script-file task.sh
+androidctl --device DEVICE -s task job get JOB_ID
+```
+
+Supply one complete script after `--` or through `--script-file`. Prefer UTF-8
+without BOM and LF line endings, and quote it against host-shell expansion.
+Read [script limits and job rules](reference.md#jobs-and-files) before large scripts
+or background work. `--wait 0` ends only this call's wait; `--background` leaves
+the job supervised. Delegated App/system-service work needs its own business check.
+
+Read both execution and cleanup facts; a known script result can accompany
+cleanup failures. The reference explains [shell exits and cleanup](reference.md#jobs-and-files).
+
+Keep the original job ID; query or cancel that ID and preserve cleanup failures.
+
+For shell, read `helperAlive`, `cleanup`, `cleanupError` and `signalErrors`;
+`helperAlive=false` can coexist with
+`cleanup=unknown`. Signal errors mean processes may still modify data. For shell UNKNOWN without
+a job ID, use the reference's
+[correlation procedure](reference.md#shell-without-an-initial-job-id).
 
 ## Recover And Finish
 
-`status` reports worker/session and failed connection checks.
+`status` reports worker/session/resources and failed connection checks.
 Use the reference's [connection
 recovery](reference.md#connection-and-sessions), [ADB route setup](reference.md#device-setup-and-adb-route)
 or [device diagnostics](reference.md#device-diagnostics) for those specific failures.
 Certificate changes require a trusted export. Forgetting a pairing does not stop
-remote work.
+remote work. Force executor exit can leave descendants and temporary files.
 
-Close the session when finished:
-
-```sh
-androidctl --device DEVICE_UUID -s task session close
-```
+Verify the business result and restore settings changed temporarily to carry out the task.
+Remove only your remote temporary objects, confirm original jobs/helpers ended,
+then `session close` unless the supervising workflow owns closure. Preserve local
+deliverables and recovery records. Report the result, remaining uncertainties and
+links using the reported absolute paths.

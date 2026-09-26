@@ -128,6 +128,8 @@ val compileNative by tasks.registering {
                     )
                 }
             }
+            // The PIE helper uses a .so name for APK packaging; ShellJobs executes it from nativeLibraryDir.
+            compile("execute.c", "libandroidctl_exec.so", listOf("-fPIE", "-pie"))
             // NativeFiles loads this JNI shared library with System.loadLibrary("androidctl_files").
             compile("files.c", "libandroidctl_files.so", listOf("-fPIC", "-shared"))
         }
@@ -179,7 +181,7 @@ android {
         aidl = true
     }
     sourceSets.getByName("test").resources.srcDir(rootProject.file("../contract"))
-    // Extract native artifacts for the worker.
+    // Extract native artifacts so ShellJobs can execute the helper.
     packaging.jniLibs.useLegacyPackaging = true
 }
 

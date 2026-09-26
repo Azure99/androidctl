@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -8,9 +9,7 @@ from typer.testing import CliRunner
 
 from androidctl import app as cli
 from androidctl import local_call
-from androidctl.protocol import (
-    completed,
-)
+from androidctl.protocol import completed
 
 
 def run_main(monkeypatch, args):
@@ -23,6 +22,9 @@ def run_main(monkeypatch, args):
 @pytest.mark.parametrize(
     "args",
     [
+        ["shell", "--run", "0", "--", "true"],
+        ["shell", "--run", "600001ms", "--", "true"],
+        ["job", "get", "j1", "--wait", "60001ms"],
         *(
             ["session", "open", "--idle", value]
             for value in ["0", "999ms", "1500ms", "86401s"]
@@ -34,7 +36,9 @@ def test_duration_arguments_keep_leaf_command_without_connection(
 ):
     run_main(monkeypatch, ["--json", *args])
     value = json.loads(capsys.readouterr().out)
-    assert value["command"] == (" ".join(args[:2]) if args[0] == "session" else args[0])
+    assert value["command"] == (
+        " ".join(args[:2]) if args[0] in ("session", "job") else args[0]
+    )
     assert value["result"] == "not sent"
     assert value["error"]["code"] == "arguments"
 
@@ -58,6 +62,7 @@ def test_idle_duration_converts_once(monkeypatch, value, seconds):
     ("command", "defaults", "options"),
     [
         (["session", "open"], ["10m"], ["--idle"]),
+        (["shell"], ["10s", "10m"], ["--run", "--wait"]),
     ],
 )
 def test_duration_help_has_units_and_current_option_names(command, defaults, options):
@@ -323,3 +328,83 @@ def test_certificate_read_error_preserves_device_trust_command(
     assert value["command"] == "device trust"
     assert value["result"] == "not sent"
     assert value["error"]["code"] == "certificate"
+
+
+def test_unreadable_relative_script_reaches_absolute_io_boundary(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "script.sh"
+    target.write_text("echo test")
+    original_access = os.access
+    original_open = Path.open
+
+    def denied_access(path, mode, *args, **kwargs):
+        if Path(path).absolute() == target:
+            return False
+        return original_access(path, mode, *args, **kwargs)
+
+    def denied_open(path, *args, **kwargs):
+        if path == target:
+            raise PermissionError(13, "Permission denied", str(path))
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "access", denied_access)
+    monkeypatch.setattr(Path, "open", denied_open)
+    run_main(monkeypatch, ["--json", "shell", "--script-file", "script.sh"])
+    value = json.loads(capsys.readouterr().out)
+    assert value["command"] == "shell"
+    assert value["error"]["code"] == "scriptFile"
+    assert str(target) in value["reason"]
+    assert "Permission denied" in value["reason"]
+
+
+@pytest.mark.parametrize("both", [False, True])
+def test_shell_requires_exactly_one_source_before_connection(
+    tmp_path, monkeypatch, capsys, both
+):
+    path = tmp_path / "script.sh"
+    path.write_bytes(b"echo test\n")
+    args = ["--script-file", str(path), "--", "echo other"] if both else []
+    run_main(monkeypatch, ["--json", "shell", *args])
+    value = json.loads(capsys.readouterr().out)
+    assert value["result"] == "not sent"
+    assert value["command"] == "shell"
+    assert value["error"]["code"] == "arguments"
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory", "utf8", "nul", "size"])
+def test_bad_script_file_is_not_sent_before_connection(
+    tmp_path, monkeypatch, capsys, kind
+):
+    path = tmp_path / "script.sh"
+    if kind == "directory":
+        path.mkdir()
+    elif kind != "missing":
+        path.write_bytes(
+            {"utf8": b"\xff", "nul": b"echo\0", "size": b"x" * 65537}[kind]
+        )
+    run_main(monkeypatch, ["--json", "shell", "--script-file", str(path)])
+    value = json.loads(capsys.readouterr().out)
+    assert value["result"] == "not sent"
+    assert value["command"] == "shell"
+    assert value["error"]["code"] == "scriptFile"
+
+
+@pytest.mark.parametrize("from_file", [False, True])
+@pytest.mark.parametrize(
+    "script", ["echo first\r\necho second", "printf 'inside\r\nquotes'"]
+)
+def test_crlf_in_either_script_source_is_not_sent_before_connection(
+    tmp_path, monkeypatch, capsys, from_file, script
+):
+    path = tmp_path / "script.sh"
+    path.write_bytes(script.encode("utf-8"))
+    args = ["--script-file", str(path)] if from_file else ["--", script]
+    run_main(monkeypatch, ["--json", "shell", *args])
+    value = json.loads(capsys.readouterr().out)
+    assert value["result"] == "not sent"
+    assert value["command"] == "shell"
+    assert value["error"]["code"] == "script"
+    assert "CRLF" in value["reason"]
+    assert "LF" in value["reason"]

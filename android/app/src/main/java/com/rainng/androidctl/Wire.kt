@@ -3,16 +3,22 @@ package com.rainng.androidctl
 import org.json.JSONObject
 import java.lang.reflect.InvocationTargetException
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.UUID
 
 internal object Limits {
     const val MESSAGE_BYTES = 256 * 1024
     const val UPGRADE_BYTES = 16 * 1024
     const val JSON_UTF8_BYTES = 96 * 1024
+    const val CHUNK_BYTES = 32 * 1024
     const val CONNECTIONS = 16
     const val QUEUE = 8
     const val NETWORK_HANDSHAKE_MS = 5000L
     const val IDLE_MS = 60000L
+    const val OUTPUT_BYTES = 128 * 1024
+    const val OUTPUTS = 8
+    const val OUTPUT_MS = 120000L
+    const val MAX_RUN_MS = 600000L
     const val PORT = 18843
 }
 
@@ -46,6 +52,14 @@ internal fun displayName(value: String): String =
         }.joinToString("")
 
 internal fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+internal fun encodeChunk(
+    bytes: ByteArray,
+    offset: Int,
+): String {
+    if (offset !in 0..bytes.size) throw Rejected("offset", "Offset outside retained bytes")
+    return Base64.getEncoder().encodeToString(bytes.copyOfRange(offset, minOf(bytes.size, offset + Limits.CHUNK_BYTES)))
+}
 
 internal fun rootCause(error: Throwable): Throwable = if (error is InvocationTargetException) error.targetException else error
 

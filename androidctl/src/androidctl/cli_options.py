@@ -5,7 +5,7 @@ from typing import Any, cast
 import typer
 from typer.core import TyperCommand
 
-from .protocol import Fault, Result, rejected
+from .protocol import MAX_RUN_MS, Fault, Result, rejected
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,18 @@ def parse_duration(value: str | int) -> int:
             "Use an integer with ms, s, m or h; only 0 may omit the unit"
         )
     return int(match[1]) * {"ms": 1, "s": 1000, "m": 60000, "h": 3600000}[match[2]]
+
+
+def wait_duration(value: int | None) -> int | None:
+    if value is not None and not 0 <= value <= 60000:
+        raise typer.BadParameter("Duration must be between 0 and 60s")
+    return value
+
+
+def run_duration(value: int | None) -> int | None:
+    if value is not None and not 1 <= value <= MAX_RUN_MS:
+        raise typer.BadParameter("Duration must be between 1ms and 10m")
+    return value
 
 
 def idle_duration(value: int) -> int:

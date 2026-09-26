@@ -20,6 +20,7 @@ class WorkerService(
     private val workerLock = WorkerLock()
     private val workerId = token()
     private val sessions = Sessions(SystemClock::elapsedRealtime)
+    private val shell = ShellJobs(context, sessions, workerLock.directory, workerLock::check)
     private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "androidctl-idle") }
     private val maintenanceFailures = ConcurrentHashMap<String, String>()
 
@@ -55,10 +56,15 @@ class WorkerService(
             val owner = SessionOwner(body.getString("pairingId"), body.getString("session"), body.getString("pairingName"))
             sessions.requireAuthorized(owner)
             if (method == "status") {
-                outcome(method, data = status(sessions.callerStatus(owner)))
+                outcome(method, data = status(sessions.callerStatus(owner), owner))
             } else {
-                accepting()
+                if (method !in RpcMethods.ALLOWED_WHILE_STOPPING) accepting()
                 when (method) {
+                    "shell.start" -> shell.start(owner, body.getJSONObject("args"))
+                    "job.get" -> shell.get(owner, body.getJSONObject("args"))
+                    "job.cancel" -> shell.cancel(owner, body.getJSONObject("args"))
+                    "output.read" -> shell.output(owner, body.getJSONObject("args"))
+
                     "session.open", "session.close", "session.takeover" ->
                         sessionCommand(
                             method,
@@ -106,22 +112,26 @@ class WorkerService(
     override fun revoke(pairingId: String): String =
         managed {
             sessions.revoke(pairingId)
+            shell.revoke(pairingId)
         }
 
     override fun reconcile(allowedPairings: String): String =
         managed {
             val values = JSONArray(allowedPairings)
             val allowed = (0 until values.length()).map(values::getString).toSet()
-            val retained = sessions.retainedPairings()
+            val retained = sessions.retainedPairings() + shell.retainedPairings()
             for (pairing in retained - allowed) {
                 sessions.revoke(pairing)
+                shell.revoke(pairing)
             }
         }
 
     override fun prepareStop(): String =
         managed {
-            sessions.stop()
-            timer.shutdown()
+            shell.prepareStop {
+                sessions.stop()
+                timer.shutdown()
+            }
         }
 
     private fun managed(action: () -> Unit): String =
@@ -140,13 +150,17 @@ class WorkerService(
         workerLock.check()
     }
 
-    private fun status(session: JSONObject): JSONObject =
+    private fun status(
+        session: JSONObject,
+        owner: SessionOwner? = null,
+    ): JSONObject =
         json(
             "version" to BuildConfig.VERSION_NAME,
             "uid" to Process.myUid(),
             "workerId" to workerId,
             "worker" to if (sessions.stopped) "stopping" else "ready",
             "session" to session,
+            "helpers" to shell.snapshot(owner),
             "diagnostics" to json("maintenance" to JSONObject(maintenanceFailures)),
         )
 

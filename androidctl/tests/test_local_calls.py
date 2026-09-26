@@ -6,8 +6,10 @@ import pytest
 from typer.testing import CliRunner
 
 from androidctl import app as cli
-from androidctl import local_call
+from androidctl import job_commands, local_call
 from androidctl import local_server as local_server_module
+from androidctl.cli_options import CliOptions
+from androidctl.private_files import write_json
 from androidctl.protocol import (
     JSON_UTF8_BYTES,
     Fault,
@@ -18,6 +20,54 @@ from androidctl.protocol import (
 )
 from androidctl.transport import Peer, encode_message
 from connection_test_support import connections, local_server
+from pairing_test_support import new_device_identity, save_active
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+@pytest.mark.parametrize("shape", ["small", "edge", "oversize"])
+def test_file_script_uses_device_json_budget_before_business_send(
+    tmp_path, monkeypatch, explicit, shape
+):
+    script_path = tmp_path / "script.sh"
+    script_path.write_bytes(
+        {"small": b"printf test\n", "edge": b"/" * 48854, "oversize": b"\\" * 60000}[
+            shape
+        ]
+    )
+    script = job_commands.script_from_file(script_path)
+
+    async def run():
+        received = []
+
+        async def dispatch(method, args):
+            received.append(method)
+            return completed(method).wire()
+
+        async with connections(tmp_path, dispatch) as (_, _, connect_local):
+            connected = []
+
+            async def connect(**kwargs):
+                connected.append(True)
+                return await connect_local(**kwargs)
+
+            monkeypatch.setattr(local_call, "connect_local", connect)
+            client = job_commands.JobClient(
+                CliOptions("phone" if explicit else None, "task", False)
+            )
+            try:
+                result = await client.call("shell.start", {"script": script})
+                if shape == "oversize":
+                    assert result.result == "not sent"
+                    assert result.exit_code() == 2
+                    assert result.error.code == "jsonLimit"
+                else:
+                    assert result.result == "done"
+                assert connected == [True]
+                assert received == ([] if shape == "oversize" else ["shell.start"])
+            finally:
+                await client.close()
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(("prefix", "encoded_bytes"), [("", 0), ("/", 2)])
@@ -149,7 +199,7 @@ async def test_local_dispatch_uncertainty_preserves_the_original_problem(tmp_pat
 
 @pytest.mark.parametrize(
     ("arguments", "command"),
-    [(["status"], "status")],
+    [(["status"], "status"), (["shell", "true"], "shell")],
 )
 def test_uncertain_local_reply_uses_the_actual_cli_command(
     tmp_path, monkeypatch, arguments, command
@@ -234,5 +284,58 @@ async def test_local_error_retains_problem_and_dispatch_classification(
             else:
                 assert caught.value.problem == problem
                 assert str(caught.value) == problem.message
+        finally:
+            await client.close()
+
+
+@pytest.mark.parametrize("entry", ["job"])
+@pytest.mark.parametrize("explicit", [False, True])
+async def test_multi_rpc_command_keeps_its_device_when_default_changes(
+    tmp_path, monkeypatch, entry, explicit
+):
+    received = []
+
+    async def dispatch(method, args):
+        received.append(method)
+        if len(received) == 1 and explicit:
+            original = coordinator.state.record(material["deviceId"])
+            original.active.alias = "original"
+            coordinator.state.save_record(original)
+            replacement = coordinator.state.resolve_selection("other")[0]
+            replacement.active.alias = "phone"
+            coordinator.state.save_record(replacement)
+        write_json(
+            coordinator.state.selection,
+            {"deviceId": replacement_id},
+        )
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (coordinator, material, connect):
+        replacement = save_active(
+            coordinator.state,
+            {
+                **new_device_identity(),
+                "alias": "other",
+                "credential": "not-the-original-device",
+            },
+        )
+        replacement_id = replacement["deviceId"]
+        write_json(
+            coordinator.state.selection,
+            {"deviceId": coordinator.state.resolve_selection("phone")[0].device_id},
+        )
+        context = CliOptions("phone" if explicit else None, "task", False)
+        client = job_commands.JobClient(context)
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        try:
+            for command in ("snapshot", "ui.read"):
+                result = await client.call(command, {})
+                assert result.result == "done"
+            assert received == ["snapshot", "ui.read"]
+            assert client.local.device_id == material["deviceId"]
+            assert context == CliOptions("phone" if explicit else None, "task", False)
+            assert (
+                coordinator.state.resolve_selection(None)[0].device_id == replacement_id
+            )
         finally:
             await client.close()
