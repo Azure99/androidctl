@@ -24,6 +24,7 @@ internal class Sessions(
 ) {
     private var sequence = 0L
     private var current: Lease? = null
+    private val released = mutableSetOf<Pair<String, String>>()
     private val revoked = mutableSetOf<String>()
 
     @get:Synchronized var stopped = false
@@ -33,6 +34,9 @@ internal class Sessions(
         accepting()
         validate(owner)
         expire()
+        if (owner.sessionKey in released) {
+            throw Rejected("sessionReleased", "Session released on device; run session open explicitly")
+        }
         val held = current
         if (held != null && !held.owner.sameSession(owner)) busy(held)
         val lease = held ?: Lease(++sequence, owner, now(), DEFAULT_IDLE_MS).also { current = it }
@@ -52,6 +56,7 @@ internal class Sessions(
         if (held != null) invalidateLease()
         val lease = Lease(++sequence, owner, now(), idleMs)
         current = lease
+        released.remove(owner.sessionKey)
         lease.touched = now()
         return lease
     }
@@ -66,12 +71,22 @@ internal class Sessions(
     @Synchronized fun takeover(owner: SessionOwner): String? {
         validate(owner)
         expire()
+        if (owner.sessionKey in released) {
+            throw Rejected("sessionReleased", "Session released on device; run session open explicitly")
+        }
         val held = current
         if (held != null && held.owner.pairing != owner.pairing) busy(held)
         val previous = held?.owner?.name
         if (held != null) invalidateLease()
         acquire(owner)
         return previous
+    }
+
+    @Synchronized fun releaseLocal(expected: Long) {
+        val held = current ?: throw Rejected("sessionChanged", "There is no current session")
+        if (held.id != expected) throw Rejected("sessionChanged", "The displayed session has changed; refresh first")
+        released.add(held.owner.sessionKey)
+        invalidateLease()
     }
 
     @Synchronized fun retainedPairings(): Set<String> = listOfNotNull(current?.owner?.pairing).toSet()
@@ -84,7 +99,7 @@ internal class Sessions(
     @Synchronized fun requireCurrent(lease: Lease) {
         accepting()
         validate(lease.owner)
-        if (current !== lease) throw Rejected("sessionChanged", "The session was closed")
+        if (current !== lease) throw Rejected("sessionChanged", "The session was closed or released")
     }
 
     @Synchronized fun isCurrent(lease: Lease): Boolean = current === lease
@@ -125,6 +140,7 @@ internal class Sessions(
 
     private fun callerState(owner: SessionOwner): String =
         when {
+            owner.sessionKey in released -> "released"
             current?.owner?.sameSession(owner) == true -> "active"
             else -> "none"
         }

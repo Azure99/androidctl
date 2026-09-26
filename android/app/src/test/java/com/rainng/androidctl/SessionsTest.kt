@@ -2,6 +2,7 @@ package com.rainng.androidctl
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -89,6 +90,28 @@ class SessionsTest {
         assertEquals("busy", assertThrows(Rejected::class.java) { sessions.takeover(first.copy(pairing = "pair-b")) }.code)
         assertEquals("checkout", sessions.takeover(second))
         assertEquals("research", sessions.localStatus()["name"])
+    }
+
+    @Test fun localReleasePreventsDispatchAndRequiresExplicitReopen() {
+        val sessions = Sessions { 0L }
+        val renamed = first.copy(pairingName = "renamed workstation")
+        assertEquals("none", sessions.callerStatus(first)["callerState"])
+        val old = sessions.acquire(first)
+        assertEquals("active", sessions.callerStatus(first)["callerState"])
+        sessions.releaseLocal(old.id)
+        assertEquals("released", sessions.callerStatus(renamed)["callerState"])
+        assertEquals("none", sessions.callerStatus(second)["callerState"])
+        assertEquals("sessionChanged", assertThrows(Rejected::class.java) { sessions.requireCurrent(old) }.code)
+        assertEquals("sessionReleased", assertThrows(Rejected::class.java) { sessions.acquire(renamed) }.code)
+        val next = sessions.acquire(second)
+        assertEquals("sessionChanged", assertThrows(Rejected::class.java) { sessions.releaseLocal(old.id) }.code)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.open(first) }.code)
+        assertTrue(sessions.isCurrent(next))
+        sessions.close(second)
+        assertEquals("sessionReleased", assertThrows(Rejected::class.java) { sessions.acquire(first) }.code)
+        assertNotEquals(old.id, sessions.open(renamed).id)
+        assertEquals("active", sessions.callerStatus(first)["callerState"])
+        assertEquals("none", Sessions { 0L }.callerStatus(first)["callerState"])
     }
 
     @Test fun revokedPairingLosesItsLeaseAndAuthorization() {

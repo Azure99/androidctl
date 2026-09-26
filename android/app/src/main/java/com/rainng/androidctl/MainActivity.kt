@@ -119,7 +119,9 @@ class MainActivity : ComponentActivity() {
             onAuthorize = ::requestAuthorization,
             onRefresh = ::refreshManagement,
             onBatterySettings = ::openBatterySettings,
+            onReleaseSession = { workerId, leaseId -> GatewayService.current?.releaseSession(workerId, leaseId) },
             onStopExecutor = { GatewayService.current?.stopExecutor() },
+            onForceExecutor = ::forceExecutor,
             onOpenPairingWindow = ::openPairingWindow,
             onClosePairingWindow = ::closePairingWindow,
             onRevokePairing = ::revokePairing,
@@ -168,6 +170,15 @@ class MainActivity : ComponentActivity() {
             getString(R.string.battery_settings_unavailable)
         }
 
+    private fun forceExecutor(
+        workerId: String,
+        report: (String) -> Unit,
+    ) {
+        GatewayService.current?.forceExecutor(workerId) {
+            runOnUiThread { report(getString(R.string.force_executor_done)) }
+        }
+    }
+
     private fun openPairingWindow() {
         GatewayService.current?.openPairingWindow { runOnUiThread(::refreshLocalManagementState) }
     }
@@ -186,6 +197,11 @@ class MainActivity : ComponentActivity() {
         } catch (error: Exception) {
             rootCause(error).toString()
         }
+
+    private fun closePairingWindow() {
+        Pairings.get(this).closeWindow()
+        refreshLocalManagementState()
+    }
 
     private fun requestCertificateExport(ready: (String) -> Unit) {
         GatewayService.current?.requestCertificate { value ->
@@ -209,11 +225,6 @@ class MainActivity : ComponentActivity() {
         } catch (error: Exception) {
             getString(R.string.certificate_export_failed, rootCause(error).toString())
         }
-
-    private fun closePairingWindow() {
-        Pairings.get(this).closeWindow()
-        refreshLocalManagementState()
-    }
 
     private companion object {
         const val STATUS_REFRESH_MS = 2000L

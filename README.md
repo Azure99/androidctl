@@ -12,6 +12,7 @@ The App uses these labels for that same worker:
 | --- | --- |
 | Executor attached / Executor unavailable | 执行器已连接 / 执行器不可用 |
 | Stop idle executor | 停止空闲执行器 |
+| Force executor exit | 强制结束执行器 |
 
 The [SKILL](skills/androidctl/SKILL.md) covers a session workflow, and the
 [command reference](skills/androidctl/reference.md) defines pairing, results and

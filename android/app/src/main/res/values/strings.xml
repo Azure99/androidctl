@@ -22,9 +22,12 @@
     <string name="battery_settings_unavailable">Open Android Settings and find Battery optimization for AndroidCtl.</string>
     <string name="current_session">Current session</string>
     <string name="session_idle">Idle %1$ds</string>
+    <string name="release_session">Release current session</string>
     <string name="no_session">No current session</string>
     <string name="session_unavailable">Session status unavailable</string>
     <string name="stop_executor">Stop idle executor</string>
+    <string name="release_session_title">Release current session?</string>
+    <string name="release">Release</string>
     <string name="cancel">Cancel</string>
     <string name="pair_host">Pair host</string>
     <string name="pairing_expiry" tools:ignore="PluralsCandidate">The code expires in %1$d seconds or after %2$d incorrect attempts. The first connection trusts the presented certificate and cannot detect an active intermediary.</string>
@@ -32,6 +35,10 @@
     <string name="candidate_addresses">Local addresses: %1$s</string>
     <string name="show_pairing">Show new pairing code</string>
     <string name="close_pairing">Close pairing code</string>
+    <string name="force_executor">Force executor exit</string>
+    <string name="force_executor_title">Force this executor to exit?</string>
+    <string name="force_executor_body">Active calls may disconnect or become UNKNOWN. Gateway and pairings remain active.</string>
+    <string name="force_executor_done">Original executor exited. Use Refresh status to start a new worker.</string>
     <string name="revoke">Revoke</string>
     <string name="pairing_revoked">Credentials revoked.</string>
     <string name="pairing_revocations_pending">Revocation requests awaiting worker confirmation: %1$d</string>

@@ -49,7 +49,9 @@ internal fun ManagementScreen(
     onAuthorize: () -> String?,
     onRefresh: () -> Unit,
     onBatterySettings: () -> String?,
+    onReleaseSession: (String, Long) -> Unit,
     onStopExecutor: () -> Unit,
+    onForceExecutor: (String, (String) -> Unit) -> Unit,
     onOpenPairingWindow: () -> Unit,
     onClosePairingWindow: () -> Unit,
     onRevokePairing: (String) -> String,
@@ -74,7 +76,7 @@ internal fun ManagementScreen(
                 GatewayControls(facts, readings.shizukuState, onGatewayEnabled, onAuthorize, onRefresh)
                 BatteryControls(facts, readings.batteryExempt, onBatterySettings)
                 HorizontalDivider()
-                SessionControls(facts, onStopExecutor)
+                SessionControls(facts, onReleaseSession, onStopExecutor, onForceExecutor)
                 HorizontalDivider()
                 PairingControls(facts, readings, onOpenPairingWindow, onClosePairingWindow, onRevokePairing)
                 HorizontalDivider()
@@ -166,19 +168,43 @@ private fun BatteryControls(
 @Composable
 private fun SessionControls(
     facts: ManagementState,
+    onReleaseSession: (String, Long) -> Unit,
     onStopExecutor: () -> Unit,
+    onForceExecutor: (String, (String) -> Unit) -> Unit,
 ) {
     val session = facts.executor?.session
     val leaseId = session?.leaseId
+    var releasing by remember { mutableStateOf<SessionReleaseConfirmation?>(null) }
     Text(stringResource(R.string.current_session), style = MaterialTheme.typography.titleMedium)
     if (leaseId == null) {
         Text(stringResource(if (session == null) R.string.session_unavailable else R.string.no_session))
     }
     if (session != null) SessionSummary(session)
+    if (leaseId != null) {
+        Button(
+            onClick = { releasing = SessionReleaseConfirmation(facts.executor.workerId, leaseId) },
+            enabled = facts.controlsEnabled,
+        ) { Text(stringResource(R.string.release_session)) }
+    }
     TextButton(
         onClick = onStopExecutor,
         enabled = facts.executor != null && facts.controlsEnabled,
     ) { Text(stringResource(R.string.stop_executor)) }
+    ForceExecutorControls(facts, onForceExecutor)
+    val expected = releasing
+    if (expected != null) {
+        AlertDialog(
+            onDismissRequest = { releasing = null },
+            title = { Text(stringResource(R.string.release_session_title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    releasing = null
+                    onReleaseSession(expected.workerId, expected.leaseId)
+                }, enabled = facts.controlsEnabled) { Text(stringResource(R.string.release)) }
+            },
+            dismissButton = { TextButton(onClick = { releasing = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 @Composable
@@ -186,6 +212,42 @@ private fun SessionSummary(session: SessionStatus) {
     if (session.leaseId != null) {
         Text("${displayName(session.pairingName.orEmpty())} / ${displayName(session.name.orEmpty())}")
         Text(stringResource(R.string.session_idle, session.idleSeconds))
+    }
+}
+
+@Composable
+private fun ForceExecutorControls(
+    facts: ManagementState,
+    onForceExecutor: (String, (String) -> Unit) -> Unit,
+) {
+    val current = facts.executor
+    var expected by remember { mutableStateOf<WorkerStatus?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    TextButton(onClick = {
+        expected = current
+        message = null
+    }, enabled = current != null && facts.controlsEnabled) { Text(stringResource(R.string.force_executor)) }
+    message?.let { Text(it) }
+    expected?.let { worker ->
+        AlertDialog(
+            onDismissRequest = { expected = null },
+            title = { Text(stringResource(R.string.force_executor_title)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(stringResource(R.string.worker_identity, worker.workerId))
+                    if (worker.session.leaseId == null) Text(stringResource(R.string.no_session))
+                    SessionSummary(worker.session)
+                    Text(stringResource(R.string.force_executor_body))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    expected = null
+                    onForceExecutor(worker.workerId) { message = it }
+                }, enabled = facts.controlsEnabled) { Text(stringResource(R.string.force_executor)) }
+            },
+            dismissButton = { TextButton(onClick = { expected = null }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
 }
 
@@ -281,6 +343,11 @@ private fun CertificateControls(
         )
     }
 }
+
+private data class SessionReleaseConfirmation(
+    val workerId: String,
+    val leaseId: Long,
+)
 
 private val ManagementState.controlsEnabled: Boolean get() = gateway.state != GatewayState.STOPPING
 

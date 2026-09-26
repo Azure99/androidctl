@@ -92,6 +92,17 @@ class WorkerService(
             }
         }
 
+    override fun release(
+        expectedWorkerId: String,
+        leaseId: Long,
+    ): String =
+        managed {
+            if (expectedWorkerId != workerId) {
+                throw Rejected("sessionChanged", "The displayed worker has changed; refresh first")
+            }
+            sessions.releaseLocal(leaseId)
+        }
+
     override fun revoke(pairingId: String): String =
         managed {
             sessions.revoke(pairingId)

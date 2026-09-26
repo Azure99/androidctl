@@ -28,7 +28,8 @@ androidctl --device DEVICE -s task session open
 
 Read the result before continuing.
 The unnamed `default` session is shared. Respect `busy`/`connectionBusy`; use
-takeover only on explicit user instruction.
+takeover only on explicit user instruction. After device-side release, explicitly
+open again only when continuing is intended.
 
 ## Results
 

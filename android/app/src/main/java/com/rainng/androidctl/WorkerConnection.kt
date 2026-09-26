@@ -180,6 +180,17 @@ internal class WorkerConnection(
         }
     }
 
+    fun forceExecutor(workerId: String) {
+        val current =
+            synchronized(this) {
+                if (connection?.status?.workerId != workerId) {
+                    throw Rejected("staleWorker", "Worker changed; review the current worker before forcing it to exit")
+                }
+                connection?.target ?: throw Rejected("workerUnavailable", "Worker is no longer attached")
+            }
+        destroyAndConfirm(current)
+    }
+
     private fun destroyAndConfirm(current: IExecutor) {
         val binder = current.asBinder()
         val died = CountDownLatch(1)

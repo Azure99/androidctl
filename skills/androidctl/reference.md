@@ -108,11 +108,13 @@ whole seconds from `1s` to `24h` (for example `10m`); fractional seconds are rej
 `busy` identifies the current holder. Explicit `session takeover` can take a
 session of the same pairing only when no foreground resources remain. It is not
 permission to interrupt another task.
+Device-side **Release current session** releases the displayed lease without
+revoking its pairing. The released caller must explicitly reopen before new work.
 
 `connectionBusy` reports another session occupying the connection. Same-session
 calls can wait within their original budget. `status` separates the
 active owner (`session.name` and `session.pairingName`) from the caller state
-(`session.callerState`, with values `active` or `none`).
+(`session.callerState`, with values `active`, `released` or `none`).
 
 Successful `status` reports worker, actual session holder and Gateway
 state without duplicate checks. A failed observation includes local pairing,
@@ -129,6 +131,11 @@ Rejection does not always include the peer's version.
 After that work ends, **Refresh status** can confirm completion.
 **Stop idle executor** requests worker shutdown; Refresh then attaches a new worker.
 Wait for stopping to finish; if it fails, use **Refresh status** after the work ends.
+**Force executor exit** is a separate device-local confirmation bound to the shown
+worker ID and session. It can also confirm that the captured worker is already
+dead. Completion confirms that worker ended; Gateway and pairings survive, and
+calls can become UNKNOWN. Use Refresh to attach a new worker. There is no remote
+force command.
 
 Use **Refresh status** to reconnect when the worker is unavailable. Cached
 management state may still show the previous worker.

@@ -22,9 +22,12 @@
     <string name="battery_settings_unavailable">请打开 Android 设置，查找 AndroidCtl 的电池优化设置。</string>
     <string name="current_session">当前会话</string>
     <string name="session_idle">空闲 %1$d 秒</string>
+    <string name="release_session">释放当前会话</string>
     <string name="no_session">无当前会话</string>
     <string name="session_unavailable">会话状态不可用</string>
     <string name="stop_executor">停止空闲执行器</string>
+    <string name="release_session_title">释放当前会话？</string>
+    <string name="release">释放</string>
     <string name="cancel">取消</string>
     <string name="pair_host">配对电脑</string>
     <string name="pairing_expiry">配对码 %1$d 秒后或累计 %2$d 次错误后失效。首次连接信任所提供的证书，不能抵抗主动中间人。</string>
@@ -32,6 +35,10 @@
     <string name="candidate_addresses">本机地址：%1$s</string>
     <string name="show_pairing">显示新配对码</string>
     <string name="close_pairing">关闭配对码</string>
+    <string name="force_executor">强制结束执行器</string>
+    <string name="force_executor_title">强制结束此执行器？</string>
+    <string name="force_executor_body">在途调用可能断连或成为 UNKNOWN。网关和配对继续有效。</string>
+    <string name="force_executor_done">原执行器已退出。请刷新状态以启动新 worker。</string>
     <string name="revoke">撤销</string>
     <string name="pairing_revoked">凭据已撤销。</string>
     <string name="pairing_revocations_pending">撤权请求待执行器确认：%1$d</string>

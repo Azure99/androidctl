@@ -155,6 +155,14 @@ class GatewayService : Service() {
             finished()
         }
 
+    fun forceExecutor(
+        workerId: String,
+        finished: () -> Unit,
+    ) = enqueueManagementCommand {
+        requireNotNull(worker).forceExecutor(workerId)
+        finished()
+    }
+
     fun revoke(id: String) {
         Pairings.get(this).revoke(id)
         synchronized(pendingRevocations) { pendingRevocations.add(id) }
@@ -209,6 +217,13 @@ class GatewayService : Service() {
             network = candidate
             if (stopping) candidate.beginStop() else candidate.start()
         }
+    }
+
+    fun releaseSession(
+        workerId: String,
+        leaseId: Long,
+    ) = enqueueManagementCommand {
+        requireNotNull(worker).manage { it.release(workerId, leaseId) }
     }
 
     fun stopExecutor() =
