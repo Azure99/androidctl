@@ -4,6 +4,8 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
+import shlex
 import time
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
@@ -29,10 +31,12 @@ from .protocol import (
     Problem,
     Result,
     TransportFailure,
+    completed,
     decode_chunk,
     rejected,
     uncertain,
 )
+from .user_files import create, require_new_file
 
 DISPLAY_BYTES = 4096
 SCRIPT_BYTES = 64 * 1024
@@ -156,6 +160,9 @@ def show(
     streams: dict[str, bytes],
     as_json: bool,
     delivery: Output,
+    *,
+    device: str | None,
+    session: str | None,
 ) -> NoReturn:
     delivery.attach(result)
     if as_json:
@@ -188,7 +195,10 @@ def show(
             except UnicodeError:
                 text = None
             if text is None or "\0" in text:
-                delivery.echo(f"{stream}: {len(body)} binary bytes")
+                delivery.echo(
+                    f"{stream}: {len(body)} binary bytes; "
+                    + output_command(result, stream, device, session)
+                )
                 continue
             delivery.echo(f"{stream}:")
             delivery.echo(
@@ -204,9 +214,14 @@ def show(
                     if len(body) > DISPLAY_BYTES
                     else "[no final newline]"
                 )
+                if len(body) > DISPLAY_BYTES:
+                    delivery.echo(output_command(result, stream, device, session))
         output = result.data.get("output", {})
         for entry in output.get("streams", []):
-            shown = streams.get(entry["stream"])
+            shown = (
+                streams.get(entry["stream"])
+                or result.data.get("stream") == entry["stream"]
+            )
             if shown and "size" in entry and "sha256" in entry:
                 delivery.echo(
                     f"{entry['stream']}: cached size={entry['size']}; "
@@ -221,7 +236,9 @@ def show(
         elif output.get("state") in ("expired", "unavailable"):
             delivery.echo(f"Output {output['state']}; the command was not repeated.")
         elif output.get("state") == "pending":
-            delivery.echo("Output pending")
+            delivery.echo(
+                "Output pending; " + output_command(result, "stdout", device, session)
+            )
         if result.data.get("queryError"):
             delivery.echo(f"Query unavailable: {result.data['queryError']['message']}")
         for error in result.data.get("signalErrors", []):
@@ -238,6 +255,29 @@ def show(
         )
     delivery.finish(result)
     raise typer.Exit(result.exit_code())
+
+
+def output_command(
+    result: Result, stream: str, device: str | None, session: str | None
+) -> str:
+    args: list[str] = []
+    if device:
+        args += ["--device", device]
+    if session:
+        args += ["-s", session]
+    args += [
+        "job",
+        "output",
+        result.data["job"],
+        "--stream",
+        stream,
+        "--out",
+        f"{result.data['job']}-{stream}.bin",
+    ]
+    return "androidctl " + " ".join(
+        "'" + arg.replace("'", "''") + "'" if os.name == "nt" else shlex.quote(arg)
+        for arg in args
+    )
 
 
 def output_problem(error: Exception) -> Problem:
@@ -298,7 +338,105 @@ def run(
         streams,
         as_json,
         delivery,
+        device=client.local.device_id,
+        session=client.local.session,
     )
+
+
+def export_output(ctx: typer.Context, job: str, out: Path, stream: str) -> NoReturn:
+    command = command_name(ctx)
+    out = out.absolute()
+    context = options(ctx)
+    delivery = Output()
+    require_new_file(
+        out,
+        "Output destination already exists",
+        Fault("fileParent", f"An existing parent directory is required: {out.parent}"),
+    )
+    client = JobClient(context)
+
+    async def request() -> Result:
+        try:
+            try:
+                result = await client.call("job.get", {"job": job})
+            except TransportFailure as error:
+                result = uncertain(command, error)
+            except Fault as error:
+                result = rejected(command, error)
+            if result.result in ("not sent", "UNKNOWN") and not result.data.get("job"):
+                return Result(
+                    command=command,
+                    result=result.result,
+                    reason=result.reason,
+                    error=result.error,
+                    data={"job": job},
+                )
+            output = result.data.get("output", {})
+            if output.get("state") != "available":
+                return Result(
+                    command=command,
+                    result="failed",
+                    reason="Output is " + output.get("state", "unavailable"),
+                    data={"job": job},
+                )
+            try:
+                metadata_by_stream = {
+                    entry["stream"]: entry for entry in output["streams"]
+                }
+                metadata = metadata_by_stream[stream]
+                body = await client.output(
+                    result.data.get("job", job), stream, metadata
+                )
+            except (Fault, OSError, KeyError, TypeError, ValueError) as error:
+                problem = output_problem(error)
+                return Result(
+                    command=command,
+                    result="failed",
+                    reason=problem.message,
+                    error=problem,
+                    data={"job": job},
+                )
+            return write_output(job, stream, body, metadata, out)
+        finally:
+            await client.close()
+
+    result = asyncio.run(request())
+    result.command = command
+    show(
+        result,
+        {},
+        context.as_json,
+        delivery,
+        device=client.local.device_id,
+        session=client.local.session,
+    )
+
+
+def write_output(
+    job: str, stream: str, body: bytes, metadata: dict[str, Any], out: Path
+) -> Result:
+    out = out.absolute()
+    try:
+        create(out.parent, out.name, body)
+        return completed(
+            "job output",
+            {
+                "job": job,
+                "stream": stream,
+                "size": metadata["size"],
+                "sha256": metadata["sha256"],
+                "output": {"state": "available", "streams": [metadata]},
+            },
+            reason=str(out),
+        )
+    except (Fault, OSError, ValueError) as error:
+        return Result(
+            command="job output",
+            result="failed",
+            reason=str(error),
+            error=output_problem(error),
+            data={"job": job},
+        )
 
 
 def register(app: typer.Typer) -> None:
@@ -403,3 +541,33 @@ def register(app: typer.Typer) -> None:
     )
     def cancel(ctx: typer.Context, identifier: str) -> None:
         run(ctx, "job.cancel", {"job": identifier}, wait_ms=3000)
+
+    @job.command(
+        "output",
+        cls=CliCommand,
+        help=(
+            "Retrieve retained original bytes without executing the command again. "
+            "Its result describes export, not the original execution."
+        ),
+    )
+    def output(
+        ctx: typer.Context,
+        identifier: str,
+        out: Annotated[
+            Path,
+            typer.Option(
+                "--out",
+                readable=False,
+                help="New file in an existing parent directory; no overwrite.",
+            ),
+        ],
+        stream: Annotated[
+            str,
+            typer.Option(
+                "--stream", help="Retained stream to export: stdout or stderr."
+            ),
+        ] = "stdout",
+    ) -> None:
+        if stream not in ("stdout", "stderr"):
+            raise Fault("stream", "Choose stdout or stderr")
+        export_output(ctx, identifier, out, stream)

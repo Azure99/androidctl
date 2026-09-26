@@ -14,7 +14,7 @@ from androidctl import job_commands
 from androidctl.cli_options import CliOptions
 from androidctl.job_commands import JobClient, query_failed
 from androidctl.output import Output
-from androidctl.protocol import CHUNK_BYTES, Fault, Problem, Result
+from androidctl.protocol import CHUNK_BYTES, Fault, Problem, Result, TransportFailure
 
 
 @pytest.mark.parametrize(("job", "budget"), [("jdevice", 50)])
@@ -203,6 +203,96 @@ async def test_output_stops_when_the_stream_budget_is_exhausted(monkeypatch):
     assert calls == [(0, 5)]
 
 
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+@pytest.mark.parametrize("execution_result", ["done", "failed", "UNKNOWN"])
+def test_job_output_exports_selected_stream_to_real_file(
+    tmp_path, monkeypatch, stream, execution_result
+):
+    monkeypatch.chdir(tmp_path)
+    streams = {"stdout": b"out\x00\xff" * 9000, "stderr": b"err\r\n" * 7000}
+    metadata = [
+        {"stream": name, "size": len(body), "sha256": hashlib.sha256(body).hexdigest()}
+        for name, body in streams.items()
+    ]
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append((command, args))
+        if command == "job.get":
+            return Result(
+                command=command,
+                result=execution_result,
+                error=(
+                    Problem(code="execution", message="Original execution problem")
+                    if execution_result != "done"
+                    else None
+                ),
+                exit=3,
+                data={
+                    "job": "j1",
+                    "execution": {"state": execution_result},
+                    "cleanup": "unknown",
+                    "cleanupError": "Original cleanup unconfirmed",
+                    "output": {"state": "available", "streams": metadata},
+                },
+            )
+        assert command == "output.read"
+        assert args["stream"] == stream
+        offset = args["offset"]
+        meta = next(item for item in metadata if item["stream"] == stream)
+        return Result(
+            command=command,
+            result="done",
+            data={
+                "job": "j1",
+                "offset": offset,
+                **meta,
+                "bytes": base64.b64encode(
+                    streams[stream][offset : offset + CHUNK_BYTES]
+                ).decode(),
+            },
+        )
+
+    monkeypatch.setattr(JobClient, "call", call)
+    destination = tmp_path / "output.bin"
+    response = CliRunner().invoke(
+        cli.app,
+        [
+            "--json",
+            "job",
+            "output",
+            "j1",
+            "--stream",
+            stream,
+            "--out",
+            destination.name,
+        ],
+    )
+    assert response.exit_code == 0, response.output
+    result = json.loads(response.output)
+    assert result["command"] == "job output"
+    assert result["result"] == "done"
+    assert result["data"]["job"] == "j1"
+    assert result["data"]["stream"] == stream
+    assert "exit" not in result
+    assert "error" not in result
+    assert not {"execution", "cleanup", "cleanupError"} & result["data"].keys()
+    assert result["data"]["output"] == {
+        "state": "available",
+        "streams": [next(item for item in metadata if item["stream"] == stream)],
+    }
+    assert result["reason"] == str(destination)
+    assert destination.read_bytes() == streams[stream]
+    assert result["data"]["size"] == destination.stat().st_size
+    assert (
+        result["data"]["sha256"] == hashlib.sha256(destination.read_bytes()).hexdigest()
+    )
+    assert [args["offset"] for command, args in calls if command == "output.read"] == [
+        0,
+        CHUNK_BYTES,
+    ]
+
+
 def test_job_preview_keeps_stdout_when_stderr_retrieval_fails(monkeypatch):
     stdout = b"captured stdout\x00\xff" + b"x" * CHUNK_BYTES
     metadata = {
@@ -267,6 +357,188 @@ def test_job_preview_keeps_stdout_when_stderr_retrieval_fails(monkeypatch):
     assert reads == [("stdout", 0), ("stdout", CHUNK_BYTES), ("stderr", 0)]
 
 
+@pytest.mark.parametrize(
+    ("failure", "expected_problem"),
+    [
+        (
+            OSError("controlled output write failure"),
+            Problem(code="output", message="controlled output write failure"),
+        ),
+        (
+            Fault.from_problem(
+                Problem(
+                    code="fileCleanup",
+                    message="Output cleanup failed",
+                    stage="local.file",
+                    diagnostic_truncated=True,
+                )
+            ),
+            Problem(
+                code="fileCleanup",
+                message="Output cleanup failed",
+                stage="local.file",
+                diagnostic_truncated=True,
+            ),
+        ),
+    ],
+    ids=["local-os-error", "classified-file-error"],
+)
+def test_job_output_write_failure_keeps_its_problem_and_job(
+    tmp_path, monkeypatch, failure, expected_problem
+):
+    body = b"known output"
+    metadata = {
+        "stream": "stdout",
+        "size": len(body),
+        "sha256": hashlib.sha256(body).hexdigest(),
+    }
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append(command)
+        if command == "job.get":
+            return Result(
+                command=command,
+                result="done",
+                data={
+                    "job": "j1",
+                    "output": {"state": "available", "streams": [metadata]},
+                },
+            )
+        return Result(
+            command=command,
+            result="done",
+            data={
+                "job": "j1",
+                "offset": 0,
+                **metadata,
+                "bytes": base64.b64encode(body).decode(),
+            },
+        )
+
+    def denied(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(JobClient, "call", call)
+    monkeypatch.setattr(job_commands, "create", denied)
+    destination = tmp_path / "output.bin"
+    response = CliRunner().invoke(
+        cli.app, ["--json", "job", "output", "j1", "--out", str(destination)]
+    )
+    assert response.exit_code == 1, response.output
+    result = json.loads(response.output)
+    assert result["command"] == "job output"
+    assert result["result"] == "failed"
+    assert result["data"]["job"] == "j1"
+    assert result["reason"] == expected_problem.message
+    assert result["error"] == expected_problem.wire()
+    assert not destination.exists()
+    assert calls == ["job.get", "output.read"]
+
+
+@pytest.mark.parametrize("failure_type", [Fault, TransportFailure])
+def test_job_output_read_failure_is_an_export_failure(
+    tmp_path, monkeypatch, failure_type
+):
+    problem = Problem(
+        code="replyLost",
+        message="Output read reply unavailable",
+        stage="local.websocket",
+        diagnostic_truncated=True,
+    )
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append(command)
+        if command == "job.get":
+            return Result(
+                command=command,
+                result="UNKNOWN",
+                exit=3,
+                error=Problem(code="execution", message="Original execution unknown"),
+                data={
+                    "job": "j1",
+                    "output": {
+                        "state": "available",
+                        "streams": [
+                            {"stream": "stdout", "size": 1, "sha256": "0" * 64}
+                        ],
+                    },
+                },
+            )
+        assert command == "output.read"
+        raise failure_type.from_problem(problem)
+
+    monkeypatch.setattr(JobClient, "call", call)
+    destination = tmp_path / "output.bin"
+    response = CliRunner().invoke(
+        cli.app, ["--json", "job", "output", "j1", "--out", str(destination)]
+    )
+    assert response.exit_code == 1, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["result"] == "failed"
+    assert value["reason"] == problem.message
+    assert value["error"] == problem.wire()
+    assert value["data"]["job"] == "j1"
+    assert "exit" not in value
+    assert not destination.exists()
+    assert calls == ["job.get", "output.read"]
+
+
+def test_job_output_missing_stream_metadata_fails_before_read(tmp_path, monkeypatch):
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append(command)
+        return Result(
+            command=command,
+            result="done",
+            data={"job": "j1", "output": {"state": "available", "streams": []}},
+        )
+
+    monkeypatch.setattr(JobClient, "call", call)
+    destination = tmp_path / "output.bin"
+    response = CliRunner().invoke(
+        cli.app, ["--json", "job", "output", "j1", "--out", str(destination)]
+    )
+    assert response.exit_code == 1, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["result"] == "failed"
+    assert value["error"]["code"] == "output"
+    assert value["data"]["job"] == "j1"
+    assert calls == ["job.get"]
+    assert not destination.exists()
+
+
+def test_job_output_existing_file_is_rejected_before_connection(
+    tmp_path, monkeypatch, capsys
+):
+    from androidctl import local_call
+
+    destination = tmp_path / "output.bin"
+    destination.write_bytes(b"preserve")
+
+    async def forbidden(**kwargs):
+        pytest.fail("existing output destination started a local connection")
+
+    monkeypatch.setattr(local_call, "connect_local", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["androidctl", "--json", "job", "output", "j1", "--out", str(destination)],
+    )
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    assert stopped.value.code == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["result"] == "not sent"
+    assert result["command"] == "job output"
+    assert result["error"]["code"] == "fileExists"
+    assert destination.read_bytes() == b"preserve"
+
+
 def test_shell_pending_cleanup_is_visible_without_changing_execution(capsys):
     result = Result(
         command="shell",
@@ -274,14 +546,14 @@ def test_shell_pending_cleanup_is_visible_without_changing_execution(capsys):
         data={"job": "j1", "helperAlive": True, "cleanup": "pending"},
     )
     with pytest.raises(typer.Exit) as stopped:
-        job_commands.show(result, {}, False, Output())
+        job_commands.show(result, {}, False, Output(), device=None, session=None)
     assert stopped.value.exit_code == 0
     output = capsys.readouterr().out
     assert "shell: done; job=j1" in output
     assert 'helperAlive=true; cleanup="pending"' in output
 
 
-@pytest.mark.parametrize("export_empty", [False])
+@pytest.mark.parametrize("export_empty", [False, True])
 def test_metadata_only_for_presented_or_explicitly_exported_stream(
     capsys, export_empty
 ):
@@ -310,6 +582,8 @@ def test_metadata_only_for_presented_or_explicitly_exported_stream(
             {} if export_empty else {"stdout": data, "stderr": b""},
             False,
             Output(),
+            device=None,
+            session=None,
         )
     assert stopped.value.exit_code == 0
     output = capsys.readouterr().out
@@ -459,11 +733,191 @@ async def test_wait_only_uses_short_queries_and_retains_done_when_output_is_lost
     )
     assert 0 < calls[1][2] < calls[0][2] <= 1
     with pytest.raises(typer.Exit) as stopped:
-        job_commands.show(value, {}, False, Output())
+        job_commands.show(value, {}, False, Output(), device=None, session=None)
     assert stopped.value.exit_code == 3
     text = capsys.readouterr().out
     assert "Query unavailable: connection lost\n" in text
     assert "device.query" not in text
+
+
+@pytest.mark.parametrize(
+    ("query_result", "query_problem", "exit_code"),
+    [
+        (
+            "UNKNOWN",
+            Problem(
+                code="replyLost",
+                message="Query reply unavailable",
+                stage="device.websocket",
+                diagnostic_truncated=True,
+            ),
+            3,
+        ),
+        (
+            "not sent",
+            Problem(
+                code="jobUnavailable",
+                message="Original job expired",
+                stage="device.query",
+                diagnostic_truncated=True,
+            ),
+            2,
+        ),
+        ("UNKNOWN", None, 3),
+    ],
+    ids=["uncertain-query", "rejected-query", "uncertain-without-problem"],
+)
+def test_job_output_preserves_a_query_without_job_facts(
+    tmp_path, monkeypatch, query_result, query_problem, exit_code
+):
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append((command, args))
+        return Result(
+            command=command,
+            result=query_result,
+            reason="Original query reason",
+            data={"deviceConnectMs": 7},
+            error=query_problem,
+        )
+
+    monkeypatch.setattr(JobClient, "call", call)
+    destination = tmp_path / "out.bin"
+    response = CliRunner().invoke(
+        cli.app, ["--json", "job", "output", "j1", "--out", str(destination)]
+    )
+    assert response.exit_code == exit_code, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["data"]["job"] == "j1"
+    assert set(value["data"]) == {"job"}
+    assert value["result"] == query_result
+    assert value["reason"] == "Original query reason"
+    assert value.get("error") == (query_problem.wire() if query_problem else None)
+    assert calls == [("job.get", {"job": "j1"})]
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    ("failure_type", "expected_result", "exit_code"),
+    [(Fault, "not sent", 2), (TransportFailure, "UNKNOWN", 3)],
+)
+def test_job_output_query_failure_keeps_its_classification_and_problem(
+    tmp_path, monkeypatch, failure_type, expected_result, exit_code
+):
+    problem = Problem(
+        code="queryUnavailable",
+        message="Original query failure",
+        stage="local.websocket",
+        diagnostic_truncated=True,
+    )
+    calls = []
+    closed = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append((command, args))
+        raise failure_type.from_problem(problem)
+
+    async def close(self):
+        closed.append(self)
+
+    monkeypatch.setattr(JobClient, "call", call)
+    monkeypatch.setattr(JobClient, "close", close)
+    destination = tmp_path / "out.bin"
+    response = CliRunner().invoke(
+        cli.app, ["--json", "job", "output", "j1", "--out", str(destination)]
+    )
+    assert response.exit_code == exit_code, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["result"] == expected_result
+    assert value["reason"] == problem.message
+    assert value["error"] == problem.wire()
+    assert value["data"]["job"] == "j1"
+    assert calls == [("job.get", {"job": "j1"})]
+    assert len(closed) == 1
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    ("execution_result", "output", "expected_reason"),
+    [
+        ("UNKNOWN", None, "Output is unavailable"),
+        ("failed", {"state": "expired"}, "Output is expired"),
+        ("not sent", {"state": "unavailable"}, "Output is unavailable"),
+        ("still running", {"state": "pending"}, "Output is pending"),
+    ],
+)
+def test_job_output_without_exportable_bytes_reports_an_export_failure(
+    tmp_path, monkeypatch, execution_result, output, expected_reason
+):
+    calls = []
+
+    async def call(self, command, args, timeout=10):
+        calls.append(command)
+        return Result(
+            command="shell",
+            result=execution_result,
+            reason="Original execution reason",
+            data={"job": "j1", **({"output": output} if output else {})},
+            error=Problem(
+                code="execution", message="Original execution problem", stage="shell"
+            ),
+            exit=3,
+        )
+
+    monkeypatch.setattr(JobClient, "call", call)
+    response = CliRunner().invoke(
+        cli.app, ["--json", "job", "output", "j1", "--out", str(tmp_path / "out.bin")]
+    )
+    assert response.exit_code == 1, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["data"]["job"] == "j1"
+    assert value["result"] == "failed"
+    assert value["reason"] == expected_reason
+    assert "error" not in value
+    assert "exit" not in value
+    assert calls == ["job.get"]
+    assert not (tmp_path / "out.bin").exists()
+
+
+@pytest.mark.parametrize("parent_kind", ["missing", "file"])
+def test_job_output_parent_is_rejected_without_rpc(
+    tmp_path, monkeypatch, capsys, parent_kind
+):
+    parent = tmp_path / "parent"
+    if parent_kind == "file":
+        parent.write_bytes(b"preserve")
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("invalid parent must not make an RPC")
+
+    monkeypatch.setattr(JobClient, "call", forbidden)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "androidctl",
+            "--json",
+            "job",
+            "output",
+            "j1",
+            "--out",
+            str(parent / "out.bin"),
+        ],
+    )
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    assert stopped.value.code == 2
+    value = json.loads(capsys.readouterr().out)
+    assert value["result"] == "not sent"
+    assert value["error"]["code"] == "fileParent"
+    if parent_kind == "file":
+        assert parent.read_bytes() == b"preserve"
+    else:
+        assert not parent.exists()
 
 
 @pytest.mark.parametrize("as_json", [False, True])
@@ -548,6 +1002,8 @@ def test_empty_output_skips_rpc_and_preview_never_executes_terminal_control(
             result,
             {"stdout": original},
             False,
+            device="my phone",
+            session="task",
             delivery=Output(),
         )
     display = capsys.readouterr().out
@@ -555,13 +1011,20 @@ def test_empty_output_skips_rpc_and_preview_never_executes_terminal_control(
     assert "\\x1b" in display
     assert "\\x07" in display
     with pytest.raises(cli.typer.Exit):
-        job_commands.show(result, {"stdout": original}, True, Output())
+        job_commands.show(
+            result, {"stdout": original}, True, Output(), device=None, session=None
+        )
     assert (
         base64.b64decode(
             json.loads(capsys.readouterr().out)["data"]["outputBytes"]["stdout"]
         )
         == original
     )
+    command = job_commands.output_command(result, "stderr", "my phone", "task")
+    assert command.startswith("androidctl ")
+    assert "my phone" in command
+    assert "task" in command
+    assert "--out" in command
 
 
 @pytest.mark.parametrize("state", ["done", "failed", "not sent", "UNKNOWN"])

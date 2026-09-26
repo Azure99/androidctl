@@ -46,6 +46,7 @@ open again only when continuing is intended.
 ```sh
 androidctl --device DEVICE -s task shell --script-file task.sh
 androidctl --device DEVICE -s task job get JOB_ID
+androidctl --device DEVICE -s task job output JOB_ID --stream stdout --out output.bin
 ```
 
 Supply one complete script after `--` or through `--script-file`. Prefer UTF-8
@@ -57,7 +58,9 @@ the job supervised. Delegated App/system-service work needs its own business che
 Read both execution and cleanup facts; a known script result can accompany
 cleanup failures. The reference explains [shell exits and cleanup](reference.md#jobs-and-files).
 
-Keep the original job ID; query or cancel that ID and preserve cleanup failures.
+Keep the original job ID. `job output` exports retained bytes without rerunning
+the script; truncated/expired output is incomplete. Follow its recovery command
+with a new output path.
 
 For shell, read `helperAlive`, `cleanup`, `cleanupError` and `signalErrors`;
 `helperAlive=false` can coexist with

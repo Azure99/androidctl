@@ -194,7 +194,7 @@ def test_terminal_fields_escape_controls_without_changing_json_or_bytes(capsys):
         data={"signalErrors": [{"pid": 42, "uid": 2000, "errno": 1, "command": label}]},
     )
     with pytest.raises(typer.Exit) as stopped:
-        job_commands.show(job, {}, False, Output())
+        job_commands.show(job, {}, False, Output(), device=None, session=None)
     assert stopped.value.exit_code == 3
     signal = next(
         line for line in capsys.readouterr().out.splitlines() if line.startswith("pid=")
@@ -204,7 +204,9 @@ def test_terminal_fields_escape_controls_without_changing_json_or_bytes(capsys):
         '\\u001b]0;title\\u0007\\u009b\\t\\u202e"'
     )
     with pytest.raises(typer.Exit):
-        job_commands.show(job, {"stdout": b"\0\x1b\xff"}, True, Output())
+        job_commands.show(
+            job, {"stdout": b"\0\x1b\xff"}, True, Output(), device=None, session=None
+        )
     facts = json.loads(capsys.readouterr().out)["data"]
     assert facts["signalErrors"][0]["command"] == label
     assert facts["outputBytes"] == {"stdout": "ABv/"}

@@ -236,6 +236,86 @@ def test_uncertain_local_reply_uses_the_actual_cli_command(
     asyncio.run(run())
 
 
+async def test_job_output_lost_query_reply_is_unknown(tmp_path, monkeypatch):
+    received = []
+
+    async def dispatch(method, args, deadline):
+        received.append((method, args["command"], args["args"]))
+        return completed("job.get", {"job": "j1"}).wire()
+
+    original_send = local_server_module.send
+
+    async def send(connection, value):
+        if "result" in json.loads(value):
+            await connection.close()
+            return
+        await original_send(connection, value)
+
+    monkeypatch.setattr(local_server_module, "send", send)
+    async with local_server(tmp_path / "ipc", dispatch) as (material, _):
+
+        async def connect(*, deadline, start=True):
+            return await Peer.open(material, source="local", deadline=deadline)
+
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        destination = tmp_path / "out.bin"
+        response = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            [
+                "--json",
+                "--device",
+                "phone",
+                "job",
+                "output",
+                "j1",
+                "--out",
+                str(destination),
+            ],
+        )
+    assert response.exit_code == 3, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["result"] == "UNKNOWN"
+    assert value["data"]["job"] == "j1"
+    assert value["error"]["code"] == "replyUnavailable"
+    assert value["error"]["stage"] == "local.websocket"
+    assert received == [("call", "job.get", {"job": "j1"})]
+    assert not destination.exists()
+
+
+async def test_job_output_unknown_device_is_rejected_before_device_rpc(
+    tmp_path, monkeypatch
+):
+    async def dispatch(method, args):
+        pytest.fail("An unknown device sent a device RPC")
+
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        destination = tmp_path / "out.bin"
+        response = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            [
+                "--json",
+                "--device",
+                "missing-device",
+                "job",
+                "output",
+                "j1",
+                "--out",
+                str(destination),
+            ],
+        )
+    assert response.exit_code == 2, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job output"
+    assert value["result"] == "not sent"
+    assert value["error"]["code"] == "deviceNotFound"
+    assert value["data"]["job"] == "j1"
+    assert not destination.exists()
+
+
 @pytest.mark.parametrize("case", ["rejected", "uncertain", "malformed"])
 async def test_local_error_retains_problem_and_dispatch_classification(
     tmp_path, monkeypatch, case

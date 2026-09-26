@@ -13,7 +13,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
-| Jobs | `shell`, `job get/cancel` | [Jobs](#jobs-and-files) |
+| Jobs | `shell`, `job get/cancel/output` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
 
@@ -237,7 +237,7 @@ Nested job facts keep their original meanings.
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
 | `data.job` | Original job ID. [Jobs](#jobs-and-files) |
 | `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
-| `data.queryError`, `outputError` | Failure to query a job or retrieve its output, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
+| `data.queryError`, `outputError` | Failure to query or export a job, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
 | `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
 
 Durations use nonnegative integers with `ms`, `s`, `m` or `h`; only `0` may
@@ -251,6 +251,8 @@ Use `--run` for shell execution limits and `--wait` for shell or `job get` waiti
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
 | Shell execution | `--run` accepts `1ms`–`10m`. |
 | Shell and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
+
+All reported host file paths are absolute, including `job output` exports.
 
 ## Jobs And Files
 
@@ -290,15 +292,26 @@ retaining the known execution result. The CLI can return a known result with
 available output while helper cleanup is still pending.
 
 Shell output retains at most 128 KiB per stream, up to eight cached
-outputs for 120 seconds. Displayed size and SHA-256 cover retained bytes,
-not discarded data. Preview controls are escaped. Truncation, binary data and missing final newlines are identified. Output
-expiry does not change execution results; output retrieval does not repeat the script.
+outputs for 120 seconds. Displayed/exported size and SHA-256 cover retained bytes,
+not discarded data. Preview controls are escaped; `job output` exports original
+bytes. Truncation, binary data and missing final newlines are identified. Output
+expiry does not change execution results; an export result is separate from them.
 `data.queryError` and `data.outputError` use the Problem shape: `code`, `message`,
 and optional `stage`/`diagnosticTruncated`. Text shows only the short message.
-They preserve known execution results and cleanup exits.
+They preserve known execution results and cleanup exits. An export's own `error`
+describes querying, reading or saving, never the original script failure.
+Before the query supplies original job facts, a definite rejection returns
+`not sent`/2; a query that may have been dispatched without a trusted result
+returns `UNKNOWN`/3. Once the original job is known, unavailable output or a
+metadata, read or save failure returns `failed`/1. Successful export returns
+`done`/0 even if the original script failed or is UNKNOWN; its execution and
+cleanup exit do not determine the export's exit.
 Existing specific error codes are preserved; other local output failures use
 code `output`. In `shell`, `job get` and `job cancel` JSON, `data.outputBytes` maps
 stream names to base64-encoded retained original bytes retrieved by this call.
+`job output` writes the `--out` file and returns its successful path in `reason`,
+without `outputBytes`. It requires a new file with an existing parent directory;
+invalid paths reject before querying.
 
 ### Shell Without An Initial Job ID
 
