@@ -17,7 +17,7 @@ internal class FileJob(
     private val completed: () -> Unit,
 ) : Job {
     override val id = "f" + token()
-    private val direction = "push"
+    private val direction: String get() = if (file.push) "push" else "pull"
     override val owner: SessionOwner = resource.lease.owner
     private var fact: JSONObject? = null
     private var ready = false
@@ -108,10 +108,15 @@ internal class FileJob(
         step {
             val offset = args.getLong("offset")
             if (offset != file.offset) throw Rejected("offset", "Unexpected file offset; a chunk is never repeated automatically")
-            val bytes = decodeFileChunk(args.getString("bytes"))
-            if (bytes.isEmpty() || bytes.size > Limits.CHUNK_BYTES) throw Rejected("chunk", "Invalid chunk size")
-            file.write(bytes)
-            val data = json("offset" to file.offset)
+            val data =
+                if (file.push) {
+                    val bytes = decodeFileChunk(args.getString("bytes"))
+                    if (bytes.isEmpty() || bytes.size > Limits.CHUNK_BYTES) throw Rejected("chunk", "Invalid chunk size")
+                    file.write(bytes)
+                    json("offset" to file.offset)
+                } else {
+                    json("offset" to offset, "bytes" to Base64.getEncoder().encodeToString(file.read()))
+                }
             val value = outcome("file chunk", data = data.put("job", id))
             synchronized(this) {
                 lastStep = json("offset" to offset, "result" to value)

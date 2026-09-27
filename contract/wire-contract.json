@@ -119,6 +119,38 @@
   },
   "fileFailures": [
     {
+      "expect": "not sent",
+      "response": {
+        "result": "not sent",
+        "reason": "Session released before transfer began; file open was not attempted",
+        "data": {
+          "job": "f1"
+        },
+        "error": {
+          "code": "sessionChanged",
+          "message": "Lease changed"
+        },
+        "command": "pull"
+      },
+      "name": "before-open"
+    },
+    {
+      "expect": "failed",
+      "response": {
+        "result": "failed",
+        "reason": "Read interrupted",
+        "data": {
+          "job": "f2"
+        },
+        "error": {
+          "code": "workerFailure",
+          "message": "Read interrupted"
+        },
+        "command": "pull"
+      },
+      "name": "read-failed"
+    },
+    {
       "expect": "UNKNOWN",
       "response": {
         "result": "UNKNOWN",

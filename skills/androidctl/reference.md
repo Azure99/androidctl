@@ -13,7 +13,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
-| Jobs and transfers | `shell`, `job get/cancel/output`, `push` | [Jobs](#jobs-and-files) |
+| Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
 
@@ -319,7 +319,7 @@ stream names to base64-encoded retained original bytes retrieved by this call.
 without `outputBytes`. It requires a new file with an existing parent directory;
 invalid paths reject before querying.
 
-Push transfers one ordinary file in 32-KiB chunks, so route round-trip latency
+Push/pull transfer one ordinary file in 32-KiB chunks, so route round-trip latency
 can limit throughput. Publication refuses overwrite unless `--replace` is explicit.
 The source must end at its declared size. Extra bytes fail with `sourceChanged`
 before publication, including files that report zero size while exposing content.
@@ -328,7 +328,7 @@ supported destination or explicitly allow replacement. See
 [publication boundaries](#support-and-storage) before relying on no-overwrite.
 
 On the device, transfer permission precedes opening files; the host may already
-hold a source. A begun transfer may finish after
+hold a source or temporary destination. A begun transfer may finish after
 session release by its original ID; queued work may not begin after release.
 Without active I/O, a device transfer expires after about 120 seconds without an
 owner query/step; blocked kernel I/O is not forcibly interrupted. Local `t...` queries
@@ -340,7 +340,8 @@ facts. Confirmed publication remains done with internal diagnostics and exit 3;
 uncertain publication remains UNKNOWN, and known unpublished work fails.
 Each cleanup step records its failure and continues the other cleanup steps.
 If a local close cannot be confirmed, the terminal result and cleanupError/exit 3
-remain, resourcesActive stays true until this daemon exits. This also rejects device forget as busy. Job cancel does not retry
+remain, resourcesActive stays true and the destination stays occupied until this
+daemon exits. This also rejects device forget as busy. Job cancel does not retry
 cleanup; with other work finished, daemon stop can end the host process. Stopping
 loses in-memory job facts and does not confirm remote cleanup or permit replay.
 
@@ -352,7 +353,9 @@ query returning not sent or UNKNOWN without the original transfer ID adds that i
 did not confirm finish; it does not establish the device's publication outcome.
 Push remains UNKNOWN unless an existing cleanup receipt confirms the original ID,
 size and hash, without repeating publication.
-Its reason then states `Original push confirmed during cleanup`. A device publication
+Its reason then states `Original push confirmed during cleanup`. Before host pull
+publication, UNKNOWN becomes failed and adds `target not published` to the original
+reason, or uses that fact alone when no reason was supplied. A device publication
 preparation failure after opening the temporary file is failed; failure after
 publication starts can be UNKNOWN. Cleanup uncertainty can still override the exit
 code of a known done result.

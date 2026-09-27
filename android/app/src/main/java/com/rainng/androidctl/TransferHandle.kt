@@ -6,10 +6,12 @@ import android.system.OsConstants
 import android.system.StructStat
 import org.json.JSONObject
 import java.io.File
+import java.io.InputStream
 import java.io.OutputStream
 import java.security.MessageDigest
 
 internal class TransferHandle(
+    val push: Boolean,
     path: String,
     private val replace: Boolean,
 ) {
@@ -17,6 +19,7 @@ internal class TransferHandle(
     private val temporary = ".androidctl-${token()}.tmp"
     private var directory = -1
     private var parcel: ParcelFileDescriptor? = null
+    private var input: InputStream? = null
     private var output: OutputStream? = null
     private var original: StructStat? = null
     private val digest = MessageDigest.getInstance("SHA-256")
@@ -42,7 +45,11 @@ internal class TransferHandle(
 
     fun open(expectedSize: Long) {
         directory = NativeFiles.openDirectory(requireNotNull(target.parent).toByteArray())
-        openPushTarget(expectedSize)
+        if (push) {
+            openPushTarget(expectedSize)
+        } else {
+            openPullSource()
+        }
     }
 
     private fun openPushTarget(expectedSize: Long) {
@@ -57,11 +64,33 @@ internal class TransferHandle(
         output = ParcelFileDescriptor.AutoCloseOutputStream(parcel)
     }
 
+    private fun openPullSource() {
+        val fd = NativeFiles.openRegular(directory, target.name.toByteArray())
+        opened = true
+        parcel = ParcelFileDescriptor.adoptFd(fd)
+        original = Os.fstat(requireNotNull(parcel).fileDescriptor)
+        size = requireNotNull(original).st_size
+        input = ParcelFileDescriptor.AutoCloseInputStream(parcel)
+    }
+
     fun write(bytes: ByteArray) {
         if (offset + bytes.size > size) throw Rejected("size", "Chunk exceeds the declared size")
         requireNotNull(output).write(bytes)
         digest.update(bytes)
         offset += bytes.size
+    }
+
+    fun read(): ByteArray {
+        val bytes = ByteArray(minOf(Limits.CHUNK_BYTES.toLong(), size - offset).toInt())
+        var received = 0
+        while (received < bytes.size) {
+            val count = requireNotNull(input).read(bytes, received, bytes.size - received)
+            if (count <= 0) throw Rejected("sourceChanged", "Source ended before its declared size")
+            received += count
+        }
+        digest.update(bytes)
+        offset += bytes.size
+        return bytes
     }
 
     fun finish(
@@ -71,8 +100,29 @@ internal class TransferHandle(
         if (offset != size) throw Rejected("size", "Transfer size does not match")
         val hash = digest.digest().joinToString("") { "%02x".format(it) }
         if (hash != expectedHash) throw Rejected("hash", "Transfer hash does not match")
-        publish(beforePublish)
+        if (push) {
+            publish(beforePublish)
+        } else {
+            verifySource()
+        }
         return json("size" to size, "sha256" to hash)
+    }
+
+    @Suppress("ComplexCondition") // Source identity includes size and both second/nanosecond timestamps.
+    private fun verifySource() {
+        if (requireNotNull(input).read() != -1) {
+            throw Rejected("sourceChanged", "Source contains bytes beyond its declared size")
+        }
+        val current = Os.fstat(requireNotNull(parcel).fileDescriptor)
+        val initial = requireNotNull(original)
+        if (current.st_dev != initial.st_dev ||
+            current.st_ino != initial.st_ino ||
+            current.st_size != initial.st_size ||
+            current.st_mtim != initial.st_mtim ||
+            current.st_ctim != initial.st_ctim
+        ) {
+            throw Rejected("sourceChanged", "Source metadata changed during transfer")
+        }
     }
 
     private fun publish(beforePublish: () -> Unit) {
@@ -108,18 +158,19 @@ internal class TransferHandle(
 
     fun close(): String? {
         val failures = mutableListOf<String>()
-        if (parcel != null && original == null) failures.add("Temporary identity unavailable; left untouched")
+        if (push && parcel != null && original == null) failures.add("Temporary identity unavailable; left untouched")
 
         fun attempt(action: () -> Unit) {
             runCatching(action).onFailure { failures.add(message(it)) }
         }
         // AutoClose streams own the parcel; a failed close must not close the same fd again.
-        val stream = output
+        val stream = output ?: input
         val descriptor = parcel
         output = null
+        input = null
         parcel = null
         attempt { if (stream != null) stream.close() else descriptor?.close() }
-        if (!published && original != null) {
+        if (push && !published && original != null) {
             attempt {
                 val identity = requireNotNull(original)
                 if (!NativeFiles.removeOwned(directory, temporary.toByteArray(), identity.st_dev, identity.st_ino)) {

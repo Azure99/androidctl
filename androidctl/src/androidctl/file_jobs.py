@@ -4,11 +4,13 @@ import asyncio
 import base64
 import hashlib
 import os
+import sys
 import time
 import uuid
 from collections.abc import Callable
 from typing import Any, BinaryIO, Literal, NamedTuple, Protocol, TypeVar
 
+from .private_files import check_private
 from .protocol import (
     CHUNK_BYTES,
     LOCAL_JOB_PREFIX,
@@ -20,9 +22,10 @@ from .protocol import (
     Problem,
     Result,
     completed,
+    decode_chunk,
     uncertain,
 )
-from .user_files import Directory, file_path
+from .user_files import DestinationKey, Directory, FileIdentity, file_path, write_all
 
 T = TypeVar("T")
 CLEANUP_SECONDS = 5.0
@@ -98,6 +101,12 @@ class FileJob:
         ] = "absent"
         self.parent: Directory | None = None
         self.stream: BinaryIO | None = None
+        self.temporary = ".androidctl-" + uuid.uuid4().hex + ".tmp"
+        self.owned: FileIdentity | None = None
+        self.local_publication: Literal["unchanged", "attempted", "published"] = (
+            "unchanged"
+        )
+        self.target_key: DestinationKey | None = None
         self.stage = "opening"
         self.fact: Result | None = None
         self.cleanup_error: str | None = None
@@ -253,6 +262,9 @@ class FileJob:
         assert self.stream is not None, "Transfer stream must be open"  # noqa: S101
         return self.stream
 
+    def write(self, data: bytes) -> None:
+        write_all(self.opened, data)
+
     async def push(self) -> Result:
         self.parent = await self.io(Directory, self.local.parent)
         self.stream = await self.io(self.parent.open, self.local.name)
@@ -289,6 +301,42 @@ class FileJob:
             self.verify_finish(result)
         return self.finish_result(result)
 
+    async def pull(self) -> Result:
+        self.parent = await self.io(Directory, self.local.parent)
+        self.target_key = self.parent.key(self.local.name)
+        self.manager.occupy(self.target_key, self.id)
+        if not self.replace and await self.io(self.parent.exists, self.local.name):
+            raise Fault("fileExists", "Destination exists; choose --replace explicitly")
+        self.stream, self.owned = await self.io(self.parent.create, self.temporary)
+        if sys.platform == "win32":
+            await self.io(check_private, self.parent.path / self.temporary)
+        unconfirmed_begin = await self.begin()
+        if unconfirmed_begin is not None:
+            return unconfirmed_begin
+
+        digest = hashlib.sha256()
+        self.stage = "copying"
+        while self.offset < self.size:
+            self.check()
+            block = await self.chunk({"offset": self.offset})
+            data = decode_chunk(block["bytes"], self.offset, self.size, code="chunk")
+            if block.get("offset") != self.offset:
+                raise Fault("chunk", "Invalid file chunk")
+            await self.io(self.write, data)
+            digest.update(data)
+            self.offset += len(data)
+
+        self.expected_digest = digest.hexdigest()
+        self.stage = "finishing"
+        await self.io(self.flush)
+        result = await self.finish(self.expected_digest)
+        if result.result == "done":
+            self.verify_finish(result)
+            self.stage = "publishing"
+            self.check()
+            await self.io(self.publish)
+        return self.finish_result(result)
+
     def verify_finish(self, result: Result) -> None:
         if (result.data.get("size"), result.data.get("sha256")) != (
             self.size,
@@ -296,6 +344,29 @@ class FileJob:
         ):
             raise Fault("hash", "Device finish metadata does not match")
         self.device_evidence = "finish-verified"
+
+    def flush(self) -> None:
+        stream = self.opened
+        stream.flush()
+        os.fsync(stream.fileno())
+
+    def publish(self) -> None:
+        assert (  # noqa: S101, PT018
+            self.parent is not None and self.owned is not None
+        ), "Pull must create its temporary file before publication"
+
+        def before_publish() -> None:
+            self.check()
+            self.local_publication = "attempted"
+
+        self.parent.publish(
+            self.temporary,
+            self.local.name,
+            self.owned,
+            replace=self.replace,
+            before_publish=before_publish,
+        )
+        self.local_publication = "published"
 
     async def finish(self, digest: str) -> Result:
         self.expected_digest = digest
@@ -326,23 +397,31 @@ class FileJob:
         return result
 
     def publication_attempted(self) -> bool:
-        return self.device_evidence in ("finish-reported", "finish-verified")
+        if self.direction == "push":
+            return self.device_evidence in ("finish-reported", "finish-verified")
+        return self.local_publication != "unchanged"
 
     def publication_confirmed(self) -> bool:
-        return self.device_evidence == "finish-verified"
+        if self.direction == "push":
+            return self.device_evidence == "finish-verified"
+        return self.local_publication == "published"
 
     def result_after_error(self, error: Exception) -> Result:
         classified = isinstance(
             error, (Fault, OSError, ValueError, KeyError, TypeError)
         )
         if classified:
-            known = isinstance(error, (FileExistsError, PermissionError))
+            known = isinstance(error, (FileExistsError, PermissionError)) or (
+                self.direction == "pull"
+                and isinstance(error, Fault)
+                and error.problem.code == "publishUnsupported"
+            )
             publication_unknown = self.publication_attempted() and not known
         else:
             if self.publication_confirmed():
                 return self.success()
             publication_unknown = self.publication_attempted() or (
-                self.device_evidence == "finish-entered"
+                self.direction == "push" and self.device_evidence == "finish-entered"
             )
         return Result(
             command=self.direction,
@@ -354,10 +433,15 @@ class FileJob:
 
     def finish_result(self, result: Result) -> Result:
         if result.result == "UNKNOWN":
+            unpublished_pull = self.direction == "pull"
             return Result(
                 command=self.direction,
-                result="UNKNOWN",
-                reason=result.reason,
+                result="failed" if unpublished_pull else "UNKNOWN",
+                reason=(
+                    "; ".join(filter(None, (result.reason, "target not published")))
+                    if unpublished_pull
+                    else result.reason
+                ),
                 error=result.error,
                 data={"job": self.id},
             )
@@ -383,7 +467,8 @@ class FileJob:
 
     def record_confirmed_push(self, state: Result) -> None:
         if (
-            self.expected_digest is not None
+            self.direction == "push"
+            and self.expected_digest is not None
             and state.result == "done"
             and (
                 state.data.get("job"),
@@ -426,6 +511,18 @@ class FileJob:
                 self.stream = None
         if self.parent is not None:
             try:
+                if (
+                    self.direction == "pull"
+                    and self.local_publication != "published"
+                    and self.owned is not None
+                    and not await self.io(
+                        self.parent.remove, self.temporary, self.owned
+                    )
+                ):
+                    self.cleanup_failed("Temporary identity changed; left untouched")
+            except Exception as error:
+                self.cleanup_failed("Temporary cleanup failed: " + str(error))
+            try:
                 await self.io(self.parent.close)
             except Exception as error:
                 self.cleanup_failed("Local directory close failed: " + str(error))
@@ -436,7 +533,10 @@ class FileJob:
         not_sent = False
         internal: Problem | None = None
         try:
-            self.fact = await self.push()
+            if self.direction == "push":
+                self.fact = await self.push()
+            else:
+                self.fact = await self.pull()
         except (Fault, OSError, ValueError, KeyError, TypeError) as error:
             creation_cleanup = (
                 isinstance(error, Fault) and error.problem.code == "temporaryCleanup"
@@ -474,12 +574,23 @@ class FileJob:
                     "target unchanged; host temporary file removed or absent"
                 )
             if self.stream is None and self.parent is None:
+                self.manager.release(self.target_key, self.id)
                 self.ended = True
 
 
 class FileJobs:
     def __init__(self) -> None:
         self.items: dict[str, FileJob] = {}
+        self.targets: dict[DestinationKey, str] = {}
+
+    def occupy(self, key: DestinationKey, identifier: str) -> None:
+        if key in self.targets:
+            raise Fault("busy", "Another transfer owns this destination")
+        self.targets[key] = identifier
+
+    def release(self, key: DestinationKey | None, identifier: str) -> None:
+        if key is not None and self.targets.get(key) == identifier:
+            del self.targets[key]
 
     def start(
         self,
@@ -492,7 +603,7 @@ class FileJobs:
         remote: Remote,
     ) -> Result:
         if (
-            args.get("direction") != "push"
+            args.get("direction") not in ("push", "pull")
             or not 1 <= args.get("runMs", MAX_RUN_MS) <= MAX_RUN_MS
         ):
             raise Fault("file", "Invalid direction or run budget")

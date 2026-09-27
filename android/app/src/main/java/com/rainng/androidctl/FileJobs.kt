@@ -17,9 +17,9 @@ internal class FileJobs(
         val duration = args.getLong("runMs")
         checkRunMs(duration)
         val direction = args.getString("direction")
-        if (direction != "push") throw Rejected("direction", "Choose push")
-        val file = TransferHandle(args.getString("path"), args.optBoolean("replace"))
-        val size = args.getLong("size")
+        if (direction !in setOf("push", "pull")) throw Rejected("direction", "Choose push or pull")
+        val file = TransferHandle(direction == "push", args.getString("path"), args.optBoolean("replace"))
+        val size = if (direction == "push") args.getLong("size") else 0
         if (size < 0) throw Rejected("size", "Invalid source size")
         val lease = sessions.acquire(owner)
         val resource = sessions.reserve(lease, ResourceKind.FILE, changing = true)

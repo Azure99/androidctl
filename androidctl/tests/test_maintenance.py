@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import threading
 import time
 from contextlib import redirect_stdout
 from types import SimpleNamespace
@@ -15,7 +16,8 @@ from androidctl import coordinator as coordinator_module
 from androidctl import local_call
 from androidctl.cli_options import CliOptions
 from androidctl.coordinator import Coordinator
-from androidctl.private_files import private_directory
+from androidctl.file_jobs import FileJob
+from androidctl.private_files import private_directory, write_json
 from androidctl.protocol import (
     Fault,
     Result,
@@ -23,8 +25,12 @@ from androidctl.protocol import (
 )
 from androidctl.state import HostState
 from connection_test_support import connections
+from file_test_support import Device as FileDevice
 from pairing_test_support import (
+    active_material,
     new_device_identity,
+    paired,
+    save_active,
 )
 
 
@@ -200,3 +206,64 @@ async def test_status_expired_before_dispatch_keeps_not_sent_without_checks(
         assert "before device dispatch" in result.reason
         assert "checks" not in result.data
         assert not coordinator.devices[saved["deviceId"]].in_use()
+
+
+def test_forget_rejects_active_host_io_then_discards_ended_facts(tmp_path, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    write = FileJob.write
+
+    def blocked(job, data):
+        entered.set()
+        assert release.wait(5)
+        write(job, data)
+
+    monkeypatch.setattr(FileJob, "write", blocked)
+
+    async def run():
+        private_directory(tmp_path / "state")
+        state = HostState(tmp_path / "state")
+        saved = paired(state, new_device_identity(), "phone")
+        saved["pairingId"] = "pair"
+        save_active(state, saved)
+        write_json(
+            state.selection, {"deviceId": state.resolve_selection("phone")[0].device_id}
+        )
+        private_directory(tmp_path / "files")
+        coordinator = Coordinator(state, instance="test")
+        file_device = FileDevice()
+
+        device, _ = await coordinator.device(None)
+        monkeypatch.setattr(device, "request", file_device.call)
+        result = await coordinator.dispatch(
+            "call",
+            {
+                "command": "file.start",
+                "args": {
+                    "timeoutMs": 15000,
+                    "direction": "pull",
+                    "local": str(tmp_path / "files/target"),
+                    "remote": "/file",
+                },
+            },
+            deadline=time.monotonic() + 15,
+        )
+        job = coordinator.files.items[result["data"]["job"]]
+        try:
+            assert await asyncio.to_thread(entered.wait, 3)
+            with pytest.raises(Fault, match="Finish local"):
+                await coordinator.forget("phone")
+            assert active_material(state, None) == saved
+            assert not job.ended
+            release.set()
+            await job.task
+            await asyncio.sleep(0)
+            assert job.ended
+            result = await coordinator.forget("phone")
+            assert result.result == "done"
+            assert result.data["discardedJobFacts"] == 1
+            assert not coordinator.files.items
+        finally:
+            release.set()
+            await coordinator.close()
+
+    asyncio.run(run())

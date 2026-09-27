@@ -1,6 +1,6 @@
 ---
 name: androidctl
-description: Use when pairing with an Android device and managing its AndroidCtl session, running supervised device shell scripts and pushing files through the CLI.
+description: Use when pairing with an Android device and managing its AndroidCtl session, running supervised device shell scripts and transferring files through the CLI.
 ---
 
 # AndroidCtl
@@ -48,6 +48,7 @@ androidctl --device DEVICE -s task shell --script-file task.sh
 androidctl --device DEVICE -s task job get JOB_ID
 androidctl --device DEVICE -s task job output JOB_ID --stream stdout --out output.bin
 androidctl --device DEVICE -s task push local.txt /sdcard/Download/remote.txt
+androidctl --device DEVICE -s task pull /sdcard/Download/remote.txt local-copy.txt
 ```
 
 Supply one complete script after `--` or through `--script-file`. Prefer UTF-8
@@ -61,7 +62,7 @@ cleanup failures. The reference explains [shell exits and cleanup](reference.md#
 
 Keep the original job ID. `job output` exports retained bytes without rerunning
 the script; truncated/expired output is incomplete. Follow its recovery command
-with a new output path. `push` refuses overwrite unless `--replace` is intended.
+with a new output path. `push`/`pull` refuse overwrite unless `--replace` is intended.
 Inspect the original job and destination before another transfer; never resend
 an unknown finish because publication may already have happened.
 

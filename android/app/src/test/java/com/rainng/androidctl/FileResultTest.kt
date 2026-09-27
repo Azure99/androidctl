@@ -3,8 +3,10 @@ package com.rainng.androidctl
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 
 class FileResultTest {
     @Test fun publicationUncertaintyTakesPrecedenceOverOpenedFact() {
@@ -20,7 +22,7 @@ class FileResultTest {
                 error = failure,
             ).getString("result"),
         )
-        for (command in listOf("push")) {
+        for (command in listOf("push", "pull")) {
             val result =
                 fileFailure(
                     command = command,
@@ -70,6 +72,49 @@ class FileResultTest {
                 publicationAttempted = true,
                 error = Rejected("publishFailed", "I/O", uncertain = true),
             ).getString("result"),
+        )
+    }
+
+    @Test fun failureWithoutMessageRetainsReasonAndClassification() {
+        val result =
+            fileFailure(
+                command = "pull",
+                id = "f1",
+                begun = true,
+                opened = true,
+                publicationAttempted = false,
+                error = InvocationTargetException(IOException()),
+            )
+        assertEquals("failed", result.getString("result"))
+        assertEquals("IOException", result.getString("reason"))
+        assertEquals("workerFailure", result.getJSONObject("error").getString("code"))
+        assertEquals("IOException", result.getJSONObject("error").getString("message"))
+    }
+
+    @Test fun releasedLeaseDoesNotClaimFileOpenWasAttempted() {
+        val error = Rejected("sessionChanged", "lease changed")
+        val result =
+            fileFailure(
+                command = "pull",
+                id = "f2",
+                begun = false,
+                opened = false,
+                publicationAttempted = false,
+                error = error,
+            )
+        assertEquals("not sent", result.getString("result"))
+        assertTrue(result.getString("reason").contains("file open was not attempted"))
+        assertEquals("sessionChanged", result.getJSONObject("error").getString("code"))
+        assertEquals(
+            "lease changed",
+            fileFailure(
+                command = "pull",
+                id = "f2",
+                begun = true,
+                opened = false,
+                publicationAttempted = false,
+                error = error,
+            ).getString("reason"),
         )
     }
 

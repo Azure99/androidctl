@@ -5,8 +5,9 @@ import hashlib
 import pytest
 
 from androidctl import file_jobs
-from androidctl.file_jobs import FileJobs
+from androidctl.file_jobs import FileJob, FileJobs
 from androidctl.protocol import Problem, Result, completed
+from androidctl.user_files import Directory
 from file_test_support import Device, start
 
 PUBLICATION_BYTES = b"complete publication\n"
@@ -41,6 +42,7 @@ class PushDevice(Device):
 
 def assert_released(job):
     assert job.view().data["resourcesActive"] is False
+    assert not job.manager.targets
     assert not list(job.local.parent.glob(".androidctl-*.tmp"))
 
 
@@ -53,36 +55,74 @@ def assert_internal_diagnostic(value, job):
     assert_released(job)
 
 
-class PendingFinish(Device):
-    async def call(self, command, parameters, **options):
-        if command == "file.cancel":
-            self.commands.append(command)
-            return completed("push", {"job": "f-original", "resourcesActive": False})
-        result = await super().call(command, parameters, **options)
-        if command == "file.finish":
-            return Result(
-                command="push", result="still running", data={"job": "f-original"}
-            )
-        return result
+async def test_defect_before_finish_keeps_pull_unpublished(tmp_path, monkeypatch):
+    async def fail_finish(job, digest):
+        raise RuntimeError("finish defect")
+
+    monkeypatch.setattr(FileJob, "finish", fail_finish)
+    device = Device(PUBLICATION_BYTES)
+    job = start(FileJobs(), tmp_path, remote=device.call)
+    await job.task
+    value = job.manager.find(job.id, "device", "pair", "session").view()
+    assert value.result == "failed"
+    assert value.exit_code() == 1
+    assert_internal_diagnostic(value, job)
+    assert "file.finish" not in device.commands
+    assert not job.local.exists()
 
 
-class CleanupReceipt(PushDevice):
-    def __init__(self, receipt):
-        super().__init__(PUBLICATION_BYTES)
-        self.receipt = receipt
-        self.arrived = asyncio.Event()
-        self.release = asyncio.Event()
+async def test_defect_after_publish_permission_keeps_pull_unknown(
+    tmp_path, monkeypatch
+):
+    original_publish = Directory.publish
 
-    async def call(self, command, parameters, **options):
-        if command == "file.finish":
-            self.commands.append(command)
-            return Result(command="push", result="UNKNOWN")
-        if command == "file.cancel":
-            self.commands.append(command)
-            self.arrived.set()
-            await self.release.wait()
-            return self.receipt
-        return await super().call(command, parameters, **options)
+    def publish(parent, temporary, name, expected, *, replace, before_publish):
+        def permit_then_fail():
+            before_publish()
+            raise RuntimeError("finish defect")
+
+        return original_publish(
+            parent,
+            temporary,
+            name,
+            expected,
+            replace=replace,
+            before_publish=permit_then_fail,
+        )
+
+    monkeypatch.setattr(Directory, "publish", publish)
+    device = Device(PUBLICATION_BYTES)
+    job = start(FileJobs(), tmp_path, remote=device.call)
+    await job.task
+    value = job.view()
+    assert value.result == "UNKNOWN"
+    assert value.exit_code() == 3
+    assert_internal_diagnostic(value, job)
+    assert device.commands.count("file.finish") == 1
+    assert not job.local.exists()
+
+
+async def test_result_construction_defect_keeps_published_pull(tmp_path, monkeypatch):
+    complete = file_jobs.completed
+
+    def fail_once(command, data, **kwargs):
+        monkeypatch.setattr(file_jobs, "completed", complete)
+        raise RuntimeError("finish defect")
+
+    monkeypatch.setattr(file_jobs, "completed", fail_once)
+    device = Device(PUBLICATION_BYTES)
+    job = start(FileJobs(), tmp_path, remote=device.call)
+    await job.task
+    value = job.view()
+    assert value.result == "done"
+    assert value.exit_code() == 3
+    assert_internal_diagnostic(value, job)
+    assert (value.data["size"], value.data["sha256"]) == (
+        len(PUBLICATION_BYTES),
+        PUBLICATION_HASH,
+    )
+    assert job.local.read_bytes() == PUBLICATION_BYTES
+    assert device.commands.count("file.finish") == 1
 
 
 async def test_finish_defect_with_weak_cleanup_keeps_push_unknown(tmp_path):
@@ -175,7 +215,7 @@ async def test_result_construction_defect_keeps_confirmed_push(tmp_path, monkeyp
     assert "file.cancel" not in device.commands
 
 
-@pytest.mark.parametrize("direction", ["push"])
+@pytest.mark.parametrize("direction", ["push", "pull"])
 @pytest.mark.parametrize("receipt_job", [None, "different"])
 async def test_normal_finish_accepts_matching_size_hash_without_matching_job(
     tmp_path, direction, receipt_job
@@ -206,7 +246,7 @@ async def test_normal_finish_accepts_matching_size_hash_without_matching_job(
     assert_released(job)
 
 
-@pytest.mark.parametrize("direction", ["push"])
+@pytest.mark.parametrize("direction", ["push", "pull"])
 async def test_finish_metadata_mismatch_keeps_direction_publication_fact(
     tmp_path, direction
 ):
@@ -233,7 +273,7 @@ async def test_finish_metadata_mismatch_keeps_direction_publication_fact(
     assert_released(job)
 
 
-@pytest.mark.parametrize("direction", ["push"])
+@pytest.mark.parametrize("direction", ["push", "pull"])
 async def test_digest_construction_defect_remains_in_opening_stage(
     tmp_path, monkeypatch, direction
 ):
@@ -264,7 +304,20 @@ async def test_digest_construction_defect_remains_in_opening_stage(
     assert_released(job)
 
 
-@pytest.mark.parametrize("direction", ["push"])
+class PendingFinish(Device):
+    async def call(self, command, parameters, **options):
+        if command == "file.cancel":
+            self.commands.append(command)
+            return completed("push", {"job": "f-original", "resourcesActive": False})
+        result = await super().call(command, parameters, **options)
+        if command == "file.finish":
+            return Result(
+                command="push", result="still running", data={"job": "f-original"}
+            )
+        return result
+
+
+@pytest.mark.parametrize("direction", ["push", "pull"])
 @pytest.mark.parametrize(
     ("reply_at", "original_job"),
     [("finish", False), ("query", False), ("query", True)],
@@ -425,6 +478,25 @@ def test_finish_rejected_before_send_is_failed_not_unknown(tmp_path):
         assert job.ended
 
     asyncio.run(run())
+
+
+class CleanupReceipt(PushDevice):
+    def __init__(self, receipt):
+        super().__init__(PUBLICATION_BYTES)
+        self.receipt = receipt
+        self.arrived = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def call(self, command, parameters, **options):
+        if command == "file.finish":
+            self.commands.append(command)
+            return Result(command="push", result="UNKNOWN")
+        if command == "file.cancel":
+            self.commands.append(command)
+            self.arrived.set()
+            await self.release.wait()
+            return self.receipt
+        return await super().call(command, parameters, **options)
 
 
 @pytest.mark.parametrize(
@@ -639,3 +711,42 @@ async def test_cleanup_query_can_confirm_after_weak_cancel_receipt(tmp_path):
         "file.get",
     ]
     assert_released(job)
+
+
+@pytest.mark.parametrize("existing", [False, True])
+@pytest.mark.parametrize("cleanup_lost", [False, True])
+def test_pull_lost_finish_preserves_unpublished_destination(
+    tmp_path, existing, cleanup_lost
+):
+    target = tmp_path / "final"
+    if existing:
+        target.write_bytes(b"old target")
+
+    class Lost(Device):
+        async def call(self, command, parameters, **options):
+            if command == "file.finish":
+                self.commands.append(command)
+                return Result(command="pull", result="UNKNOWN")
+            if command == "file.cancel" and cleanup_lost:
+                self.commands.append(command)
+                return Result(
+                    command=command,
+                    result="UNKNOWN",
+                    reason="cleanup reply unavailable",
+                    error=Problem(code="offline", message="cleanup reply unavailable"),
+                )
+            return await super().call(command, parameters, **options)
+
+    async def run():
+        device = Lost()
+        job = start(FileJobs(), tmp_path, remote=device.call, replace=existing)
+        await job.task
+        result = job.view()
+        assert result.result == "failed"
+        assert result.reason == "target not published"
+        assert result.exit_code() == (3 if cleanup_lost else 1)
+        assert target.read_bytes() == b"old target" if existing else not target.exists()
+        assert device.commands.count("file.finish") == 1
+        assert not list(tmp_path.glob(".androidctl-*.tmp"))
+
+    asyncio.run(run())

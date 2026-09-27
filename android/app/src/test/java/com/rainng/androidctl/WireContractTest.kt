@@ -127,10 +127,14 @@ class WireContractTest {
     }
 
     private fun fileFailures(): JSONArray {
+        val beforeOpen = fileFailure("pull", "f1", false, false, false, Rejected("sessionChanged", "Lease changed"))
+        val readFailed = fileFailure("pull", "f2", true, true, false, IOException("Read interrupted"))
         val publicationUnknown = fileFailure("push", "f3", true, true, true, IOException("Publication interrupted"))
         val rejected = fileFailure("push", "f4", true, true, true, Rejected("publishFailed", "Target exists"))
         return JSONArray(
             listOf(
+                json("name" to "before-open", "expect" to Outcome.NOT_SENT, "response" to beforeOpen),
+                json("name" to "read-failed", "expect" to Outcome.FAILED, "response" to readFailed),
                 json("name" to "publication-unknown", "expect" to Outcome.UNKNOWN, "response" to publicationUnknown),
                 json("name" to "publication-rejected", "expect" to Outcome.FAILED, "response" to rejected),
             ),

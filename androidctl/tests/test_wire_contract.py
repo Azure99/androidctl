@@ -30,6 +30,20 @@ def index_samples(section, samples, key="name"):
 FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
 
 FILE_FAILURE_EXPECTED = {
+    "before-open": (
+        "not sent",
+        2,
+        [
+            "pull: not sent; job=f1; Session released before transfer began; "
+            "file open was not attempted",
+            "code=sessionChanged",
+        ],
+    ),
+    "read-failed": (
+        "failed",
+        1,
+        ["pull: failed; job=f2; Read interrupted", "code=workerFailure"],
+    ),
     "publication-unknown": (
         "UNKNOWN",
         3,

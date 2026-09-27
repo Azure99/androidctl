@@ -623,6 +623,22 @@ def register(app: typer.Typer) -> None:
     ) -> None:
         transfer(ctx, "push", local, remote, replace, run_ms, wait_ms)
 
+    @app.command(
+        "pull", cls=CliCommand, help="Atomically publish one device file on the host."
+    )
+    def pull(
+        ctx: typer.Context,
+        remote: str,
+        local: Annotated[Path, typer.Argument(readable=False)],
+        replace: Annotated[
+            bool,
+            typer.Option("--replace", help="Allow replacing the local destination."),
+        ] = False,
+        run_ms: TransferRun = MAX_RUN_MS,
+        wait_ms: TransferWait = 10000,
+    ) -> None:
+        transfer(ctx, "pull", local, remote, replace, run_ms, wait_ms)
+
 
 def transfer(
     ctx: typer.Context,

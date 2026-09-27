@@ -11,7 +11,7 @@ from androidctl.protocol import Problem, Result, completed
 from file_test_support import Device, start
 
 
-@pytest.mark.parametrize("direction", ["push"])
+@pytest.mark.parametrize("direction", ["push", "pull"])
 async def test_cancel_before_begin_call_keeps_zero_dispatch_fact(
     tmp_path, monkeypatch, direction
 ):
@@ -40,6 +40,44 @@ async def test_cancel_before_begin_call_keeps_zero_dispatch_fact(
     assert not device.commands
     assert local.read_bytes() == b"unchanged"
     assert not list(tmp_path.glob(".androidctl-*.tmp"))
+
+
+@pytest.mark.parametrize(
+    ("phase", "stage"), [("file.begin", "opening"), ("file.chunk", "copying")]
+)
+def test_unexpected_open_copy_failure_has_terminal_original_identity(
+    tmp_path, phase, stage
+):
+    class DefectiveDevice(Device):
+        async def call(self, command, parameters, **options):
+            if command == phase:
+                self.commands.append(phase)
+                raise RuntimeError("unexpected transfer defect")
+            return await super().call(command, parameters, **options)
+
+    async def run():
+        device = DefectiveDevice()
+        manager = FileJobs()
+        job = start(manager, tmp_path, remote=device.call)
+        await job.task
+        value = manager.find(job.id, "device", "pair", "session").view()
+        assert value.result == "failed"
+        assert value.error.wire() == {
+            "code": "internal",
+            "message": "unexpected transfer defect",
+            "stage": f"host.file.{stage}",
+        }
+        assert value.data["job"] == job.id
+        assert value.data.get("deviceJob") == (
+            "f-original" if phase == "file.chunk" else None
+        )
+        assert value.data["resourcesActive"] is False
+        assert device.commands.count(phase) == 1
+        assert "file.finish" not in device.commands
+        assert not list(tmp_path.iterdir())
+        assert not manager.targets
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize(
@@ -135,11 +173,59 @@ def test_push_verifies_source_before_publishing(
         assert source.read_bytes() == body
         assert result.data["resourcesActive"] is False
         assert job.stream is None
+        assert not manager.targets
 
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("direction", ["push"])
+@pytest.mark.parametrize(
+    "phase", ["file.begin", "file.get", "file.chunk", "file.finish"]
+)
+def test_device_problem_survives_host_transfer_classification(tmp_path, phase):
+    problem = Problem(
+        code="fileExists" if phase in ("file.begin", "file.get") else "deviceIo",
+        message="Device diagnostic",
+        stage="device.file",
+        diagnostic_truncated=True,
+    )
+
+    class FailingDevice(Device):
+        async def call(self, command, parameters, **options):
+            if command == phase:
+                self.commands.append(phase)
+                return Result(
+                    command=phase,
+                    result=(
+                        "not sent" if phase in ("file.begin", "file.get") else "failed"
+                    ),
+                    reason="Transfer rejected",
+                    error=problem,
+                    data={
+                        **({"job": "f-original"} if phase != "file.begin" else {}),
+                        "resourcesActive": False,
+                    },
+                )
+            return await super().call(command, parameters, **options)
+
+    async def run():
+        device = FailingDevice()
+        job = start(FileJobs(), tmp_path, remote=device.call)
+        await job.task
+        result = job.view()
+        assert result.error == problem
+        assert result.reason.startswith("Transfer rejected")
+        assert result.result == (
+            "not sent" if phase in ("file.begin", "file.get") else "failed"
+        )
+        assert not result.data["resourcesActive"]
+        assert not (tmp_path / "final").exists()
+        assert not list(tmp_path.glob(".androidctl-*.tmp"))
+        assert device.commands.count(phase) == 1
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("direction", ["push", "pull"])
 @pytest.mark.parametrize(
     "failure", ["offline", "lost", "before-open", "after-open", "query-not-sent"]
 )

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ctypes
+import errno
 import os
 import stat
 import sys
+from collections.abc import Callable
 from contextlib import nullcontext
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -13,11 +15,17 @@ from typing import Any, BinaryIO, cast
 
 from .protocol import Fault
 
+RENAME_NOREPLACE = 1
+RENAME_EXCL = 4
+
 
 @dataclass(frozen=True)
 class FileIdentity:
     filesystem: int
     file_id: int | str
+
+
+DestinationKey = tuple[FileIdentity, str]
 
 
 def create(directory: Path, name: str, data: bytes) -> None:
@@ -315,6 +323,9 @@ class Directory:
                 self.close()
                 raise
 
+    def key(self, name: str) -> DestinationKey:
+        return self.identity, name.casefold() if self.kernel else name
+
     def open(self, name: str) -> BinaryIO:
         return self._open(name, create=False)[0]
 
@@ -392,10 +403,78 @@ class Directory:
                     ) from error
                 raise
 
+    def exists(self, name: str) -> bool:
+        try:
+            with self.open(name):
+                return True
+        except FileNotFoundError:
+            return False
+
     def verify(self, name: str, expected: FileIdentity) -> None:
         with self.open(name) as stream:
             if identity(stream) != expected:
                 raise Fault("temporaryChanged", "Temporary file identity changed")
+
+    def publish(
+        self,
+        temporary: str,
+        name: str,
+        expected: FileIdentity,
+        *,
+        replace: bool,
+        before_publish: Callable[[], None],
+    ) -> None:
+        self.verify(temporary, expected)
+        # Opening an existing target rejects non-files and final links/reparse points.
+        try:
+            with self.open(name):
+                pass
+        except FileNotFoundError:
+            pass
+        if sys.platform == "win32":
+            before_publish()
+            (os.replace if replace else os.rename)(
+                self.path / temporary, self.path / name
+            )
+        elif replace:
+            before_publish()
+            os.replace(temporary, name, src_dir_fd=self.handle, dst_dir_fd=self.handle)
+        elif sys.platform in ("linux", "darwin"):
+            library = ctypes.CDLL(None, use_errno=True)
+            darwin = sys.platform == "darwin"
+            rename = getattr(library, "renameatx_np" if darwin else "renameat2", None)
+            if rename is None:
+                raise Fault(
+                    "publishUnsupported", "Atomic no-replace publishing is unavailable"
+                )
+            rename.argtypes = [
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_int,
+                ctypes.c_char_p,
+                ctypes.c_uint,
+            ]
+            rename.restype = ctypes.c_int
+            before_publish()
+            if rename(
+                self.handle,
+                os.fsencode(temporary),
+                self.handle,
+                os.fsencode(name),
+                RENAME_EXCL if darwin else RENAME_NOREPLACE,
+            ):
+                code = ctypes.get_errno()
+                if code in (errno.EINVAL, errno.ENOTSUP, errno.ENOSYS):
+                    raise Fault(
+                        "publishUnsupported",
+                        "Atomic no-replace is unsupported here; "
+                        "choose --replace or another path",
+                    )
+                raise OSError(code, os.strerror(code))
+        else:
+            raise Fault(
+                "publishUnsupported", "Atomic no-replace publishing is unavailable"
+            )
 
     def remove(self, name: str, expected: FileIdentity) -> bool:
         if sys.platform == "win32":
