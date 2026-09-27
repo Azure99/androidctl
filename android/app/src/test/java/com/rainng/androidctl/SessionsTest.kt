@@ -129,7 +129,7 @@ class SessionsTest {
         var time = 0L
         val sessions = Sessions { time }
         val lease = sessions.open(first, idleMs = 1000)
-        val task = sessions.reserve(lease, ResourceKind.SHELL, changing = true)
+        val task = sessions.reserve(lease, ResourceKind.FILE, changing = true)
         time = 9000
         sessions.expire()
         assertEquals(first.name, sessions.callerStatus(first)["name"])
@@ -153,7 +153,7 @@ class SessionsTest {
     @Test fun stoppingRejectsAlreadyAcquiredButNotReservedWork() {
         val sessions = Sessions { 0L }
         val lease = sessions.acquire(first)
-        val resource = sessions.reserve(lease, ResourceKind.SHELL, changing = true)
+        val resource = sessions.reserve(lease, ResourceKind.FILE, changing = true)
         assertEquals("busy", assertThrows(Rejected::class.java) { sessions.stop() }.code)
         sessions.finished(resource)
         sessions.stop()

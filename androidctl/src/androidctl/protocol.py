@@ -13,6 +13,8 @@ JSON_UTF8_BYTES = 96 * 1024
 CHUNK_BYTES = 32 * 1024
 OUTPUT_BYTES = 128 * 1024
 MAX_RUN_MS = 600000
+RECENT_JOBS = 64
+LOCAL_JOB_PREFIX = "t"
 MAX_CONNECTIONS = 16
 PAIRING_NAME_UNITS = 100
 CONNECT_SECONDS = 5.0
@@ -107,3 +109,7 @@ def uncertain(command: str, fault: Fault, data: dict[str, Any] | None = None) ->
         data=data or {},
         error=fault.problem,
     )
+
+
+def is_local_transfer(identifier: str) -> bool:
+    return identifier.startswith(LOCAL_JOB_PREFIX)

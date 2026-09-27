@@ -118,7 +118,7 @@ def emit_status(facts: dict[str, Any], output: Output) -> None:
         output.echo("session=none")
     if held.get("callerState"):
         output.echo("callerSession=" + held["callerState"])
-    output.echo(f"shell={held['shell']}")
+    output.echo(f"shell={held['shell']} file={held['file']}")
     helpers = facts.get("helpers", {})
     if helpers.get("pids"):
         output.echo("helper pids=" + ",".join(map(str, helpers["pids"])))

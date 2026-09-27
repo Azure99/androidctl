@@ -13,7 +13,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
-| Jobs | `shell`, `job get/cancel/output` | [Jobs](#jobs-and-files) |
+| Jobs and transfers | `shell`, `job get/cancel/output`, `push` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
 
@@ -78,15 +78,15 @@ pairing's jobs. UUIDs can be used directly with `--device`; no prefix
 matching is performed. `pair` and `device address` require `HOST:PORT`, with a port
 from 1 to 65535; enclose IPv6 hosts in brackets. `device address DEVICE HOST:PORT`
 changes the route, not trust. `device forget DEVICE`
-works offline, refuses active local work, and removes that local record; it does
-not revoke device credentials or stop remote work.
+works offline, refuses active local work, and removes that local record and retained
+local job facts; it does not revoke device credentials or stop remote work.
 If unlinking the pairing file fails with an OS error, the result is not sent with
 exit 2 and a `localConfiguration` Problem at `local.configuration`; local preparation
 may already have closed the connection. A failure before removing the pairing
 does not report `forgotten`.
 If the pairing was removed but its global selection could not be read or cleared,
-the result is failed with exit 1. It retains `forgotten` and `selectionCleared`,
-with a `data.selectionError` Problem containing `code`,
+the result is failed with exit 1. It retains `forgotten`, `selectionCleared` and
+`discardedJobFacts`, with a `data.selectionError` Problem containing `code`,
 `message` and any `stage`. A malformed selection file is preserved. Text displays
 `Selection: <message>`; JSON retains the complete Problem.
 Management text uses lowercase `true`/`false` for boolean fields and does not add
@@ -117,7 +117,8 @@ Device-side **Release current session** does not kill active work;
 the released caller must explicitly reopen before new work.
 
 `connectionBusy` reports another session occupying the connection. Same-session
-calls can wait within their original budget. `status` separates the
+calls can wait within their original budget. Queries and file work may queue;
+queuing does not waive the worker's session permission. `status` separates the
 active owner (`session.name` and `session.pairingName`) from the caller state
 (`session.callerState`, with values `active`, `released` or `none`).
 
@@ -134,7 +135,7 @@ Rejection does not always include the peer's version.
 
 **Gateway off** stops new requests; stopping/failed may still have live work.
 After that work ends, **Refresh status** can confirm completion. **Stop idle executor**
-refuses live helpers; Refresh then attaches a new worker.
+refuses live helpers/transfers; Refresh then attaches a new worker.
 Wait for stopping to finish; if it fails, use **Refresh status** after the work ends.
 **Force executor exit** is a separate device-local confirmation bound to the shown
 worker ID, session and jobs. It can also confirm that the captured worker is already
@@ -146,7 +147,8 @@ remote force command.
 Use **Refresh status** to reconnect when the worker is unavailable. Cached
 management state may still show the previous worker.
 
-Worker restart loses device `j...` jobs.
+Worker restart loses device `j...`
+jobs; a surviving daemon can retain local `t...` transfer facts.
 Unused device connections close after 45 seconds; the daemon exits after about
 five continuous idle minutes with no local work or connections.
 
@@ -213,9 +215,9 @@ lock, and deleting a file does not stop its owner.
 | --- | ---: | --- |
 | `done` | 0 | The command's stated condition completed. |
 | `failed` | 1 | A known failure; partial effects can remain. |
-| `not sent` | 2 | The request was not dispatched. |
+| `not sent` | 2 | The request was not dispatched; transfer admission also requires no execution/publication effects. |
 | `UNKNOWN` | 3 | Dispatch or its final outcome is uncertain. |
-| `still running` | 4 | A shell job has no final result yet, or `daemon stop` has not confirmed shutdown. Query or cancel the original job ID, or recheck the daemon with `daemon status`, respectively. |
+| `still running` | 4 | A shell/transfer job has no final result yet, or `daemon stop` has not confirmed shutdown. Query or cancel the original job ID, or recheck the daemon with `daemon status`, respectively. |
 
 Cleanup failure, uncertainty or signal failure overrides exit to 3 while retaining
 the known main result. Known shell cancellation with only ordinary pending cleanup
@@ -235,22 +237,24 @@ Nested job facts keep their original meanings.
 | Location | Interpretation |
 | --- | --- |
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
-| `data.job` | Original job ID. [Jobs](#jobs-and-files) |
+| `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
 | `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
+| `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
 | `data.queryError`, `outputError` | Failure to query or export a job, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
 | `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
 
 Durations use nonnegative integers with `ms`, `s`, `m` or `h`; only `0` may
 omit its unit. Each option retains its own range. Requests share one finite
 budget across local lookup, connection, authentication and device work.
-Use `--run` for shell execution limits and `--wait` for shell or `job get` waiting.
+Use `--run` for shell/transfer execution limits and `--wait` for shell/transfer or `job get` waiting.
 
 | Budget | Default / limit |
 | --- | --- |
 | Ordinary shell execution / initial wait | 10000 ms each. |
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
-| Shell execution | `--run` accepts `1ms`–`10m`. |
-| Shell and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
+| Transfer execution / initial wait | 600000 ms / 10000 ms. |
+| Shell or transfer execution | `--run` accepts `1ms`–`10m`. |
+| Shell/transfer and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
 
 All reported host file paths are absolute, including `job output` exports.
 
@@ -265,6 +269,8 @@ The local CLI-to-daemon message is limited to 256 KiB. The complete encoded JSON
 request sent to the device also has a 96-KiB budget. It may reject a file within
 64 KiB as not sent/2 after daemon connection, device selection or device connection,
 but before business dispatch. The device keeps its existing script limits for argv input.
+If the encoded request is too large, shorten the script or push it to a task-owned
+device path and run it there after the transfer succeeds.
 
 Both modes supervise descendants, including `&`, `nohup` and `setsid`; work
 delegated to apps or system services is outside that supervision. Background
@@ -313,6 +319,51 @@ stream names to base64-encoded retained original bytes retrieved by this call.
 without `outputBytes`. It requires a new file with an existing parent directory;
 invalid paths reject before querying.
 
+Push transfers one ordinary file in 32-KiB chunks, so route round-trip latency
+can limit throughput. Publication refuses overwrite unless `--replace` is explicit.
+The source must end at its declared size. Extra bytes fail with `sourceChanged`
+before publication, including files that report zero size while exposing content.
+Unsupported publication primitives report failed/publishUnsupported; choose a
+supported destination or explicitly allow replacement. See
+[publication boundaries](#support-and-storage) before relying on no-overwrite.
+
+On the device, transfer permission precedes opening files; the host may already
+hold a source. A begun transfer may finish after
+session release by its original ID; queued work may not begin after release.
+Without active I/O, a device transfer expires after about 120 seconds without an
+owner query/step; blocked kernel I/O is not forcibly interrupted. Local `t...` queries
+return host facts for the original pairing/session without contacting the device.
+Cancelling an active transfer records `stopRequested`, then the transfer attempts
+device cleanup with its own budget. Cleanup failures appear in `cleanupError`.
+Unexpected host open/copy/finish defects retain the original job ID and publication
+facts. Confirmed publication remains done with internal diagnostics and exit 3;
+uncertain publication remains UNKNOWN, and known unpublished work fails.
+Each cleanup step records its failure and continues the other cleanup steps.
+If a local close cannot be confirmed, the terminal result and cleanupError/exit 3
+remain, resourcesActive stays true until this daemon exits. This also rejects device forget as busy. Job cancel does not retry
+cleanup; with other work finished, daemon stop can end the host process. Stopping
+loses in-memory job facts and does not confirm remote cleanup or permit replay.
+
+Not sent requires no data transferred, no device object created, an unchanged
+target, and a removed or absent host temporary file. A lost begin reply is failed and can leave
+temporary device work; it is not resent. A finish known unsent is failed. A lost
+finish or a device UNKNOWN preserves its original reason and Problem. A subsequent
+query returning not sent or UNKNOWN without the original transfer ID adds that it
+did not confirm finish; it does not establish the device's publication outcome.
+Push remains UNKNOWN unless an existing cleanup receipt confirms the original ID,
+size and hash, without repeating publication.
+Its reason then states `Original push confirmed during cleanup`. A device publication
+preparation failure after opening the temporary file is failed; failure after
+publication starts can be UNKNOWN. Cleanup uncertainty can still override the exit
+code of a known done result.
+
+`stopRequested` is not completion. `resourcesActive` stays true until local I/O and
+cleanup end; `cleanupError` can identify failed or unconfirmed device cleanup.
+Device cleanup that was not confirmed remains reported with the original job ID;
+UNKNOWN or not sent alone does not mean resources ended. Local completion does
+not imply remote completion. There are no structured install/uninstall/recovery
+commands.
+
 ### Shell Without An Initial Job ID
 
 For a shell UNKNOWN with no initial job ID, inspect `status` on the original
@@ -325,6 +376,20 @@ Multiple candidates, an already-ended job or uncertain association leaves UNKNOW
 do not resend the script. Querying an identified job does not rewrite the lost reply.
 
 ## Support And Storage
+
+Targets are Python 3.12+ on Windows/macOS/Linux, Android API 30+ on arm64-v8a/x86_64,
+shell-UID Shizuku, Android user 0 and default display. Root Shizuku, 32-bit userspace,
+other users/work profiles and secondary displays are unsupported. Local/network
+filesystems must provide the required publication operations. Windows host state
+storage must support replacing open records.
+
+Publication checks ordinary concurrent destination conflicts and reports the
+object's hash at publication time, not after later edits. Android shared-storage
+concurrent creation of the same destination is excluded from no-overwrite.
+Parent directories follow ordinary access rules; temporary files must remain
+private. Active interference with temporary objects by the same user, privileged
+processes, directory-authorized principals, shared-storage Apps or an app-specific
+directory's owner is outside the guarantee.
 
 Credentials are private to the current OS user, under `%LOCALAPPDATA%/AndroidCtl`
 on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions and job facts

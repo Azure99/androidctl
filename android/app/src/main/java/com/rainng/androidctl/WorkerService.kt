@@ -20,12 +20,14 @@ class WorkerService(
     private val workerLock = WorkerLock()
     private val workerId = token()
     private val sessions = Sessions(SystemClock::elapsedRealtime)
+    private val files = FileJobs(sessions)
     private val shell = ShellJobs(context, sessions, workerLock.directory, workerLock::check)
     private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "androidctl-idle") }
     private val maintenanceFailures = ConcurrentHashMap<String, String>()
 
     init {
         maintenance("sessionExpiry", sessions::expire)
+        maintenance("fileExpiry", files::expire)
     }
 
     // Unexpected failure ends only this periodic responsibility and remains visible.
@@ -60,6 +62,8 @@ class WorkerService(
             } else {
                 if (method !in RpcMethods.ALLOWED_WHILE_STOPPING) accepting()
                 when (method) {
+                    "file.begin" -> files.start(owner, body.getJSONObject("args"))
+                    "file.get", "file.cancel", "file.chunk", "file.finish" -> files.call(owner, method, body.getJSONObject("args"))
                     "shell.start" -> shell.start(owner, body.getJSONObject("args"))
                     "job.get" -> shell.get(owner, body.getJSONObject("args"))
                     "job.cancel" -> shell.cancel(owner, body.getJSONObject("args"))
@@ -113,24 +117,28 @@ class WorkerService(
         managed {
             sessions.revoke(pairingId)
             shell.revoke(pairingId)
+            files.revoke(pairingId)
         }
 
     override fun reconcile(allowedPairings: String): String =
         managed {
             val values = JSONArray(allowedPairings)
             val allowed = (0 until values.length()).map(values::getString).toSet()
-            val retained = sessions.retainedPairings() + shell.retainedPairings()
+            val retained = sessions.retainedPairings() + shell.retainedPairings() + files.retainedPairings()
             for (pairing in retained - allowed) {
                 sessions.revoke(pairing)
                 shell.revoke(pairing)
+                files.revoke(pairing)
             }
         }
 
     override fun prepareStop(): String =
         managed {
             shell.prepareStop {
-                sessions.stop()
-                timer.shutdown()
+                files.prepareStop {
+                    sessions.stop()
+                    timer.shutdown()
+                }
             }
         }
 

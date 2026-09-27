@@ -10,6 +10,7 @@ from typing import Any, Literal, TypeVar, cast
 
 from websockets.exceptions import ConnectionClosed
 
+from .file_jobs import FileJobs
 from .identity import DeviceIdentity, endpoint, trusted_certificate
 from .private_files import PublishedWriteError, write_json
 from .protocol import (
@@ -19,6 +20,7 @@ from .protocol import (
     Result,
     TransportFailure,
     completed,
+    is_local_transfer,
     rejected,
     uncertain,
 )
@@ -34,7 +36,16 @@ from .transport import Peer
 T = TypeVar("T")
 PeerRole = Literal["mutation", "query"]
 PEER_IDLE_SECONDS = 45.0
-QUERY_METHODS = frozenset({"status", "job.get", "job.cancel", "output.read"})
+QUERY_METHODS = frozenset(
+    {
+        "status",
+        "job.get",
+        "job.cancel",
+        "output.read",
+        "file.get",
+        "file.cancel",
+    }
+)
 
 
 def local_configuration(message: str) -> Fault:
@@ -194,6 +205,12 @@ class Device:
         outcome.data.update(timings)
         return outcome
 
+    def retain_transfer(self) -> None:
+        self._active_calls += 1
+
+    def release_transfer(self) -> None:
+        self._active_calls -= 1
+
     async def replace_record(self, record: PairingRecord) -> None:
         self._record = record
         await self.close()
@@ -236,6 +253,7 @@ class Coordinator:
         self.io_task: asyncio.Task[Any] | None = None
         self.io_lock = asyncio.Lock()
         self.changing: set[str] = set()
+        self.files = FileJobs()
 
     async def io(self, function: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         await self.io_lock.acquire()
@@ -477,7 +495,25 @@ class Coordinator:
             )
         if time.monotonic() >= deadline:
             raise Fault("timeout", "Request budget exhausted before device dispatch")
-        if command == "status":
+        if command == "file.start":
+            device.retain_transfer()
+            try:
+                result = self.files.start(
+                    device.record.device_id,
+                    device.active.pairing_id,
+                    args.get("session", "default"),
+                    parameters,
+                    device.release_transfer,
+                    remote=device.request,
+                )
+            except BaseException:
+                device.release_transfer()
+                raise
+        elif command in ("job.get", "job.cancel") and is_local_transfer(
+            parameters.get("job", "")
+        ):
+            result = self.local_file(device, args, parameters)
+        elif command == "status":
             result = await self.status(device, args, deadline)
         else:
             result = await device.request(
@@ -539,6 +575,22 @@ class Coordinator:
         outcome.data["device"] = device.active.alias
         return outcome
 
+    def local_file(
+        self,
+        device: Device,
+        args: dict[str, Any],
+        parameters: dict[str, Any],
+    ) -> Result:
+        job = self.files.find(
+            parameters["job"],
+            device.record.device_id,
+            device.active.pairing_id,
+            args.get("session", "default"),
+        )
+        if args["command"] == "job.cancel":
+            job.request_stop()
+        return job.view()
+
     async def address(self, args: dict[str, Any]) -> Result:
         endpoint(args["endpoint"])
         return await self.update_connection(args, "endpoint", args["endpoint"])
@@ -546,8 +598,17 @@ class Coordinator:
     async def forget(self, identifier: str) -> Result:
         key = await self.io(self.state.resolve_forget_key, identifier)
         device = self.devices.get(key)
-        if key in self.changing or device is not None and device.in_use():
-            raise Fault("busy", "Finish local device requests before forgetting")
+        if (
+            key in self.changing
+            or device is not None
+            and device.in_use()
+            or any(
+                job.device == key and not job.ended for job in self.files.items.values()
+            )
+        ):
+            raise Fault(
+                "busy", "Finish local device requests and transfers before forgetting"
+            )
         self.changing.add(key)
         try:
             if device is not None:
@@ -557,10 +618,12 @@ class Coordinator:
             except OSError as error:
                 return rejected("device forget", local_configuration(str(error)))
             self.devices.pop(key, None)
+            data["discardedJobFacts"] = self.files.discard_device(key)
             return Result(
                 command="device forget",
                 result="failed" if data.get("selectionError") else "done",
-                reason="Local pairing removed; device credentials were not revoked",
+                reason="Local pairing removed; device jobs were not checked or "
+                "stopped; device credentials were not revoked",
                 data=data,
             )
         finally:
@@ -717,6 +780,7 @@ class Coordinator:
         )
 
     async def close(self) -> None:
+        await self.files.close()
         await asyncio.gather(*tuple(self.tasks), return_exceptions=True)
         if self.io_task is not None:
             await asyncio.gather(self.io_task, return_exceptions=True)

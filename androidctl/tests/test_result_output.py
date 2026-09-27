@@ -78,7 +78,7 @@ def test_session_names_are_escaped_only_in_human_output(capsys):
         cli.emit(Result(command="session open", result="done", data=facts))
     assert result.value.exit_code == 0
     assert 'name="task\\u202e"' in capsys.readouterr().out
-    session = {**facts, "shell": 0}
+    session = {**facts, "shell": 0, "file": 0}
     value = Result(
         command="status",
         result="done",
@@ -109,7 +109,7 @@ def test_device_alias_is_escaped_only_in_text(capsys, command, alias, display):
         data={
             "device": alias,
             "worker": "ready",
-            "session": {"shell": 0},
+            "session": {"shell": 0, "file": 0},
         },
     )
     original = value.wire()
@@ -139,7 +139,7 @@ def test_expected_write_errors_keep_known_result(monkeypatch, closed):
     if closed:
         stream.close()
     monkeypatch.setattr(sys, "stdout", stream)
-    result = Result(command="pair", result="done", exit=3)
+    result = Result(command="push", result="done", exit=3)
     with pytest.raises(typer.Exit) as stopped:
         cli.emit(result)
     assert stopped.value.exit_code == 3
@@ -264,6 +264,7 @@ async def test_forget_renderer_keeps_failed_facts(tmp_path, monkeypatch):
     assert "session=" not in output
     assert f"forgotten={saved['deviceId']}\n" in output
     assert "selectionCleared=false\n" in output
+    assert "discardedJobFacts=0\n" in output
     assert "Selection: " + forgotten.data["selectionError"]["message"] + "\n" in output
     assert "selectionError=" not in output
     assert forgotten.data["selectionError"]["code"] == "selectionInvalid"
@@ -365,6 +366,7 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
                 "idleSeconds": 12,
                 "callerState": "none",
                 "shell": 0,
+                "file": 0,
             },
             helpers={"pids": [42], "active": ["j1"]},
             diagnostics={"maintenance": {}},
@@ -386,7 +388,7 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         assert "callerSession=none\n" in output
         assert "workerId=worker-1\n" in output
         assert 'gateway={"state": "listening"}\n' in output
-        assert "shell=0\n" in output
+        assert "shell=0 file=0\n" in output
         assert "helper pids=42\njobs=j1\n" in output
 
 

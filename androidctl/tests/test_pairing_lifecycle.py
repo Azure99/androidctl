@@ -281,6 +281,120 @@ async def test_confirmation_validation_and_close_faults_do_not_activate(
             await coordinator.close()
 
 
+async def test_unregistered_candidate_recovers_without_losing_old_route_or_credential(
+    tmp_path,
+):
+    async def dispatch(method, args):
+        return completed(method).wire()
+
+    gateway = Gateway(tmp_path / "tls", dispatch=dispatch)
+    private_directory(tmp_path / "state")
+    state = HostState(tmp_path / "state")
+    async with gateway.listening():
+        old = save_active(
+            state,
+            {
+                **gateway.identity,
+                "alias": "old",
+                "credential": "old-credential",
+                "pairingId": "old-pair",
+            },
+        )
+        old_endpoint = old["endpoint"]
+        gateway.credentials["old-credential"] = "old-pair"
+        coordinator = Coordinator(state, instance="test")
+        async with gateway.listening():
+            record, _ = state.prepare_pairing(
+                DeviceIdentity(
+                    gateway.identity["deviceId"], gateway.identity["certificate"]
+                ),
+                gateway.identity["endpoint"],
+                "new",
+            )
+            credential = record.candidate.credential
+            try:
+                with pytest.raises(Fault) as caught:
+                    await coordinator.pair(
+                        gateway.args(name="new", code="999999"),
+                        deadline=time.monotonic() + 20,
+                    )
+                assert caught.value.problem.code == "unauthorized"
+                assert not gateway.registers
+                assert state.record(record.device_id).candidate.credential == credential
+                assert active_material(state, "old") == old
+                result = await coordinator.dispatch(
+                    "call",
+                    {
+                        "args": {"timeoutMs": 15000},
+                        "command": "status",
+                        "device": "old",
+                    },
+                    deadline=time.monotonic() + 15,
+                )
+                assert result["result"] == "done"
+                assert result["data"]["device"] == "old"
+                old_port = gateway.connections[-1].local_address[1]
+                assert old_endpoint == f"wss://127.0.0.1:{old_port}/androidctl"
+                transfer = await coordinator.dispatch(
+                    "call",
+                    {
+                        "device": "old",
+                        "command": "file.start",
+                        "args": {
+                            "timeoutMs": 15000,
+                            "direction": "push",
+                            "local": str(tmp_path / "missing-source"),
+                            "remote": "/unused",
+                        },
+                    },
+                    deadline=time.monotonic() + 15,
+                )
+                job = coordinator.files.items[transfer["data"]["job"]]
+                await job.task
+                query = {
+                    "device": "old",
+                    "command": "job.get",
+                    "args": {"job": job.id, "timeoutMs": 15000},
+                }
+                observed = await coordinator.dispatch(
+                    "call", query, deadline=time.monotonic() + 15
+                )
+                assert observed["result"] == "not sent"
+                assert observed["data"]["job"] == job.id
+                assert (
+                    await coordinator.pair(
+                        gateway.args(name="new"), deadline=time.monotonic() + 20
+                    )
+                ).result == "done"
+                active = state.resolve_selection("new")[0].active
+                assert active.credential == credential
+                assert active.pairing_id == "pair-1"
+                assert active.endpoint == gateway.identity["endpoint"]
+                assert len(gateway.registers) == 1
+                assert gateway.registers[0]["args"]["credential"] == credential
+                result = await coordinator.dispatch(
+                    "call",
+                    {
+                        "args": {"timeoutMs": 15000},
+                        "command": "status",
+                        "device": "new",
+                    },
+                    deadline=time.monotonic() + 15,
+                )
+                assert result["result"] == "done"
+                assert result["data"]["device"] == "new"
+                assert gateway.connections[-1].local_address[1] != old_port
+                with pytest.raises(Fault) as caught:
+                    await coordinator.dispatch(
+                        "call",
+                        {**query, "device": "new"},
+                        deadline=time.monotonic() + 15,
+                    )
+                assert caught.value.problem.code == "jobOwner"
+            finally:
+                await coordinator.close()
+
+
 @pytest.mark.parametrize("failure", ["pin", "welcome", "budget", "connection"])
 def test_pending_confirmation_failure_does_not_register(tmp_path, failure):
     async def run():

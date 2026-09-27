@@ -1,6 +1,6 @@
 ---
 name: androidctl
-description: Use when pairing with an Android device and managing its AndroidCtl session and running supervised device shell scripts through the CLI.
+description: Use when pairing with an Android device and managing its AndroidCtl session, running supervised device shell scripts and pushing files through the CLI.
 ---
 
 # AndroidCtl
@@ -39,14 +39,15 @@ open again only when continuing is intended.
 | `failed` | Read the reason and retained registration or confirmation facts. |
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
-| `still running` | For a shell job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
+| `still running` | For a shell/transfer job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
 
-## Run Jobs
+## Run Jobs And Transfer Files
 
 ```sh
 androidctl --device DEVICE -s task shell --script-file task.sh
 androidctl --device DEVICE -s task job get JOB_ID
 androidctl --device DEVICE -s task job output JOB_ID --stream stdout --out output.bin
+androidctl --device DEVICE -s task push local.txt /sdcard/Download/remote.txt
 ```
 
 Supply one complete script after `--` or through `--script-file`. Prefer UTF-8
@@ -60,11 +61,16 @@ cleanup failures. The reference explains [shell exits and cleanup](reference.md#
 
 Keep the original job ID. `job output` exports retained bytes without rerunning
 the script; truncated/expired output is incomplete. Follow its recovery command
-with a new output path.
+with a new output path. `push` refuses overwrite unless `--replace` is intended.
+Inspect the original job and destination before another transfer; never resend
+an unknown finish because publication may already have happened.
 
 For shell, read `helperAlive`, `cleanup`, `cleanupError` and `signalErrors`;
 `helperAlive=false` can coexist with
-`cleanup=unknown`. Signal errors mean processes may still modify data. For shell UNKNOWN without
+`cleanup=unknown`. Signal errors mean processes may still modify data. For transfers,
+`stopRequested` does not mean ended; read `resourcesActive` and `cleanupError` for
+the reported side; local completion does not prove device completion. Query or
+cancel the original ID and preserve cleanup failures. For shell UNKNOWN without
 a job ID, use the reference's
 [correlation procedure](reference.md#shell-without-an-initial-job-id).
 

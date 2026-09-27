@@ -9,6 +9,8 @@
     "HELPER_PAYLOAD_BYTES": 2040
   },
   "queryMethods": [
+    "file.cancel",
+    "file.get",
     "job.cancel",
     "job.get",
     "output.read",
@@ -114,5 +116,39 @@
       "signalErrors": []
     },
     "command": "shell"
-  }
+  },
+  "fileFailures": [
+    {
+      "expect": "UNKNOWN",
+      "response": {
+        "result": "UNKNOWN",
+        "reason": "Publication interrupted",
+        "data": {
+          "job": "f3"
+        },
+        "error": {
+          "code": "workerFailure",
+          "message": "Publication interrupted"
+        },
+        "command": "push"
+      },
+      "name": "publication-unknown"
+    },
+    {
+      "expect": "failed",
+      "response": {
+        "result": "failed",
+        "reason": "Target exists",
+        "data": {
+          "job": "f4"
+        },
+        "error": {
+          "code": "publishFailed",
+          "message": "Target exists"
+        },
+        "command": "push"
+      },
+      "name": "publication-rejected"
+    }
+  ]
 }

@@ -24,6 +24,7 @@ from .cli_options import (
 from .local_call import LocalCall
 from .output import Output, display_name, terminal_text
 from .protocol import (
+    MAX_RUN_MS,
     OUTPUT_BYTES,
     RPC_SECONDS,
     UNCERTAIN_EXIT,
@@ -33,6 +34,7 @@ from .protocol import (
     TransportFailure,
     completed,
     decode_chunk,
+    is_local_transfer,
     rejected,
     uncertain,
 )
@@ -40,6 +42,28 @@ from .user_files import create, require_new_file
 
 DISPLAY_BYTES = 4096
 SCRIPT_BYTES = 64 * 1024
+TransferRun = Annotated[
+    int,
+    typer.Option(
+        "--run",
+        parser=parse_duration,
+        callback=run_duration,
+        metavar="DURATION",
+        show_default="10m",
+        help="Transfer limit: 1ms–10m.",
+    ),
+]
+TransferWait = Annotated[
+    int,
+    typer.Option(
+        "--wait",
+        parser=parse_duration,
+        callback=wait_duration,
+        metavar="DURATION",
+        show_default="10s",
+        help="Wait (0–60s) without cancelling the transfer.",
+    ),
+]
 
 
 def script_from_file(path: Path) -> str:
@@ -78,11 +102,12 @@ class JobClient:
             return (
                 value.result == "still running"
                 or value.data.get("output", {}).get("state") == "pending"
+                or value.data.get("resourcesActive", False)
             )
 
         while pending(result):
             remaining = until - time.monotonic()
-            if remaining < 0.1:
+            if remaining < (0.02 if is_local_transfer(identifier) else 0.1):
                 return result
             try:
                 current = await self.call("job.get", {"job": identifier}, remaining)
@@ -175,6 +200,16 @@ def show(
         job = f"; job={result.data['job']}" if result.data.get("job") else ""
         delivery.heading(result, before_reason=job)
         delivery.error(result)
+        if result.data.get("stopRequested"):
+            delivery.echo(
+                "Stop requested"
+                if result.data.get("resourcesActive")
+                else "Local work stopped"
+            )
+        if "resourcesActive" in result.data:
+            delivery.echo(
+                f"resourcesActive={str(result.data['resourcesActive']).lower()}"
+            )
         if result.data.get("helperAlive") is True or result.data.get("cleanup") in (
             "pending",
             "unknown",
@@ -306,7 +341,7 @@ def run(
         try:
             try:
                 result = await client.call(method, args)
-                if method == "shell.start" and result.data.get("job"):
+                if method in ("shell.start", "file.start") and result.data.get("job"):
                     job = result.data["job"]
                     delivery.echo(f"Job: {job}", err=as_json)
                 if result.data.get("job") and wait_ms:
@@ -440,7 +475,7 @@ def write_output(
 
 
 def register(app: typer.Typer) -> None:
-    job = typer.Typer(help="Query or cancel an in-memory shell job.")
+    job = typer.Typer(help="Query or cancel an in-memory shell or file job.")
     app.add_typer(job, name="job")
 
     @app.command(
@@ -571,3 +606,42 @@ def register(app: typer.Typer) -> None:
         if stream not in ("stdout", "stderr"):
             raise Fault("stream", "Choose stdout or stderr")
         export_output(ctx, identifier, out, stream)
+
+    @app.command(
+        "push", cls=CliCommand, help="Atomically publish one local file on the device."
+    )
+    def push(
+        ctx: typer.Context,
+        local: Annotated[Path, typer.Argument(readable=False)],
+        remote: str,
+        replace: Annotated[
+            bool,
+            typer.Option("--replace", help="Allow replacing the device destination."),
+        ] = False,
+        run_ms: TransferRun = MAX_RUN_MS,
+        wait_ms: TransferWait = 10000,
+    ) -> None:
+        transfer(ctx, "push", local, remote, replace, run_ms, wait_ms)
+
+
+def transfer(
+    ctx: typer.Context,
+    direction: str,
+    local: Path,
+    remote: str,
+    replace: bool,
+    run_ms: int,
+    wait_ms: int,
+) -> None:
+    run(
+        ctx,
+        "file.start",
+        {
+            "direction": direction,
+            "local": str(local.absolute()),
+            "remote": remote,
+            "replace": replace,
+            "runMs": run_ms,
+        },
+        wait_ms=wait_ms,
+    )

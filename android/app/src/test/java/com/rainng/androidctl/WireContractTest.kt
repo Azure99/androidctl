@@ -9,6 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.util.Base64
 
 class WireContractTest {
@@ -26,6 +27,30 @@ class WireContractTest {
         assertTrue(failure.message.orEmpty().contains("Contract sections differ"))
     }
 
+    @Test fun namedSamplesIgnoreOnlyTheirOuterOrder() {
+        val first = json("name" to "first", "nodes" to JSONArray(listOf(1, 2)))
+        val second = json("name" to "second", "nodes" to JSONArray(listOf(3)))
+        val reviewed = JSONArray(listOf(first, second))
+        compareNamedSamples("actionResults", reviewed, JSONArray(listOf(second, first)))
+
+        for (changed in listOf(
+            JSONArray(listOf(first)),
+            JSONArray(listOf(first, second, json("name" to "extra"))),
+            JSONArray(listOf(copy(first).put("nodes", JSONArray(listOf(2, 1))), second)),
+        )) {
+            val failure = assertThrows(AssertionError::class.java) { compareNamedSamples("actionResults", reviewed, changed) }
+            assertTrue(failure.message.orEmpty().contains("actionResults"))
+        }
+        val duplicates = JSONArray(listOf(first, first, second))
+        for ((saved, actual) in listOf(reviewed to duplicates, duplicates to reviewed)) {
+            val failure = assertThrows(AssertionError::class.java) { compareNamedSamples("actionResults", saved, actual) }
+            assertTrue(failure.message.orEmpty().contains("duplicate name: first"))
+        }
+        val forms = JSONArray(listOf(json("input" to "&amp;"), json("input" to "&amp;")))
+        val failure = assertThrows(AssertionError::class.java) { indexSamples("entityForms", forms, "input") }
+        assertTrue(failure.message.orEmpty().contains("duplicate input: &amp;"))
+    }
+
     private fun generateContract(): JSONObject =
         json(
             "limits" to
@@ -38,6 +63,7 @@ class WireContractTest {
                     "HELPER_PAYLOAD_BYTES" to HELPER_PAYLOAD_BYTES,
                     "PAIRING_NAME_UNITS" to Pairings.PAIRING_NAME_UNITS,
                 ),
+            "fileFailures" to fileFailures(),
             "output" to outputChunks(),
             "shellCleanupFailure" to shellCleanupFailure(),
             "queryMethods" to JSONArray(RpcMethods.QUERY_METHODS.sorted()),
@@ -59,6 +85,7 @@ class WireContractTest {
         produced: JSONObject,
     ) {
         assertEquals("Contract sections differ from the reviewed contract", fields(fixture), fields(produced))
+        compareNamedSamples("fileFailures", fixture.getJSONArray("fileFailures"), produced.getJSONArray("fileFailures"))
         for (section in listOf("output", "shellCleanupFailure")) {
             assertEquals(section, structure(fixture.getJSONObject(section)), structure(produced.getJSONObject(section)))
         }
@@ -99,6 +126,17 @@ class WireContractTest {
         return json("job" to job, "metadata" to store.describe(job), "chunks" to chunks)
     }
 
+    private fun fileFailures(): JSONArray {
+        val publicationUnknown = fileFailure("push", "f3", true, true, true, IOException("Publication interrupted"))
+        val rejected = fileFailure("push", "f4", true, true, true, Rejected("publishFailed", "Target exists"))
+        return JSONArray(
+            listOf(
+                json("name" to "publication-unknown", "expect" to Outcome.UNKNOWN, "response" to publicationUnknown),
+                json("name" to "publication-rejected", "expect" to Outcome.FAILED, "response" to rejected),
+            ),
+        )
+    }
+
     private fun shellCleanupFailure(): JSONObject {
         val protocol = ShellProtocol("j-cleanup", OutputStore { 0L }) { }
         protocol.sent = true
@@ -124,6 +162,33 @@ class WireContractTest {
         protocol.accept(ShellFrame('S', cleanup.toString().toByteArray()))
         protocol.ended()
         return protocol.view(ended = true)
+    }
+
+    private fun indexSamples(
+        section: String,
+        samples: JSONArray,
+        key: String = "name",
+    ): Map<String, JSONObject> {
+        val names = mutableSetOf<String>()
+        val objects = samples.objects()
+        for (sample in objects) {
+            val name = sample.getString(key)
+            assertTrue("$section contains duplicate $key: $name", names.add(name))
+        }
+        return objects.associateBy { it.getString(key) }
+    }
+
+    private fun compareNamedSamples(
+        section: String,
+        reviewed: JSONArray,
+        produced: JSONArray,
+    ) {
+        val saved = indexSamples("$section reviewed", reviewed)
+        val actual = indexSamples("$section produced", produced)
+        assertEquals("$section sample names differ from the reviewed contract", saved.keys, actual.keys)
+        for ((name, sample) in actual) {
+            assertEquals("$section/$name differs from the reviewed contract", structure(saved.getValue(name)), structure(sample))
+        }
     }
 
     private fun fields(value: JSONObject): Set<String> = value.keys().asSequence().toSet()

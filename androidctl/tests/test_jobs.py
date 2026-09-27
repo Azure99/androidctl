@@ -17,7 +17,7 @@ from androidctl.output import Output
 from androidctl.protocol import CHUNK_BYTES, Fault, Problem, Result, TransportFailure
 
 
-@pytest.mark.parametrize(("job", "budget"), [("jdevice", 50)])
+@pytest.mark.parametrize(("job", "budget"), [("jdevice", 50), ("tlocal", 10)])
 def test_job_wait_short_budget_keeps_last_fact_without_query(job, budget, monkeypatch):
     async def unexpected(*_, **__):
         raise AssertionError("insufficient budget must not send a query")
@@ -355,6 +355,60 @@ def test_job_preview_keeps_stdout_when_stderr_retrieval_fails(monkeypatch):
         "stdout": base64.b64encode(stdout).decode()
     }
     assert reads == [("stdout", 0), ("stdout", CHUNK_BYTES), ("stderr", 0)]
+
+
+def test_push_wait_queries_local_facts_until_resources_end(tmp_path, monkeypatch):
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"source")
+    requests = []
+    request_owners = []
+    closed_owners = []
+
+    async def call(self, command, args, *, deadline):
+        request_owners.append(self)
+        requests.append(command)
+        if command == "file.start":
+            assert args["direction"] == "push"
+            assert args["local"] == str(source)
+            return Result(
+                command="push",
+                result="still running",
+                data={"job": "t-transfer", "resourcesActive": True},
+            )
+        assert command == "job.get"
+        assert args == {"job": "t-transfer"}
+        if len(requests) == 2:
+            return Result(
+                command="push",
+                result="done",
+                data={
+                    "job": "t-transfer",
+                    "resourcesActive": True,
+                },
+            )
+        return Result(
+            command="push",
+            result="done",
+            data={"job": "t-transfer", "resourcesActive": False},
+        )
+
+    async def close(self):
+        closed_owners.append(self)
+
+    monkeypatch.setattr(job_commands.LocalCall, "call", call)
+    monkeypatch.setattr(job_commands.LocalCall, "close", close)
+    response = CliRunner().invoke(
+        cli.app, ["--json", "push", str(source), "/file", "--wait", "3s"]
+    )
+    assert response.exit_code == 0, response.output
+    result = json.loads(response.stdout)
+    assert result["result"] == "done"
+    assert result["data"]["job"] == "t-transfer"
+    assert result["command"] == "push"
+    assert result["data"]["resourcesActive"] is False
+    assert requests == ["file.start", "job.get", "job.get"]
+    assert all(owner is request_owners[0] for owner in request_owners)
+    assert closed_owners == [request_owners[0]]
 
 
 @pytest.mark.parametrize(
@@ -1043,7 +1097,9 @@ def test_wait_returns_initial_qualified_fact_without_query_or_sleep(state, monke
     assert asyncio.run(client.wait(fact, 1000)) is fact
 
 
-@pytest.mark.parametrize("pending", [{"output": {"state": "pending"}}])
+@pytest.mark.parametrize(
+    "pending", [{"output": {"state": "pending"}}, {"resourcesActive": True}]
+)
 def test_wait_returns_first_new_qualified_fact_without_tail_sleep(pending, monkeypatch):
     calls = []
     final = Result(

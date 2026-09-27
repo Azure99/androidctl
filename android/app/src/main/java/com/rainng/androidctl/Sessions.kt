@@ -23,6 +23,7 @@ internal enum class ResourceKind(
     val wire: String,
 ) {
     SHELL("shell"),
+    FILE("file"),
 }
 
 internal class Resource(
@@ -182,6 +183,7 @@ internal class Sessions(
             "pairingName" to held?.owner?.pairingName,
             "idleSeconds" to if (held == null || resources.isNotEmpty()) 0L else (now() - held.touched) / SECOND_MS,
             "shell" to resources.count { it.kind == ResourceKind.SHELL },
+            "file" to resources.count { it.kind == ResourceKind.FILE },
         )
     }
 

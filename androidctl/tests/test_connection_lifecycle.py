@@ -164,7 +164,7 @@ async def test_coordinator_session_wait_and_per_peer_idle(tmp_path):
 
     async def dispatch(method, args):
         received.append(method)
-        if method == "session.open":
+        if method == "file.chunk":
             entered.set()
             await leave.wait()
         return completed(method).wire()
@@ -183,19 +183,20 @@ async def test_coordinator_session_wait_and_per_peer_idle(tmp_path):
                 deadline=time.monotonic() + timeout,
             )
 
-        active = asyncio.create_task(call("session.open"))
+        active = asyncio.create_task(call("file.chunk"))
         waiting = None
         try:
             await asyncio.wait_for(entered.wait(), 1)
-            waiting = asyncio.create_task(call("session.close"))
-            refused = await asyncio.wait_for(call("session.takeover", "other"), 3)
+            waiting = asyncio.create_task(call("snapshot"))
+            refused = await asyncio.wait_for(call("click", "other"), 3)
             assert refused["result"] == "not sent"
             assert "occupied" in refused["reason"]
             assert not leave.is_set()
             assert not active.done()
             assert not waiting.done()
-            assert (await call("status"))["result"] == "done"
-            assert "session.close" not in received
+            assert (await call("file.get"))["result"] == "done"
+            assert (await call("file.cancel"))["result"] == "done"
+            assert "snapshot" not in received
             leave.set()
             assert (await active)["result"] == "done"
             assert (await waiting)["result"] == "done"
@@ -210,9 +211,9 @@ async def test_coordinator_session_wait_and_per_peer_idle(tmp_path):
             assert "mutation" not in device._peers
             assert not mutation.opened
             assert query.opened
-            assert (await call("session.close"))["result"] == "done"
-            assert received.count("session.open") == 1
-            assert "session.takeover" not in received
+            assert (await call("snapshot"))["result"] == "done"
+            assert received.count("file.chunk") == 1
+            assert "click" not in received
         finally:
             leave.set()
             await asyncio.gather(

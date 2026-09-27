@@ -196,7 +196,7 @@ private fun SessionControls(
         AlertDialog(
             onDismissRequest = { releasing = null },
             title = { Text(stringResource(R.string.release_session_title)) },
-            text = { Text(stringResource(R.string.release_session_body)) },
+            text = { Text(stringResource(R.string.release_session_body, TimeUnit.MILLISECONDS.toMinutes(FileJob.TRANSFER_IDLE_MS))) },
             confirmButton = {
                 TextButton(onClick = {
                     releasing = null
@@ -214,7 +214,7 @@ private fun SessionSummary(session: SessionStatus) {
         Text("${displayName(session.pairingName.orEmpty())} / ${displayName(session.name.orEmpty())}")
         Text(stringResource(R.string.session_idle, session.idleSeconds))
     }
-    Text(stringResource(R.string.session_resources, session.shell))
+    Text(stringResource(R.string.session_resources, session.shell, session.file))
 }
 
 @Composable

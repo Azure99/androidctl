@@ -95,6 +95,7 @@ internal data class SessionStatus(
     val pairingName: String?,
     val idleSeconds: Long,
     val shell: Int,
+    val file: Int,
     val leaseId: Long?,
 ) {
     companion object {
@@ -104,6 +105,7 @@ internal data class SessionStatus(
                 value.nullableString("pairingName"),
                 value.getLong("idleSeconds"),
                 value.getInt("shell"),
+                value.getInt("file"),
                 if (value.isNull("leaseId")) null else value.getLong("leaseId"),
             )
     }

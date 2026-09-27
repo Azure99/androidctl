@@ -62,6 +62,7 @@ def test_idle_duration_converts_once(monkeypatch, value, seconds):
     ("command", "defaults", "options"),
     [
         (["session", "open"], ["10m"], ["--idle"]),
+        (["push"], ["10m", "10s"], ["--run", "--wait"]),
         (["shell"], ["10s", "10m"], ["--run", "--wait"]),
     ],
 )

@@ -37,7 +37,7 @@
     <string name="close_pairing">Close pairing code</string>
     <string name="force_executor">Force executor exit</string>
     <string name="force_executor_title">Force this executor to exit?</string>
-    <string name="force_executor_body">Active calls may disconnect or become UNKNOWN. Background jobs are included above even without a session. Helpers follow their existing cleanup rules; descendants may remain. Gateway and pairings remain active.</string>
+    <string name="force_executor_body">Active calls may disconnect or become UNKNOWN. Background jobs are included above even without a session. Helpers follow their existing cleanup rules; descendants and temporary files may remain. Gateway and pairings remain active.</string>
     <string name="force_executor_done">Original executor exited. Use Refresh status to start a new worker; old job IDs cannot be recovered.</string>
     <string name="revoke">Revoke</string>
     <string name="pairing_revoked">Credentials revoked.</string>
@@ -52,7 +52,7 @@
     <string name="renew_certificate_title">Renew device certificate?</string>
     <string name="renew_certificate_body">Connections will close. Export the new certificate and update trust on each host. Pairings and the device key are retained.</string>
     <string name="renew">Renew</string>
-    <string name="session_resources">Shell: %1$d</string>
+    <string name="session_resources">Shell: %1$d / File: %2$d</string>
     <string name="helper_jobs">Helpers: %1$s</string>
-    <string name="release_session_body" tools:ignore="PluralsCandidate">Started shell jobs continue. Revoke this pairing to request an earlier stop.</string>
+    <string name="release_session_body" tools:ignore="PluralsCandidate">Started transfers and shell jobs continue (transfers stop after about %1$d minutes without the host). Revoke this pairing to request an earlier stop.</string>
 </resources>

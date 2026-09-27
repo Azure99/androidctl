@@ -334,6 +334,7 @@ async def test_forget_reports_bad_selection_without_deleting_it(tmp_path):
                 "forgotten": saved["deviceId"],
                 "selectionCleared": False,
                 "selectionError": invalid.value.problem.wire(),
+                "discardedJobFacts": 0,
             }
             assert result.data["selectionError"]["code"] == "selectionInvalid"
             assert result.data["selectionError"]["stage"] == "local.configuration"
@@ -376,6 +377,7 @@ async def test_forget_reports_only_completed_deletions(tmp_path, monkeypatch, ta
                     "message": "controlled unlink failure",
                     "stage": "local.configuration",
                 },
+                "discardedJobFacts": 0,
             }
         else:
             assert result.reason == "controlled unlink failure"

@@ -4,16 +4,47 @@ import re
 from pathlib import Path
 
 import pytest
+import typer
 
 from androidctl import job_commands, protocol
 from androidctl.cli_options import CliOptions
 from androidctl.coordinator import QUERY_METHODS
+from androidctl.output import Output
 from androidctl.protocol import CHUNK_BYTES, Result
 from ui_test_support import load_wire_contract
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE = ROOT / "android/app/src/main/c"
 WIRE_CONTRACT = load_wire_contract()
+
+
+def index_samples(section, samples, key="name"):
+    names = set()
+    for sample in samples:
+        name = sample[key]
+        assert name not in names, f"{section} contains duplicate {key}: {name}"
+        names.add(name)
+    return {sample[key]: sample for sample in samples}
+
+
+FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
+
+FILE_FAILURE_EXPECTED = {
+    "publication-unknown": (
+        "UNKNOWN",
+        3,
+        [
+            "push: UNKNOWN; job=f3; Publication interrupted",
+            "code=workerFailure",
+            "Do not repeat automatically; inspect the current job or device.",
+        ],
+    ),
+    "publication-rejected": (
+        "failed",
+        1,
+        ["push: failed; job=f4; Target exists", "code=publishFailed"],
+    ),
+}
 
 
 def assert_json(expected, actual):
@@ -113,3 +144,41 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
     assert len(chunks) == (2 if stream == "stdout" else 1)
     assert meta["read"] == len(expected)
     assert meta["truncated"] is False
+
+
+@pytest.mark.parametrize(
+    ("samples", "names"),
+    [
+        (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
+    ],
+    ids=["fileFailures"],
+)
+def test_named_sample_coverage_is_exact(samples, names):
+    assert samples.keys() == names
+
+
+@pytest.mark.parametrize("key", ["name", "input"])
+def test_sample_index_rejects_duplicate_names_before_building_the_mapping(key):
+    with pytest.raises(
+        AssertionError, match=f"samples contains duplicate {key}: first"
+    ):
+        index_samples("samples", [{key: "first"}, {key: "first"}], key)
+
+
+@pytest.mark.parametrize("name", FILE_FAILURE_EXPECTED)
+def test_host_renders_device_file_failure_facts(name, capsys):
+    case = FILE_FAILURES[name]
+    expected_result, expected_exit, expected_lines = FILE_FAILURE_EXPECTED[name]
+    result = Result.model_validate(case["response"])
+    assert_json(
+        case["response"],
+        result.model_dump(mode="json", by_alias=True, exclude_unset=True),
+    )
+    original = result.wire()
+    assert result.result == expected_result
+    assert result.exit_code() == expected_exit
+    with pytest.raises(typer.Exit) as stopped:
+        job_commands.show(result, {}, False, Output(), device=None, session=None)
+    assert stopped.value.exit_code == expected_exit
+    assert capsys.readouterr().out.splitlines() == expected_lines
+    assert_json(original, result.wire())

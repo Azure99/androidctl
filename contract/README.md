@@ -11,6 +11,10 @@ and cleanup facts. Native output/frame constants are checked directly because C
 does not participate in the JVM producer. Actual helper execution and cleanup
 require the separate device checks.
 
+`fileFailures` records device publication uncertainty and definite rejection.
+Kotlin compares named samples independent of their outer order, with exact name
+coverage; Python consumes each original job, Problem and public exit.
+
 Validate both sides from the repository root:
 
 ```powershell
