@@ -15,14 +15,14 @@ import java.util.Base64
 class WireContractTest {
     @Test fun deviceProjectionAndTransferMatchTheSharedContract() {
         val fixture = javaClass.getResourceAsStream("/wire-contract.json")!!.bufferedReader().use { JSONObject(it.readText()) }
-        val produced = generateContract()
+        val produced = generateContract(fixture)
         System.getenv("ANDROIDCTL_CONTRACT_OUTPUT")?.let { exportCandidate(produced, it) }
         compareContract(fixture, produced)
     }
 
     @Test fun contractComparisonRejectsAnExtraTopLevelSection() {
         val fixture = javaClass.getResourceAsStream("/wire-contract.json")!!.bufferedReader().use { JSONObject(it.readText()) }
-        val produced = generateContract().put("extra", JSONObject())
+        val produced = generateContract(fixture).put("extra", JSONObject())
         val failure = assertThrows(AssertionError::class.java) { compareContract(fixture, produced) }
         assertTrue(failure.message.orEmpty().contains("Contract sections differ"))
     }
@@ -51,8 +51,9 @@ class WireContractTest {
         assertTrue(failure.message.orEmpty().contains("duplicate input: &amp;"))
     }
 
-    private fun generateContract(): JSONObject =
+    private fun generateContract(fixture: JSONObject): JSONObject =
         json(
+            "raw" to fixture.getJSONObject("raw"),
             "limits" to
                 json(
                     "MESSAGE_BYTES" to Limits.MESSAGE_BYTES,

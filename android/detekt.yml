@@ -61,7 +61,7 @@ style:
   MaxLineLength:
     active: false
   ReturnCount:
-    max: 3
+    active: false
   ThrowsCount:
     max: 3
   WildcardImport:

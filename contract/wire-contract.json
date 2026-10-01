@@ -1,4 +1,148 @@
 {
+  "raw": {
+    "sequence": 7,
+    "keyboard": "hidden",
+    "nodes": [
+      {
+        "sourceId": "a",
+        "parent": null,
+        "visible": true,
+        "checkable": false,
+        "unavailable": [],
+        "editable": false,
+        "clickable": true,
+        "collectionInfo": null,
+        "description": null,
+        "className": "android.widget.Button",
+        "enabled": true,
+        "windowId": 1,
+        "longClickable": false,
+        "ref": "e1",
+        "collectionItemInfo": {
+          "rowIndex": 0,
+          "columnIndex": 0
+        },
+        "hint": null,
+        "refAvailable": true,
+        "text": "",
+        "actions": ["click"],
+        "scrollable": false
+      },
+      {
+        "sourceId": "b",
+        "parent": "e1",
+        "visible": true,
+        "checkable": false,
+        "unavailable": [],
+        "editable": false,
+        "clickable": false,
+        "collectionInfo": null,
+        "description": null,
+        "className": "android.widget.TextView",
+        "enabled": true,
+        "windowId": 1,
+        "longClickable": false,
+        "ref": "e2",
+        "collectionItemInfo": null,
+        "hint": null,
+        "refAvailable": true,
+        "text": "Pay & finish",
+        "actions": [],
+        "scrollable": false
+      },
+      {
+        "sourceId": null,
+        "refReason": "Original identity unavailable",
+        "parent": null,
+        "visible": true,
+        "checkable": true,
+        "unavailable": [{
+          "reason": "InvocationTargetException",
+          "field": "sourceId"
+        }],
+        "editable": false,
+        "clickable": true,
+        "collectionInfo": null,
+        "description": null,
+        "className": "android.widget.CheckBox",
+        "enabled": true,
+        "windowId": 1,
+        "longClickable": false,
+        "ref": "e3",
+        "checkedModel": "triState",
+        "collectionItemInfo": null,
+        "hint": null,
+        "checked": "mixed",
+        "refAvailable": false,
+        "text": "Options",
+        "actions": ["click"],
+        "scrollable": false
+      },
+      {
+        "sourceId": "d",
+        "refReason": null,
+        "parent": null,
+        "visible": true,
+        "checkable": false,
+        "unavailable": [],
+        "editable": false,
+        "clickable": true,
+        "collectionInfo": null,
+        "description": null,
+        "className": "android.widget.Button",
+        "enabled": true,
+        "windowId": 1,
+        "longClickable": false,
+        "ref": "e4",
+        "collectionItemInfo": {
+          "rowIndex": -1,
+          "columnIndex": 0
+        },
+        "hint": null,
+        "refAvailable": true,
+        "text": "Delete",
+        "actions": ["click"],
+        "scrollable": false
+      },
+      {
+        "sourceId": "e",
+        "refReason": "Name is incomplete",
+        "parent": null,
+        "visible": true,
+        "checkable": false,
+        "unavailable": [{
+          "reason": "truncated",
+          "field": "text"
+        }],
+        "editable": false,
+        "clickable": false,
+        "collectionInfo": null,
+        "description": null,
+        "className": "android.widget.TextView",
+        "enabled": true,
+        "windowId": 1,
+        "longClickable": false,
+        "ref": "e5",
+        "collectionItemInfo": null,
+        "hint": null,
+        "refAvailable": false,
+        "text": "Readable prefix",
+        "actions": [],
+        "scrollable": false
+      }
+    ],
+    "scope": {
+      "package": "example.shop",
+      "window": 1
+    },
+    "windows": [{
+      "active": true,
+      "id": 1,
+      "type": "application",
+      "title": "Cart"
+    }],
+    "partial": true
+  },
   "limits": {
     "MESSAGE_BYTES": 262144,
     "JSON_UTF8_BYTES": 98304,
