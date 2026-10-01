@@ -12,7 +12,8 @@ The Kotlin JVM test compares the current projector and producer with the reviewe
 fixture, preserving JSON types, numeric values and array order while ignoring
 object key order. Python applies the same rules to projected facts, including
 the distinction between booleans and numbers, and replays responses through `Result`,
-`UiClient.blob`, and the XML renderer.
+`UiClient.blob`, and the XML renderer. The image payload and metadata are synthetic
+inputs for raw transfer testing; they do not establish PNG or screenshot correctness.
 
 The `captures` and `fileFailures` sections match samples by unique `name`, with
 exactly the same names required on both sides. Their outer array order does not

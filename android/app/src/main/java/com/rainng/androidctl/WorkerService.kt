@@ -92,15 +92,15 @@ class WorkerService(
                 val seconds = args.getLong("idleSeconds")
                 if (seconds !in 1L..MAX_IDLE_SECONDS) throw Rejected("idle", "Idle timeout must be 1 to $MAX_IDLE_SECONDS seconds")
                 sessions.open(owner, idleMs = TimeUnit.SECONDS.toMillis(seconds))
-                outcome("session open", reason = "${displayName(owner.name)}; refs cleared")
+                outcome("session open", reason = "${displayName(owner.name)}; refs and images cleared")
             }
             "session.close" -> {
                 sessions.close(owner)
-                outcome("session close", reason = "refs cleared")
+                outcome("session close", reason = "refs and images cleared")
             }
             else -> {
                 val previous = sessions.takeover(owner)
-                outcome("session", reason = "took over ${previous?.let(::displayName) ?: "idle device"}; refs cleared")
+                outcome("session", reason = "took over ${previous?.let(::displayName) ?: "idle device"}; refs and images cleared")
             }
         }
 
@@ -171,6 +171,7 @@ class WorkerService(
             "worker" to if (sessions.stopped) "stopping" else "ready",
             "session" to session,
             "helpers" to shell.snapshot(owner),
+            "capabilities" to ui.capabilities(owner),
             "diagnostics" to json("uiCleanup" to ui.cleanupFailure, "maintenance" to JSONObject(maintenanceFailures)),
         )
 

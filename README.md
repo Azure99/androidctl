@@ -84,10 +84,12 @@ androidctl --device DEVICE_UUID -s trial snapshot
 ```
 
 Read the reported absolute `snapshotPath` using your host's file tools.
-The reference covers [formats, paths and delivery options](skills/androidctl/reference.md#images-and-delivery).
+For visual details, capture and view the actual `imagePath` PNG. The reference
+covers [formats, paths and delivery options](skills/androidctl/reference.md#images-and-delivery).
 Close your session when finished:
 
 ```sh
+androidctl --device DEVICE_UUID -s trial screenshot
 androidctl --device DEVICE_UUID -s trial session close
 ```
 

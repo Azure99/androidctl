@@ -15,6 +15,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command. Use
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot` | [Observations](#observations-and-targets) |
+| Images and coordinates | `screenshot` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
@@ -108,7 +109,7 @@ restarts the listener; if cleanup blocks it, the App reports no renewal. Finish
 cleanup, use **Refresh status**, then explicitly renew again.
 
 One device has
-one owner; different devices can run concurrently. Opening clears old refs.
+one owner; different devices can run concurrently. Opening clears old refs/images.
 Use `session open`, `session close` or `session takeover`; inspect state with `status`.
 Bare `session` shows command help and exits with 2 without contacting the daemon.
 The default idle limit is ten minutes; `session open --idle DURATION` accepts
@@ -151,7 +152,7 @@ Use **Refresh status** to reconnect when the worker is unavailable. Cached
 management state may still show the previous worker.
 
 Worker restart loses device `j...`
-jobs, refs; a surviving daemon can retain local `t...` transfer facts.
+jobs, refs and images; a surviving daemon can retain local `t...` transfer facts.
 Unused device connections close after 45 seconds; the daemon exits after about
 five continuous idle minutes with no local work or connections.
 
@@ -229,9 +230,10 @@ the known main result. Known shell cancellation with only ordinary pending clean
 remains exit 1.
 
 Text headings use the same fixed command path as JSON `command`.
-Ordinary UI text results occupy one line with the full `snapshotPath` and delivery
-errors or warnings. String values use JSON quoting; embedded newlines stay escaped
-on that line. Missing facts are not inferred. `--print` then echoes the saved body.
+Ordinary UI text results occupy one line with full `snapshotPath` / `imagePath`,
+image dimensions and delivery errors or warnings. String values use JSON quoting;
+embedded newlines stay escaped on that line. Missing facts are not inferred.
+`--print` then echoes the saved body.
 Raw shell output retains its own lines.
 
 ### JSON Field Guide
@@ -245,7 +247,7 @@ Nested job facts keep their original meanings.
 | Location | Interpretation |
 | --- | --- |
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
-| `data.snapshotPath` | Absolute path to the saved observation. [Delivery](#images-and-delivery) also reports `snapshotError`, `historyError` and `deliveryError` when applicable. |
+| `data.snapshotPath`, `imagePath` | Absolute paths to the saved observation and PNG. [Delivery](#images-and-delivery) also reports `snapshotError`, `imageError`, `historyError` and `deliveryError` when applicable. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
 | `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
 | `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
@@ -259,6 +261,7 @@ execution limits and `--wait` for shell/transfer or `job get` waiting.
 | Budget | Default / limit |
 | --- | --- |
 | Ordinary UI | `5s`; explicit `--timeout` accepts `1ms`–`60s`. |
+| Standalone screenshot | `15s`; explicit timeout takes precedence. |
 | Ordinary shell execution / initial wait | 10000 ms each. |
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
 | Transfer execution / initial wait | 600000 ms / 10000 ms. |
@@ -332,6 +335,7 @@ facts remain. Raw JSON retains its existing facts.
 | `snapshotFacts.display` | Omit `interactive=true`, `deepIdle=false`, `userId=0`, `displayId=0`, `displayState=2` and `keyguardShowing/keyguardSecure/deviceLocked=false`. With displayError, retain displayId/displayState. Omit sampleMs only when it equals an actually reported, non-null finishedMs. Keep width/height/rotation and errors. |
 | Controls and windows | Omit a checkable node's reported `checkedModel=triState`; keep binary and other reported models. Omit window `active=false` and `focused=false`. Keep rootAvailable true/false; its absence means unreported, not true. Actions, including empty editable actions, and named coordinates keep their existing meaning. |
 | Collections | Render all reported non-null integer dimensions, indexes, spans and selectionMode, including negative values. rows/columns=-1 are unknown platform counts; other negative values are preserved as reported. Omit `selectionMode=0` only with rows or columns, and `rowSpan/columnSpan=1` only with rowIndex or columnIndex on that element. Keep zero, multi-cell and negative spans; absent collection fields add no defaults. These rules use fields, including on textbox/button, rather than list/item tags. |
+| `image.shape` | Use the image's own shape and time. Omit reported displayId/userId=0, interactive=true and keyguardShowing/keyguardSecure/deviceLocked=false. Keep dimensions, rotation and complete top-level magnification, including mode/activated/scale. Shape windows omit active/focused=false; omit their transformation only when the complete numeric object is matrix=[1,0,0,0,1,0,0,0,1] and magnification=[1,0,0]. Keep non-unit or incomplete transformations, shape=null and errors. mappingKnown=false can still carry a valid after shape. |
 | Selected title | Keep screen.title. After XML character cleaning and titleIncomplete checks, omit only the nonempty duplicate window title whose id equals scope.window. Keep explicit empty window titles, both titleIncomplete flags, other window titles, packageName and rootAvailable. Null or absent window titles remain absent. Illegal XML characters use the existing replacement; the header no longer duplicates their original window values. |
 
 The original capture's missing entries whose refs appear in the final XML body
@@ -358,11 +362,19 @@ not search parent directories. This root does not change user-level credentials
 or create a separate daemon. All reported host file paths are absolute, including
 `job output` exports.
 `snapshot --out PATH` writes the body only to that new file in an existing directory;
-relative explicit paths resolve against the CLI cwd.
+relative explicit paths resolve against the CLI cwd. Automatic PNGs use
+`.androidctl/shots/`. Matching filename stems identify a delivery, not an atomic
+tree/image frame. Fresh `snapshot --screenshot` adds a current PNG.
+JSON stdout's image is a summary;
+XML metadata retains delivered image facts under the
+[shape default rules](#xml-defaults-and-gaps).
+Text output includes `imagePath="..."` and `imageSize=W x H px` on the result line;
+JSON uses `data.imagePath` and `data.image.width` / `data.image.height`.
 Complete files contain all selected collected content, not necessarily a complete
 page. Check missing/partial facts and any host-tool truncation separately.
 
-`snapshot --print` echoes the saved body after the result and paths.
+`snapshot --print` and `screenshot --print` echo the saved body after
+the result and paths.
 It cannot be combined with global `--json`. The body is generated once and echoed
 only after saving succeeds; print is neither a body-only stdout format nor a
 fallback for a failed save.
@@ -373,23 +385,28 @@ the reported path on Windows, use **Properties → Security → Advanced** and t
 reported permission error. On POSIX, `chmod 700` fixes access bits only when the
 reported owner is correct. Fix delivery before obtaining the missing observation.
 
-Automatic bodies use a 150-file/20-MiB quota. Later saves can reclaim old
+Automatic bodies and PNGs share a 150-file/20-MiB quota. Later saves can reclaim old
 files matching AndroidCtl's complete filename format, including edited or replaced
 files. Matching stems are reclaimed together and current
 file sizes count toward the quota. Copy files elsewhere for lasting retention;
 nonmatching files are left alone and failed deletions still occupy quota.
 This is not a physical directory-size guarantee. Explicit outputs outside these
 cache directories are not rotated. An explicit output inside them with a matching
-filename is reclaimable too. Invalid output paths and print/json conflicts reject before the snapshot RPC.
-The body is not duplicated in history when saved through an explicit --out.
+filename is reclaimable too. `--image-out` requires a new file and an existing
+directory and implies `--screenshot`. Giving both options requests one image.
+Invalid output paths and print/json conflicts reject before the snapshot RPC.
+With an explicit body output, automatic PNGs still
+use the shared history quota; the body is not duplicated in history.
 
-`snapshot` requires a saved body; missing that artifact fails an otherwise
-successful observation.
+`snapshot` requires a saved body, and `screenshot` requires a saved PNG;
+missing that artifact fails an otherwise successful observation.
 Actual write or close failures are reported and removal of that write's file is
 attempted.
 
 Read actual saved content before relying on it; expand the same file when the
-host's display is truncated. Automatic files can contain private screen values.
+host's display is truncated. If a decision depends on a new PNG, wait for the image
+tool's result to reach the model before choosing the action. Independent operations
+may be batched. Automatic files can contain private screen values.
 
 ## Jobs And Files
 
@@ -530,7 +547,7 @@ processes, directory-authorized principals, shared-storage Apps or an app-specif
 directory's owner is outside the guarantee.
 
 Credentials are private to the current OS user, under `%LOCALAPPDATA%/AndroidCtl`
-on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions, refs and job
+on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions, refs, images and job
 facts are in memory; there is no durable operation history. Preserve pairing and
 recovery materials when outcomes are uncertain, and preserve verified deliverables
 outside automatic history reclamation when needed.

@@ -99,6 +99,7 @@ class ManagementStateTest {
             {"version":"0.3.0","uid":2000,"workerId":"worker","worker":"ready",
              "session":{"name":"task","pairingName":"host","idleSeconds":3,"ui":0,"shell":1,"file":0,"leaseId":7},
              "helpers":{"pids":[1234],"active":["job"]},
+             "capabilities":{"androidApi":36,"coordinates":{"apiSupported":true,"image":"not checked"}},
              "diagnostics":{"uiCleanup":null,"maintenance":{"session-expiry":"failed"}}}
             """.trimIndent(),
         )

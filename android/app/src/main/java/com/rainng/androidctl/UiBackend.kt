@@ -32,11 +32,20 @@ internal class UiBackend(
     private var generation = 0
     val snapshots = UiSnapshot()
     val delivery = UiDelivery(sessions, workerId)
+    private val visuals = VisualInput(this)
 
     @Volatile private var closeError: String? = null
     val cleanupFailure: String? get() = closeError
 
     fun deviceFacts(): JSONObject = deviceFacts(context)
+
+    fun capabilities(owner: SessionOwner?): JSONObject =
+        synchronized(sessions) {
+            json(
+                "androidApi" to Build.VERSION.SDK_INT,
+                "coordinates" to visuals.status(sessions.ownsIdleUi(owner)),
+            )
+        }
 
     fun execute(
         owner: SessionOwner,
@@ -66,17 +75,36 @@ internal class UiBackend(
 
     private fun perform(run: UiRun) {
         capture(run)
-        finish(run, outcome("snapshot"))
+        finish(run, outcome(run.command))
     }
 
     private fun finish(
         run: UiRun,
         result: JSONObject,
     ) {
-        run.remember(result)
-        val observed = observation(run)
+        if (run.command != "screenshot") run.remember(result)
+        val screenshot = run.command == "screenshot" || run.args.optBoolean("screenshot")
+        if (screenshot) visuals.invalidate()
+        val observed = observation(run, screenshot)
         val answer = observedResult(run, result, observed)
-        run.remember(answer)
+        val capture = observed.capture
+        if (screenshot && run.budget.remaining() == 0L) answer.getJSONObject("data").put("imageError", "Request budget exhausted")
+        if (run.command == "screenshot") {
+            val imagePending = answer.getString("result") == Outcome.DONE
+            if (imagePending) {
+                run.remember(copy(answer).put("result", Outcome.FAILED).put("reason", "Screenshot did not complete within the budget"))
+            }
+            if (capture != null) {
+                val failure = attachImage(run, capture)
+                if (imagePending && failure != null) answer.put("result", Outcome.FAILED).put("reason", failure)
+            } else if (imagePending) {
+                answer.put("result", Outcome.FAILED).put("reason", "Screenshot unavailable within the budget")
+            }
+            run.remember(answer)
+        } else {
+            run.remember(answer)
+            if (screenshot && capture != null) attachImage(run, capture)
+        }
     }
 
     private fun observedResult(
@@ -98,7 +126,10 @@ internal class UiBackend(
         return answer
     }
 
-    private fun observation(run: UiRun): ObservationDelivery {
+    private fun observation(
+        run: UiRun,
+        screenshot: Boolean,
+    ): ObservationDelivery {
         val data = json("samples" to run.samples)
         run.snapshotError?.let { data.put("snapshotError", it) }
         snapshots.tree?.let { tree ->
@@ -116,7 +147,7 @@ internal class UiBackend(
         var captureProblem: JSONObject? = null
         val capture =
             try {
-                prepareCapture(run)
+                prepareCapture(run, screenshot)
             } catch (error: Exception) {
                 val issue = problem(error)
                 captureProblem = issue
@@ -130,12 +161,29 @@ internal class UiBackend(
         return ObservationDelivery(capture, data, captureProblem)
     }
 
-    private fun prepareCapture(run: UiRun): String? {
+    private fun prepareCapture(
+        run: UiRun,
+        screenshot: Boolean,
+    ): String? {
         if (snapshots.tree == null) return null
         if (!sessions.isCurrent(run.lease)) return null
         val prepared = requireNotNull(snapshots.deliveryTree())
-        return delivery.createCapture(run.lease, prepared, false)
+        return delivery.createCapture(run.lease, prepared, screenshot && run.budget.remaining() > 0)
     }
+
+    private fun attachImage(
+        run: UiRun,
+        capture: String,
+    ): String? =
+        try {
+            val image = visuals.screenshot(run)
+            delivery.image(run.lease, capture, image.first, image.second)
+            null
+        } catch (error: Exception) {
+            val reason = message(error)
+            if (sessions.isCurrent(run.lease)) delivery.imageFailed(run.lease, capture, reason)
+            reason
+        }
 
     fun current(run: UiRun) {
         run.budget.check()
@@ -200,12 +248,24 @@ internal class UiBackend(
                 }
             run.samples++
             run.snapshotError = null
+            if (replacement.changed) visuals.invalidate()
             run.budget.reserveDelivery(snapshots.deliveryTree()?.size)
             return replacement.tree
         } catch (error: Exception) {
             run.snapshotError = message(error)
+            visuals.invalidate()
             throw error
         }
+    }
+
+    fun automation(run: UiRun): UiAutomation {
+        connect(run)
+        return requireNotNull(automation)
+    }
+
+    fun platform(run: UiRun): AccessibilityConnection {
+        connect(run)
+        return requireNotNull(platform)
     }
 
     private fun connect(run: UiRun) {
@@ -235,7 +295,7 @@ internal class UiBackend(
                         AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                         AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
                 }
-            platform = AccessibilityConnection(ui)
+            platform = AccessibilityConnection(ui, context)
             generation++
         } catch (error: Exception) {
             try {
@@ -254,6 +314,7 @@ internal class UiBackend(
         executor.execute {
             try {
                 snapshots.close()
+                visuals.invalidate()
                 disconnect()
                 sessions.finished(closing)
             } catch (error: Exception) {

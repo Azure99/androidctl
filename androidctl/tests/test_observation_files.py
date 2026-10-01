@@ -27,6 +27,7 @@ def deliver_snapshot(result, source, view, *, as_json=False, session="default"):
     ui_client.deliver(
         result,
         source,
+        None,
         view,
         time.monotonic() + 3,
         command="snapshot",
@@ -58,6 +59,7 @@ def test_observation_files_preserve_body_source_and_missing_facts(
     ui_client.deliver(
         result,
         raw,
+        None,
         view,
         time.monotonic() + 3,
         command="snapshot",
@@ -269,6 +271,84 @@ def test_xml_defaults_preserve_nondefault_unavailable_and_unreported_facts(
     assert metadata["snapshotFacts"]["partial"] is None
 
 
+def test_xml_image_shape_keeps_its_own_facts_and_nonunit_transformations():
+    identity = {
+        "matrix": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "magnification": [1.0, 0.0, 0.0],
+    }
+    translated = {**identity, "matrix": [1, 0, 12, 0, 1, 34, 0, 0, 1]}
+    windows = [
+        {"id": 12, "active": False, "focused": False, "transformation": identity},
+        {"id": 13, "active": True, "transformation": translated},
+        {"id": 14, "transformation": {"matrix": identity["matrix"]}},
+        {"id": 15, "transformation": {"magnification": identity["magnification"]}},
+        {"id": 16, "transformation": None, "transformationError": "unavailable"},
+    ]
+    image = {
+        "at": 101,
+        "width": 720,
+        "height": 1600,
+        "mappingKnown": False,
+        "mappingError": "geometry changed",
+        "shape": {
+            "displayId": 0,
+            "userId": 0,
+            "interactive": True,
+            "keyguardShowing": False,
+            "keyguardSecure": False,
+            "deviceLocked": False,
+            "width": 720,
+            "height": 1600,
+            "rotation": 1,
+            "windows": windows,
+            "magnification": {"mode": 2, "activated": False, "scale": 1.0},
+        },
+    }
+    original = deepcopy(image)
+    raw = tree()
+    raw["display"] = {"width": 1080, "height": 2400, "rotation": 0}
+    rendered = ui_client.render_observation(
+        raw, View(), {"command": "snapshot"}, source={}, image=image
+    )
+    metadata = xml_metadata(rendered.body)
+    shape = metadata["image"]["shape"]
+    assert metadata["image"] == {
+        **original,
+        "shape": {
+            "width": 720,
+            "height": 1600,
+            "rotation": 1,
+            "magnification": original["shape"]["magnification"],
+            "windows": [{"id": 12}, *windows[1:]],
+        },
+    }
+    assert shape["windows"][1]["transformation"] == translated
+    assert image == original
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        None,
+        {
+            "displayId": None,
+            "displayIdError": "unavailable",
+            "userId": 10,
+            "interactive": False,
+            "keyguardShowing": True,
+            "keyguardSecure": None,
+            "deviceLocked": True,
+        },
+    ],
+)
+def test_xml_image_shape_preserves_null_error_and_nondefault_facts(shape):
+    image = {"shape": shape, "mappingKnown": False, "mappingError": "unavailable"}
+    rendered = ui_client.render_observation(
+        tree(), View(), {"command": "snapshot"}, source={}, image=image
+    )
+    assert xml_metadata(rendered.body)["image"] == image
+
+
 @pytest.mark.parametrize(
     ("view", "refs", "summary", "matches"),
     [
@@ -463,7 +543,7 @@ def test_presentation_program_error_propagates(monkeypatch, tmp_path, operation)
         )
 
 
-@pytest.mark.parametrize("command", ["snapshot"])
+@pytest.mark.parametrize("command", ["snapshot", "screenshot"])
 @pytest.mark.parametrize(
     ("original", "expected"),
     [("done", "failed"), ("not sent", "not sent"), ("UNKNOWN", "UNKNOWN")],
@@ -494,6 +574,7 @@ def test_raw_json_does_not_require_xml_projection(monkeypatch, capsys, tmp_path)
     ui_client.deliver(
         result,
         tree(),
+        None,
         ui_client.View(raw=True),
         time.monotonic() + 1,
         command="snapshot",
@@ -561,6 +642,7 @@ def test_required_observation_save_failure_keeps_cleanup_exit(
     deliver(
         result,
         tree(),
+        None,
         View(),
         time.monotonic() + 3,
         command="snapshot",
@@ -599,6 +681,7 @@ def test_delivery_timing_counts_local_rendering_without_fabricating_other_stages
     deliver(
         result,
         tree,
+        None,
         View(),
         time.monotonic() + 5,
         command="snapshot",

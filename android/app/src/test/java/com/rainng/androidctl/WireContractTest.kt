@@ -146,11 +146,32 @@ class WireContractTest {
         val lease = sessions.acquire(owner)
         val delivery = UiDelivery(sessions, "contract")
         val result = JSONArray()
-        var capture = delivery.createCapture(lease, UiDelivery.prepareTree(projected), false)
+        var capture = delivery.createCapture(lease, UiDelivery.prepareTree(projected), true)
         result.put(
             read(delivery, owner, capture, "tree", multiple = false)
                 .put("name", "projected-tree")
                 .put("expect", json("encoding" to "zlib", "tree" to "projected")),
+        )
+        // Synthetic image bytes exercise raw transport; PNG rendering is a device acceptance check.
+        val image = ByteArray(Limits.CHUNK_BYTES + 1).also { Random(17).nextBytes(it) }
+        delivery.image(
+            lease,
+            capture,
+            image,
+            json(
+                "id" to "synthetic-image",
+                "width" to 1,
+                "height" to 1,
+                "at" to 0,
+                "mappingKnown" to false,
+                "mappingError" to "Synthetic transport sample",
+                "shape" to null,
+            ),
+        )
+        result.put(
+            read(delivery, owner, capture, "image", multiple = true)
+                .put("name", "raw-image")
+                .put("expect", json("encoding" to "raw", "bytes" to image.size)),
         )
         val large = copy(projected)
         val noise = ByteArray(Limits.CHUNK_BYTES + 1).also { Random(23).nextBytes(it) }

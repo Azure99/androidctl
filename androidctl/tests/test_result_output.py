@@ -389,6 +389,10 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
                 "file": 0,
             },
             helpers={"pids": [42], "active": ["j1"]},
+            capabilities={
+                "androidApi": 36,
+                "coordinates": {"apiSupported": True, "image": "not checked"},
+            },
             diagnostics={"maintenance": {}},
             gateway={"state": "listening"},
         )
@@ -409,7 +413,8 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         assert "workerId=worker-1\n" in output
         assert 'gateway={"state": "listening"}\n' in output
         assert "ui=0 shell=0 file=0\n" in output
-        assert "helper pids=42\njobs=j1\n" in output
+        assert "helper pids=42\njobs=j1\nandroidApi=36\n" in output
+        assert 'coordinates={"apiSupported": true, "image": "not checked"}\n' in output
 
 
 @pytest.mark.parametrize(

@@ -27,7 +27,7 @@ androidctl --device DEVICE -s task session open
 androidctl --device DEVICE -s task snapshot
 ```
 
-Read the result before continuing. Open once: reopening clears refs.
+Read the result before continuing. Open once: reopening clears refs and images.
 The unnamed `default` session is shared. Respect `busy`/`connectionBusy`; use
 takeover only on explicit user instruction. After device-side release, explicitly
 open again only when continuing is intended.
@@ -41,8 +41,8 @@ opening the files. XML is the default;
 on stdout. See [XML defaults and gaps](reference.md#xml-defaults-and-gaps) and
 [delivery options](reference.md#images-and-delivery).
 
-Real App JSON result excerpts follow. The reported absolute paths use symbolic
-values; omitted fields remain in the original results.
+Real App JSON result excerpts follow. Paths and image IDs use symbolic values;
+omitted fields remain in the original results.
 
 ```json
 {
@@ -51,6 +51,22 @@ values; omitted fields remain in the original results.
   "data": {
     "snapshotPath": "SNAPSHOT_PATH",
     "snapshotCached": false,
+    "snapshotCompleteness": {
+      "partial": true,
+      "missingCount": 1,
+      "unavailableNodeCount": 0
+    }
+  }
+}
+```
+
+```json
+{
+  "command": "screenshot",
+  "result": "done",
+  "data": {
+    "imagePath": "IMAGE_PATH",
+    "image": {"id": "IMAGE_ID", "width": 1080, "height": 2400, "mappingKnown": true},
     "snapshotCompleteness": {
       "partial": true,
       "missingCount": 1,
@@ -82,6 +98,12 @@ See [artifact paths and retention](reference.md#images-and-delivery).
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
 | `still running` | For a shell/transfer job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
+
+## Use Images
+
+When semantics lack a needed fact, run `screenshot` and view its actual `imagePath`
+PNG with the host image tool before choosing an image-dependent action.
+`--image-out PATH` implies screenshot.
 
 ## Run Jobs And Transfer Files
 

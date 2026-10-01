@@ -23,6 +23,18 @@ Timeout = Annotated[
         help="Total request budget: 1ms–60s.",
     ),
 ]
+Screenshot = Annotated[
+    bool,
+    typer.Option("--screenshot", help="Attach an image within the remaining budget."),
+]
+ImageOut = Annotated[
+    Path | None,
+    typer.Option(
+        "--image-out",
+        readable=False,
+        help="Write PNG to a new file in an existing directory; implies --screenshot.",
+    ),
+]
 Print = Annotated[
     bool,
     typer.Option(
@@ -78,6 +90,8 @@ def register(app: typer.Typer) -> None:
             ),
         ] = False,
         timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
         out: Out = None,
         print_body: Print = False,
     ) -> None:
@@ -88,12 +102,47 @@ def register(app: typer.Typer) -> None:
             {
                 "scope": selected,
                 "timeoutMs": timeout,
+                "screenshot": screenshot,
             },
             View(
                 all_nodes=all_nodes,
                 boxes=boxes,
                 raw=raw,
                 out=out,
+                image_out=image_out,
                 print_body=print_body,
             ),
+        )
+
+    @app.command(
+        "screenshot", cls=CliCommand, help="Capture PNG and its task snapshot."
+    )
+    def screenshot(
+        ctx: typer.Context,
+        timeout: Annotated[
+            int,
+            typer.Option(
+                "--timeout",
+                parser=parse_duration,
+                callback=timeout_duration,
+                metavar="DURATION",
+                show_default="15s",
+                help="Total request budget: 1ms–60s.",
+            ),
+        ] = 15000,
+        image_out: Annotated[
+            Path | None,
+            typer.Option(
+                "--image-out",
+                readable=False,
+                help="Write PNG to a new file in an existing directory.",
+            ),
+        ] = None,
+        print_body: Print = False,
+    ) -> None:
+        execute(
+            ctx,
+            "screenshot",
+            {"timeoutMs": timeout},
+            View(image_out=image_out, print_body=print_body),
         )

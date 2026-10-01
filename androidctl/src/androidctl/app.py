@@ -142,6 +142,7 @@ def emit_status(facts: dict[str, Any], output: Output) -> None:
         output.echo("jobs=" + ",".join(helpers["active"]))
     if helpers.get("error"):
         output.echo("Shell unavailable: " + helpers["error"])
+    emit_fields(facts.get("capabilities", {}), output)
     emit_fields(facts.get("diagnostics", {}), output)
     emit_fields({key: facts.get(key) for key in ("workerId", "gateway")}, output)
 
@@ -435,7 +436,7 @@ def device_trust(
 
 
 @session_app.command(
-    "open", cls=CliCommand, help="Open a session and clear its old refs."
+    "open", cls=CliCommand, help="Open a session and clear its old refs and images."
 )
 def session_open(
     ctx: typer.Context,
@@ -457,7 +458,7 @@ def session_open(
 @session_app.command(
     "close",
     cls=CliCommand,
-    help="Close the caller's session and clear its refs.",
+    help="Close the caller's session and clear its refs and images.",
 )
 def session_close(ctx: typer.Context) -> None:
     device_call(ctx, "session.close")

@@ -5,10 +5,13 @@ import sys
 import xml.etree.ElementTree as ET
 
 import pytest
+import typer
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from androidctl import app as cli
 from androidctl import ui_client
+from androidctl.cli_options import CliOptions
 from androidctl.protocol import Fault, Result
 from androidctl.ui_commands import DEFAULT_TIMEOUT_MS
 from ui_test_support import raw_read_data, tree, xml_metadata
@@ -62,6 +65,31 @@ def test_duration_error_in_real_cli_process():
     assert value["command"] == "session open"
     assert value["result"] == "not sent"
     assert value["error"]["code"] == "arguments"
+
+
+@pytest.mark.parametrize("parent_file", [False, True])
+def test_missing_or_nondirectory_image_parent_rejects_before_rpc(
+    monkeypatch, tmp_path, parent_file
+):
+    parent = tmp_path / "parent"
+    if parent_file:
+        parent.write_text("ordinary file")
+
+    async def call(*args):
+        pytest.fail("Invalid image path reached RPC")
+
+    monkeypatch.setattr(ui_client.UiClient, "call", call)
+    context = typer.Context(
+        get_command(cli.app), obj=CliOptions(None, "default", False)
+    )
+    with pytest.raises(Fault) as rejected:
+        ui_client.execute(
+            context,
+            "click",
+            {"ref": "e1", "screenshot": True, "timeoutMs": 5000},
+            ui_client.View(image_out=parent / "out.png"),
+        )
+    assert rejected.value.problem.code == "imagePath"
 
 
 def test_print_and_json_reject_before_rpc(monkeypatch, tmp_path, capsys):
@@ -166,6 +194,7 @@ def test_collection_is_explicit_and_cache_is_identified(
 @pytest.mark.parametrize(
     "args",
     [
+        ["screenshot", "--image-out"],
         ["snapshot", "--out"],
         ["job", "output", "j1", "--out"],
     ],
@@ -199,12 +228,17 @@ def test_output_path_rejects_ads_before_request(tmp_path, args):
 @pytest.mark.parametrize(
     ("args", "timeout"),
     [
+        (["screenshot"], 15000),
+        (["screenshot", "--timeout", "5s"], 5000),
+        (["screenshot", "--timeout=20s"], 20000),
         (["snapshot"], DEFAULT_TIMEOUT_MS),
     ],
 )
 def test_ui_budget_reaches_client(captured_ui_calls, tmp_path, args, timeout):
     calls = captured_ui_calls
     invocation = [*args, "--print"]
+    if args[0] == "screenshot" or "--screenshot" in args:
+        invocation += ["--image-out", str(tmp_path / "image.png")]
     result = CliRunner().invoke(cli.app, invocation)
     assert result.exit_code == 2, result.output
     assert len(calls) == 1

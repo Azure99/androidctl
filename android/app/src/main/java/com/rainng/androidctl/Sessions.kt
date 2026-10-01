@@ -170,6 +170,11 @@ internal class Sessions(
         if (resources.isEmpty() && now() - held.touched >= held.idleMs) invalidateLease(held)
     }
 
+    @Synchronized fun ownsIdleUi(owner: SessionOwner?): Boolean {
+        expire()
+        return owner != null && current?.owner?.sameSession(owner) == true && resources.none { it.kind == ResourceKind.UI }
+    }
+
     @Synchronized fun localStatus(): JSONObject {
         expire()
         return statusFields().put("leaseId", current?.id ?: JSONObject.NULL)

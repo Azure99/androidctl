@@ -69,6 +69,9 @@ internal class UiRun(
             if (!data.has("capture") && !data.has("snapshotError")) {
                 data.put("snapshotError", "Request budget exhausted before snapshot delivery")
             }
+            if (command == "screenshot" || args.optBoolean("screenshot")) {
+                data.put("imageError", "Request budget exhausted before image delivery")
+            }
         }
         return value
     }

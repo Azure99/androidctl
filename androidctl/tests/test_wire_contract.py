@@ -146,6 +146,10 @@ def test_host_consumes_device_produced_chunks_without_reencoding(capture, monkey
     assert (len(chunks) > 1) == capture["multiple"]
     expected = capture["expect"]
     assert chunks[0]["data"]["encoding"] == expected["encoding"]
+    if capture["kind"] == "image":
+        assert len(body) == expected["bytes"]
+        assert_json(chunks[0]["data"]["image"], metadata)
+        return
     tree = json.loads(body)
     if expected["tree"] == "minimal":
         assert tree == {"sequence": 9}
@@ -217,7 +221,7 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
 @pytest.mark.parametrize(
     ("samples", "names"),
     [
-        (CAPTURES, {"projected-tree", "large-tree", "minimal-tree"}),
+        (CAPTURES, {"projected-tree", "raw-image", "large-tree", "minimal-tree"}),
         (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
     ],
     ids=["captures", "fileFailures"],

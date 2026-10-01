@@ -67,6 +67,7 @@ def test_idle_duration_converts_once(monkeypatch, value, seconds):
 @pytest.mark.parametrize(
     ("command", "defaults", "options"),
     [
+        (["screenshot"], ["15s"], ["--timeout"]),
         (["snapshot"], ["5s"], ["--timeout"]),
         (["session", "open"], ["10m"], ["--idle"]),
         (["push"], ["10m", "10s"], ["--run", "--wait"]),

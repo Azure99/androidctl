@@ -33,6 +33,7 @@ class View:
     all_nodes: bool = False
     boxes: bool = False
     raw: bool = False
+    image_out: Path | None = None
     out: Path | None = None
     print_body: bool = False
 
@@ -40,6 +41,7 @@ class View:
 @dataclass(frozen=True)
 class DeliveryPaths:
     snapshot: Path | None = None
+    image: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -85,13 +87,16 @@ def result_line(
         parts.append("observationWarning=" + compact("; ".join(gaps)))
     if not observed and result.result in {"not sent", "failed", "UNKNOWN"}:
         parts.append("Observation: unavailable; run snapshot.")
-    for field in ("snapshotPath",):
+    for field in ("snapshotPath", "imagePath"):
         if field in result.data:
             parts.append(field + "=" + compact(result.data[field]))
-    for field in ("snapshotError", "historyError"):
+    if "imagePath" in result.data:
+        image = result.data["image"]
+        parts.append(f"imageSize={image['width']} x {image['height']} px")
+    for field in ("snapshotError", "imageError", "historyError"):
         if result.data.get(field):
             parts.append(field + "=" + compact(result.data[field]))
-    if result.result == "UNKNOWN" and command == "snapshot":
+    if result.result == "UNKNOWN" and command in {"snapshot", "screenshot"}:
         parts.append(
             "Read-only reply unavailable; query again. For a new sample, run snapshot."
         )
@@ -208,6 +213,7 @@ class UiClient:
 
 def delivery_paths(view: View) -> DeliveryPaths:
     snapshot = view.out.absolute() if view.out is not None else None
+    image = view.image_out.absolute() if view.image_out is not None else None
     if snapshot is not None:
         require_new_file(
             snapshot,
@@ -217,7 +223,15 @@ def delivery_paths(view: View) -> DeliveryPaths:
                 "Observation destination parent must be an existing directory",
             ),
         )
-    return DeliveryPaths(snapshot=snapshot)
+    if image is not None:
+        require_new_file(
+            image,
+            "Image destination already exists",
+            Fault(
+                "imagePath", "Image destination parent must be an existing directory"
+            ),
+        )
+    return DeliveryPaths(snapshot=snapshot, image=image)
 
 
 def execute(
@@ -232,6 +246,9 @@ def execute(
         raise Fault("arguments", "--print and --json cannot be used together")
     paths = delivery_paths(view)
     wire_args = dict(args)
+    if paths.image is not None:
+        wire_args["screenshot"] = True
+    wants_image = command == "screenshot" or wire_args.get("screenshot", False)
     invocation: dict[str, Any] = {
         "command": command,
         "args": {key: value for key, value in wire_args.items() if key != "value"},
@@ -242,8 +259,8 @@ def execute(
         invocation["args"]["boxes"] = True
     client = UiClient(context, deadline)
 
-    async def request() -> tuple[Result, dict[str, Any] | None]:
-        tree = None
+    async def request() -> tuple[Result, dict[str, Any] | None, bytes | None]:
+        tree, png = None, None
         try:
             try:
                 result = await client.call(command, wire_args)
@@ -265,15 +282,27 @@ def execute(
                     tree = value
                 except (Fault, OSError, ValueError, KeyError, TypeError) as error:
                     result.data["snapshotError"] = str(error)
+                if wants_image and not result.data.get("imageError"):
+                    try:
+                        png, meta = await client.blob(capture, "image")
+                        result.data["image"] = meta
+                    except (Fault, OSError, ValueError, KeyError, TypeError) as error:
+                        result.data["imageError"] = str(error)
                 result.data["deliveryMs"] = int((time.monotonic() - started) * 1000)
-            return result, tree
+            elif wants_image:
+                result.data.setdefault(
+                    "imageError",
+                    result.data.get("snapshotError") or "No capture was published",
+                )
+            return result, tree, png
         finally:
             await client.close()
 
-    result, tree = asyncio.run(request())
+    result, tree, png = asyncio.run(request())
     deliver(
         result,
         tree,
+        png,
         view,
         deadline,
         command=command,
@@ -287,6 +316,7 @@ def execute(
 def deliver(
     result: Result,
     tree: dict[str, Any] | None,
+    png: bytes | None,
     view: View,
     deadline: float,
     *,
@@ -312,13 +342,14 @@ def deliver(
                 )
                 if key in result.data
             },
-            image=None,
+            image=result.data.get("image"),
         )
         result.data.update(rendered.facts)
         body = rendered.body
     save_delivery(
         result,
         tree,
+        png,
         body,
         paths,
         deadline,
@@ -326,7 +357,7 @@ def deliver(
         raw=view.raw,
     )
     finish_primary_result(result, command=command)
-    if tree is not None or "deliveryMs" in result.data:
+    if tree is not None or png is not None or "deliveryMs" in result.data:
         result.data["deliveryMs"] = result.data.get("deliveryMs", 0) + int(
             (time.monotonic() - started) * 1000
         )
@@ -394,6 +425,7 @@ def render_observation(
 def save_delivery(
     result: Result,
     tree: dict[str, Any] | None,
+    png: bytes | None,
     body: str | None,
     paths: DeliveryPaths,
     deadline: float,
@@ -401,6 +433,13 @@ def save_delivery(
     workspace_root: Path,
     raw: bool,
 ) -> None:
+    if png is not None and paths.image is not None:
+        try:
+            path = paths.image
+            create(path.parent, path.name, png)
+            result.data["imagePath"] = str(path)
+        except (Fault, OSError, ValueError, KeyError, TypeError) as error:
+            result.data["imageError"] = str(error)
     if body is not None and paths.snapshot is not None:
         try:
             path = paths.snapshot
@@ -409,13 +448,14 @@ def save_delivery(
         except (Fault, OSError, ValueError) as error:
             result.data["snapshotError"] = str(error)
     history_body = body if paths.snapshot is None else None
-    if tree is not None and history_body is not None:
+    history_png = png if paths.image is None else None
+    if tree is not None and (history_body is not None or history_png is not None):
         try:
             app, title = ui_view.app_title(tree, ui_view.window(tree))
             saved = history.save(
                 workspace_root,
                 history_body,
-                None,
+                history_png,
                 app=app,
                 title=title,
                 deadline=deadline,
@@ -423,6 +463,10 @@ def save_delivery(
             )
             if saved.snapshot_path is not None:
                 result.data["snapshotPath"] = str(saved.snapshot_path)
+            if saved.image_path is not None:
+                result.data["imagePath"] = str(saved.image_path)
+            if saved.image_error:
+                result.data["imageError"] = saved.image_error
             if saved.warning:
                 result.data["historyError"] = "; ".join(
                     filter(None, (result.data.get("historyError"), saved.warning))
@@ -433,20 +477,28 @@ def save_delivery(
             )
     if "snapshotPath" not in result.data and tree is not None:
         result.data.setdefault("snapshotError", "Observation file was not saved")
+    if "imagePath" not in result.data and png is not None:
+        result.data.setdefault(
+            "imageError", "PNG could not be saved; no image path was published"
+        )
 
 
 def finish_primary_result(result: Result, *, command: str) -> None:
-    if (
-        result.result == "done"
-        and command == "snapshot"
-        and "snapshotPath" not in result.data
-    ):
-        result.result = "failed"
-        result.reason = (
-            result.data.get("historyError")
-            or result.data.get("snapshotError")
-            or "Observation file was not delivered"
-        )
+    if result.result == "done":
+        if command == "snapshot" and "snapshotPath" not in result.data:
+            result.result = "failed"
+            result.reason = (
+                result.data.get("historyError")
+                or result.data.get("snapshotError")
+                or "Observation file was not delivered"
+            )
+        elif command == "screenshot" and (
+            "imagePath" not in result.data or result.data.get("imageError")
+        ):
+            result.result = "failed"
+            result.reason = (
+                result.data.get("imageError") or "Screenshot was not delivered"
+            )
 
 
 def print_delivery(
@@ -460,6 +512,12 @@ def print_delivery(
     output = Output()
     if as_json:
         wire = result.wire()
+        if isinstance(wire["data"].get("image"), dict):
+            wire["data"]["image"] = {
+                key: value
+                for key, value in wire["data"]["image"].items()
+                if key != "shape"
+            }
         output.json(wire)
         output.finish(result)
         return

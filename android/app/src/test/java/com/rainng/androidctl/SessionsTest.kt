@@ -130,6 +130,33 @@ class SessionsTest {
         assertEquals("none", Sessions({ 0L }) { }.callerStatus(first)["callerState"])
     }
 
+    @Test fun uiOwnershipQueryExpiresEvenWithoutCallerAndTracksAllUiResources() {
+        var now = 0L
+        var cleared = 0
+        val sessions = Sessions({ now }) { cleared++ }
+        sessions.open(first, idleMs = 10)
+        assertTrue(sessions.ownsIdleUi(first.copy(pairingName = "other display name")))
+        assertFalse(sessions.ownsIdleUi(second))
+        now = 10
+        assertFalse(sessions.ownsIdleUi(null))
+        assertEquals(1, cleared)
+        val lease = sessions.acquire(first)
+        for (kind in listOf(ResourceKind.SHELL, ResourceKind.FILE)) {
+            val resource = sessions.reserve(lease, kind, changing = true)
+            assertTrue(sessions.ownsIdleUi(first))
+            sessions.finished(resource)
+        }
+        val ui = sessions.reserve(lease, ResourceKind.UI, changing = false)
+        assertFalse(sessions.ownsIdleUi(first))
+        sessions.finished(ui)
+        val closing = sessions.closing(lease)
+        sessions.releaseLocal(lease.id)
+        sessions.acquire(second)
+        assertFalse(sessions.ownsIdleUi(second))
+        sessions.finished(closing)
+        assertTrue(sessions.ownsIdleUi(second))
+    }
+
     @Test fun lateResourceKeepsMutexButCannotPublishIntoNewLease() {
         val sessions = Sessions({ 0L }) { }
         val old = sessions.acquire(first)

@@ -341,6 +341,7 @@ def test_blocked_history_counts_owned_file_and_tries_other_groups(
             ui_client.deliver(
                 result,
                 tree(),
+                None,
                 ui_client.View(),
                 time.monotonic() + 5,
                 command="snapshot",

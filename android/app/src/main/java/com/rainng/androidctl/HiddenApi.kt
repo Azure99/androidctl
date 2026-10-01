@@ -5,6 +5,7 @@ import android.app.UiAutomation
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
+import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
@@ -60,6 +61,13 @@ internal object HiddenApi {
             ).apply { isAccessible = true }
     }
     val windows: Method by lazy { service.getMethod("getWindows") }
+    val magnificationConfig: Method by lazy { service.getMethod("getMagnificationConfig", Int::class.javaPrimitiveType) }
+    val windowTransformation: Method by lazy {
+        AccessibilityManager::class.java.getMethod(
+            "getWindowTransformationSpec",
+            Int::class.javaPrimitiveType,
+        )
+    }
     val currentUser: Method by lazy { Class.forName("android.app.ActivityManager").getMethod("getCurrentUser") }
     val serviceBinder: Method by lazy { Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java) }
     val windowInterface: Method by lazy { Class.forName("android.view.IWindowManager\$Stub").getMethod("asInterface", IBinder::class.java) }
