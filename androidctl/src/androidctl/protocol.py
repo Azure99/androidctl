@@ -11,14 +11,16 @@ VERSION = version("androidctl")
 MAX_MESSAGE = 256 * 1024
 JSON_UTF8_BYTES = 96 * 1024
 CHUNK_BYTES = 32 * 1024
+MAX_CONNECTIONS = 16
+PAIRING_NAME_UNITS = 100
+TREE_BYTES = 4 * 1024 * 1024
+IMAGE_BYTES = 8 * 1024 * 1024
 OUTPUT_BYTES = 128 * 1024
 MAX_RUN_MS = 600000
 RECENT_JOBS = 64
-LOCAL_JOB_PREFIX = "t"
-MAX_CONNECTIONS = 16
-PAIRING_NAME_UNITS = 100
 CONNECT_SECONDS = 5.0
 RPC_SECONDS = 10.0
+LOCAL_JOB_PREFIX = "t"
 UNCERTAIN_EXIT = 3
 
 
@@ -74,6 +76,10 @@ class TransportFailure(Fault):
     """The request may have arrived; a missing reply never permits resending it."""
 
 
+def is_local_transfer(identifier: str) -> bool:
+    return identifier.startswith(LOCAL_JOB_PREFIX)
+
+
 def decode_chunk(encoded: str, offset: int, size: int, *, code: str) -> bytes:
     try:
         chunk = base64.b64decode(encoded, validate=True)
@@ -109,7 +115,3 @@ def uncertain(command: str, fault: Fault, data: dict[str, Any] | None = None) ->
         data=data or {},
         error=fault.problem,
     )
-
-
-def is_local_transfer(identifier: str) -> bool:
-    return identifier.startswith(LOCAL_JOB_PREFIX)

@@ -21,7 +21,8 @@ recovery. Each command also has `--help`.
 ## Requirements
 
 - Python 3.12 or newer on Windows, macOS or Linux.
-- Android 11 (API 30) or newer, arm64-v8a or x86_64 userspace and Android user 0.
+- Android 11 (API 30) or newer, arm64-v8a or x86_64 userspace, Android user 0 and
+  default display.
 - Shizuku running through ADB or wireless debugging as shell UID 2000, with
   AndroidCtl authorized. Root mode is unsupported.
 - A reachable network route to the AndroidCtl app, and matching host/app versions.
@@ -71,20 +72,24 @@ and any port forwarding are your responsibility.
 For an emulator or device without a LAN route, follow the optional
 [ADB route setup](skills/androidctl/reference.md#device-setup-and-adb-route).
 
-## Use A Session
+## Try An Observation
 
-Use the `deviceId` returned by `pair`, or find a paired UUID with `--json devices`.
-Global options precede the command. Keep a distinct session name for each task.
+Use the `deviceId` returned by `pair`, or find a paired UUID with `--json devices`,
+and choose a name for this task. Global options
+precede the command. Open the named session once; if busy, respect its holder.
 
 ```sh
-androidctl --json devices
 androidctl --device DEVICE_UUID -s trial session open
-androidctl --device DEVICE_UUID -s trial status
-androidctl --device DEVICE_UUID -s trial session close
+androidctl --device DEVICE_UUID -s trial snapshot
 ```
 
-`status` observes the actual owner without creating or refreshing a lease. Respect
-`busy`; explicit takeover is limited to another session of the same pairing.
+Read the reported absolute `snapshotPath` using your host's file tools.
+The reference covers [formats, paths and delivery options](skills/androidctl/reference.md#images-and-delivery).
+Close your session when finished:
+
+```sh
+androidctl --device DEVICE_UUID -s trial session close
+```
 
 ## Development
 

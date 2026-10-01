@@ -39,6 +39,7 @@ PEER_IDLE_SECONDS = 45.0
 QUERY_METHODS = frozenset(
     {
         "status",
+        "ui.read",
         "job.get",
         "job.cancel",
         "output.read",

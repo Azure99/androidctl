@@ -3,20 +3,25 @@ import base64
 import json
 import socket
 import time
+from types import SimpleNamespace
 
 import pytest
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-from androidctl import transport
+from androidctl import coordinator as coordinator_module
+from androidctl import local_call, transport
+from androidctl import local_server as local_server_module
+from androidctl.cli_options import CliOptions
 from androidctl.coordinator import Coordinator
 from androidctl.identity import local_identity
 from androidctl.private_files import private_directory
 from androidctl.protocol import VERSION, Fault, TransportFailure, completed
 from androidctl.state import HostState
 from androidctl.transport import Peer
+from androidctl.ui_client import UiClient
 from connection_test_support import connections, local_server
-from pairing_test_support import Gateway
+from pairing_test_support import Gateway, save_active
 
 
 async def test_connect_tries_other_addresses_and_shares_dns_welcome_budget(
@@ -221,7 +226,7 @@ async def test_coordinator_session_wait_and_per_peer_idle(tmp_path):
             )
 
 
-@pytest.mark.parametrize("command", ["status", "session.close"])
+@pytest.mark.parametrize("command", ["status", "snapshot"])
 async def test_reused_peer_survives_idle_sweep_during_request_handoff(
     tmp_path, monkeypatch, command
 ):
@@ -479,3 +484,81 @@ async def test_real_tls_authentication_and_validated_reply(tmp_path):
                 await peer.close()
         finally:
             await coordinator.close()
+
+
+async def test_real_connections_report_only_this_requests_measured_stages(
+    tmp_path, monkeypatch
+):
+    device_clock, local_clock = [time.monotonic()], [time.monotonic()]
+    monkeypatch.setattr(
+        coordinator_module,
+        "time",
+        SimpleNamespace(monotonic=lambda: device_clock[0]),
+    )
+    monkeypatch.setattr(
+        local_call, "time", SimpleNamespace(monotonic=lambda: local_clock[0])
+    )
+
+    async def dispatch(method, args):
+        return completed(method).wire()
+
+    gateway = Gateway(tmp_path / "gateway", dispatch=dispatch)
+    gateway.credentials["test"] = "pair"
+    device_reply = gateway.reply
+
+    async def measured_device_reply(connection, value):
+        if value.get("event") == "connected":
+            device_clock[0] += 0.125
+        await device_reply(connection, value)
+
+    monkeypatch.setattr(gateway, "reply", measured_device_reply)
+    async with gateway.listening():
+        private_directory(tmp_path / "state")
+        state = HostState(tmp_path / "state")
+        save_active(
+            state,
+            {
+                **gateway.identity,
+                "credential": "test",
+                "alias": "timing",
+            },
+        )
+        coordinator = Coordinator(state, instance="test")
+        client = UiClient(CliOptions("timing", "default", False), time.monotonic() + 5)
+        async with local_server(
+            tmp_path / "tls",
+            coordinator.dispatch,
+            credential="test",
+        ) as (material, server):
+            reply = local_server_module.send
+
+            async def measured_local_reply(connection, value):
+                if json.loads(value).get("event") == "connected":
+                    local_clock[0] += 0.25
+                await reply(connection, value)
+
+            async def connect_local(*, deadline, start=True):
+                return await Peer.open(material, deadline=deadline, source="local")
+
+            monkeypatch.setattr(local_server_module, "send", measured_local_reply)
+            monkeypatch.setattr(local_call, "connect_local", connect_local)
+            try:
+                first = await coordinator.dispatch(
+                    "call",
+                    {"command": "snapshot", "args": {"timeoutMs": 2000}},
+                    deadline=time.monotonic() + 2,
+                )
+                assert first["data"]["deviceConnectMs"] == 125
+                second = await coordinator.dispatch(
+                    "call",
+                    {"command": "snapshot", "args": {"timeoutMs": 2000}},
+                    deadline=time.monotonic() + 2,
+                )
+                assert "deviceConnectMs" not in second["data"]
+                await client.call("snapshot", {})
+                assert client.local.connect_ms == 250
+                await client.call("ui.read", {})
+                assert client.local.connect_ms == 250
+            finally:
+                await client.close()
+                await coordinator.close()

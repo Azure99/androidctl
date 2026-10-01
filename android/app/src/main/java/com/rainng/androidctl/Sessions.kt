@@ -22,6 +22,7 @@ internal class Lease(
 internal enum class ResourceKind(
     val wire: String,
 ) {
+    UI("ui"),
     SHELL("shell"),
     FILE("file"),
 }
@@ -33,6 +34,7 @@ internal class Resource(
 
 internal class Sessions(
     private val now: () -> Long,
+    private val clearLeaseUi: (Lease) -> Unit,
 ) {
     private var sequence = 0L
     private var current: Lease? = null
@@ -67,7 +69,7 @@ internal class Sessions(
         val held = current
         if (held != null && !held.owner.sameSession(owner)) busy(held)
         requireIdle()
-        if (held != null) invalidateLease()
+        if (held != null) invalidateLease(held)
         val lease = Lease(++sequence, owner, now(), idleMs)
         current = lease
         released.remove(owner.sessionKey)
@@ -80,7 +82,7 @@ internal class Sessions(
         val held = current ?: return
         if (!held.owner.sameSession(owner)) busy(held)
         requireIdle()
-        invalidateLease()
+        invalidateLease(held)
     }
 
     @Synchronized fun takeover(owner: SessionOwner): String? {
@@ -93,7 +95,7 @@ internal class Sessions(
         if (held != null && held.owner.pairing != owner.pairing) busy(held)
         requireIdle()
         val previous = held?.owner?.name
-        if (held != null) invalidateLease()
+        if (held != null) invalidateLease(held)
         acquire(owner)
         return previous
     }
@@ -102,7 +104,7 @@ internal class Sessions(
         val held = current ?: throw Rejected("sessionChanged", "There is no current session")
         if (held.id != expected) throw Rejected("sessionChanged", "The displayed session has changed; refresh first")
         released.add(held.owner.sessionKey)
-        invalidateLease()
+        invalidateLease(held)
     }
 
     @Synchronized fun retainedPairings(): Set<String> =
@@ -111,7 +113,7 @@ internal class Sessions(
 
     @Synchronized fun revoke(pairing: String) {
         revoked.add(pairing)
-        current?.takeIf { it.owner.pairing == pairing }?.let { invalidateLease() }
+        current?.takeIf { it.owner.pairing == pairing }?.let(::invalidateLease)
     }
 
     @Synchronized fun reserve(
@@ -120,7 +122,7 @@ internal class Sessions(
         changing: Boolean,
     ): Resource {
         requireCurrent(lease)
-        if (changing && resources.isNotEmpty()) {
+        if (resources.any { it.kind == ResourceKind.UI } || (changing && resources.isNotEmpty())) {
             throw Rejected("busy", "Active ${resources.joinToString { it.kind.wire }} must finish")
         }
         return Resource(lease, kind).also { resources.add(it) }
@@ -130,10 +132,12 @@ internal class Sessions(
         if (resources.remove(resource)) current?.touched = now()
     }
 
+    @Synchronized fun closing(lease: Lease): Resource = Resource(lease, ResourceKind.UI).also { resources.add(it) }
+
     @Synchronized fun requireCurrent(lease: Lease) {
         accepting()
         validate(lease.owner)
-        if (current !== lease) throw Rejected("sessionChanged", "The session was closed or released")
+        if (current !== lease) throw Rejected("sessionChanged", "The session was closed or released; take a new snapshot")
     }
 
     @Synchronized fun isCurrent(lease: Lease): Boolean = current === lease
@@ -163,7 +167,7 @@ internal class Sessions(
 
     @Synchronized fun expire() {
         val held = current ?: return
-        if (resources.isEmpty() && now() - held.touched >= held.idleMs) invalidateLease()
+        if (resources.isEmpty() && now() - held.touched >= held.idleMs) invalidateLease(held)
     }
 
     @Synchronized fun localStatus(): JSONObject {
@@ -182,6 +186,7 @@ internal class Sessions(
             "name" to held?.owner?.name,
             "pairingName" to held?.owner?.pairingName,
             "idleSeconds" to if (held == null || resources.isNotEmpty()) 0L else (now() - held.touched) / SECOND_MS,
+            "ui" to resources.count { it.kind == ResourceKind.UI },
             "shell" to resources.count { it.kind == ResourceKind.SHELL },
             "file" to resources.count { it.kind == ResourceKind.FILE },
         )
@@ -194,8 +199,9 @@ internal class Sessions(
             else -> "none"
         }
 
-    private fun invalidateLease() {
+    private fun invalidateLease(held: Lease) {
         current = null
+        clearLeaseUi(held)
     }
 
     private fun validate(owner: SessionOwner) {

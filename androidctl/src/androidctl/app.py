@@ -34,6 +34,7 @@ from .protocol import (
     rejected,
     uncertain,
 )
+from .ui_commands import register as register_ui
 
 LOCAL_REQUEST_SECONDS = 20
 
@@ -48,6 +49,7 @@ daemon_app = typer.Typer(help="Inspect or stop the local daemon.")
 app.add_typer(session_app, name="session")
 app.add_typer(device_app, name="device")
 app.add_typer(daemon_app, name="daemon")
+register_ui(app)
 register_jobs(app)
 
 
@@ -65,7 +67,8 @@ def global_options(
         typer.Option(
             "--device",
             envvar="ANDROIDCTL_DEVICE",
-            help="Default device for devices/status, sessions, shell and jobs.",
+            help="Default device for devices/status, sessions, UI, shell "
+            "and file jobs.",
         ),
     ] = None,
     session: Annotated[
@@ -74,9 +77,21 @@ def global_options(
             "-s",
             "--session",
             envvar="ANDROIDCTL_SESSION",
-            help="Default session for status, session, shell and jobs.",
+            help="Default session for status, session, UI, shell and file jobs.",
         ),
     ] = "default",
+    workspace_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--workspace-root",
+            envvar="ANDROIDCTL_WORKSPACE_ROOT",
+            readable=False,
+            help=(
+                "Existing root for automatic artifacts; "
+                "defaults to the working directory."
+            ),
+        ),
+    ] = None,
     as_json: Annotated[
         bool, typer.Option("--json", help="Print detailed JSON.")
     ] = False,
@@ -85,7 +100,8 @@ def global_options(
     ] = False,
 ) -> None:
     del version
-    ctx.obj = CliOptions(device, session, as_json)
+    root = workspace_root.absolute() if workspace_root is not None else Path.cwd()
+    ctx.obj = CliOptions(device, session, as_json, root)
 
 
 def emit_fields(values: dict[str, Any], output: Output) -> None:
@@ -118,7 +134,7 @@ def emit_status(facts: dict[str, Any], output: Output) -> None:
         output.echo("session=none")
     if held.get("callerState"):
         output.echo("callerSession=" + held["callerState"])
-    output.echo(f"shell={held['shell']} file={held['file']}")
+    output.echo(f"ui={held['ui']} shell={held['shell']} file={held['file']}")
     helpers = facts.get("helpers", {})
     if helpers.get("pids"):
         output.echo("helper pids=" + ",".join(map(str, helpers["pids"])))
@@ -418,7 +434,9 @@ def device_trust(
     emit(result, as_json=context.as_json, render=render_summary)
 
 
-@session_app.command("open", cls=CliCommand, help="Open a session.")
+@session_app.command(
+    "open", cls=CliCommand, help="Open a session and clear its old refs."
+)
 def session_open(
     ctx: typer.Context,
     idle: Annotated[
@@ -439,7 +457,7 @@ def session_open(
 @session_app.command(
     "close",
     cls=CliCommand,
-    help="Close the caller's session.",
+    help="Close the caller's session and clear its refs.",
 )
 def session_close(ctx: typer.Context) -> None:
     device_call(ctx, "session.close")

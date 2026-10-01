@@ -24,7 +24,7 @@ class JobTableTest {
     private fun table(): JobTable<TestJob> = JobTable("Job", "Resources still active")
 
     @Test fun ownershipKeepsPairingAndSessionAfterEntryAuthorization() {
-        val sessions = Sessions { 0L }
+        val sessions = Sessions({ 0L }) { }
         val table = table()
         val job = TestJob("j", owner)
         sessions.acquire(owner)
@@ -60,7 +60,7 @@ class JobTableTest {
     }
 
     @Test fun workerStopRequiresBothRegisteredJobsAndUnregisteredReservationsToEnd() {
-        val sessions = Sessions { 0L }
+        val sessions = Sessions({ 0L }) { }
         val table = table()
         val lease = sessions.acquire(owner)
         val resource = sessions.reserve(lease, ResourceKind.SHELL, changing = true)

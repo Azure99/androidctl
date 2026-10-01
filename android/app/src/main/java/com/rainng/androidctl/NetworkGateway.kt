@@ -255,7 +255,7 @@ internal class NetworkGateway(
             executor.execute {
                 try {
                     val args = request.getJSONObject("args")
-                    val deadline = requestDeadline(args, received)
+                    val deadline = requestDeadline(method, args, received)
                     // Only the gateway supplies the worker deadline.
                     request.put("deadlineMs", deadline)
                     synchronized(channelGate) {
@@ -283,11 +283,16 @@ internal class NetworkGateway(
     }
 
     private fun requestDeadline(
+        method: String,
         args: JSONObject,
         received: Long,
     ): Long {
         val milliseconds = args.getLong("timeoutMs")
-        val maximum = Long.MAX_VALUE - received
+        val maximum =
+            minOf(
+                if (method in RpcMethods.UI_COMMANDS) UiBudget.MAX_MS else Long.MAX_VALUE,
+                Long.MAX_VALUE - received,
+            )
         if (milliseconds !in 1..maximum) {
             throw Rejected("timeout", "Timeout must be 1 to $maximum ms")
         }

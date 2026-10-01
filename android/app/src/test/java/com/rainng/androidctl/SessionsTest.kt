@@ -14,7 +14,7 @@ class SessionsTest {
     private val second = first.copy(name = "research")
 
     @Test fun localAndCallerStatusExposeDistinctFacts() {
-        val sessions = Sessions { 0L }
+        val sessions = Sessions({ 0L }) { }
         val idle = sessions.localStatus()
         assertTrue(idle.has("name") && idle.isNull("name"))
         assertTrue(idle.has("pairingName") && idle.isNull("pairingName"))
@@ -31,26 +31,40 @@ class SessionsTest {
         assertEquals(first.pairingName, held.getString("pairingName"))
     }
 
-    @Test fun automaticAcquisitionReusesLeaseWhileExplicitOpenReplacesIt() {
+    @Test fun automaticAcquisitionReusesLeaseWhileExplicitOpenClearsIt() {
         var now = 0L
-        val sessions = Sessions { now }
+        val cleared = mutableListOf<Lease>()
+        lateinit var closing: Resource
+        lateinit var sessions: Sessions
+        sessions =
+            Sessions({ now }) { lease ->
+                assertFalse(sessions.isCurrent(lease))
+                cleared.add(lease)
+                closing = sessions.closing(lease)
+            }
         val original = sessions.open(first, idleMs = 1000)
         now = 10
         assertSame(original, sessions.acquire(first.copy(pairingName = "renamed")))
         assertEquals(first.pairingName, original.owner.pairingName)
         assertEquals(1000L, original.idleMs)
         assertEquals(now, original.touched)
+        assertTrue(cleared.isEmpty())
 
         val reopened = sessions.open(first, idleMs = 2000)
         assertNotSame(original, reopened)
         assertTrue(sessions.isCurrent(reopened))
+        assertEquals(listOf(original), cleared)
         assertEquals(2000L, reopened.idleMs)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.reserve(reopened, ResourceKind.UI, changing = false) }.code)
+        sessions.finished(closing)
+        sessions.finished(sessions.reserve(reopened, ResourceKind.UI, changing = false))
     }
 
     @Test fun statusViewsShowActualOwnerAndExpireLease() {
         var now = 0L
-        val sessions = Sessions { now }
-        sessions.open(first, idleMs = 10)
+        val cleared = mutableListOf<Lease>()
+        val sessions = Sessions({ now }) { cleared.add(it) }
+        val original = sessions.open(first, idleMs = 10)
         val otherCaller = sessions.callerStatus(second)
         assertEquals(first.name, otherCaller.getString("name"))
         assertEquals("none", otherCaller.getString("callerState"))
@@ -58,17 +72,19 @@ class SessionsTest {
         val local = sessions.localStatus()
         assertTrue(local.isNull("name"))
         assertTrue(local.isNull("leaseId"))
+        assertEquals(listOf(original), cleared)
 
-        sessions.open(first, idleMs = 10)
+        val next = sessions.open(first, idleMs = 10)
         now = 20
         val caller = sessions.callerStatus(first)
         assertTrue(caller.isNull("name"))
         assertFalse(caller.has("leaseId"))
         assertEquals("none", caller.getString("callerState"))
+        assertEquals(listOf(original, next), cleared)
     }
 
     @Test fun busyNamesEscapeFormattingWithoutChangingIdentity() {
-        val sessions = Sessions { 0L }
+        val sessions = Sessions({ 0L }) { }
         val owner = first.copy(name = "task\u202e", pairingName = "desk\u2066")
         sessions.acquire(owner)
         val failure = assertThrows(Rejected::class.java) { sessions.acquire(second) }
@@ -80,7 +96,7 @@ class SessionsTest {
 
     @Test fun leaseSeparatesSessionsAndPairings() {
         var time = 0L
-        val sessions = Sessions { time }
+        val sessions = Sessions({ time }) { }
         sessions.acquire(first)
         time = 12000
         assertEquals(12L, sessions.callerStatus(first)["idleSeconds"])
@@ -93,7 +109,7 @@ class SessionsTest {
     }
 
     @Test fun localReleasePreventsDispatchAndRequiresExplicitReopen() {
-        val sessions = Sessions { 0L }
+        val sessions = Sessions({ 0L }) { }
         val renamed = first.copy(pairingName = "renamed workstation")
         assertEquals("none", sessions.callerStatus(first)["callerState"])
         val old = sessions.acquire(first)
@@ -111,47 +127,84 @@ class SessionsTest {
         assertEquals("sessionReleased", assertThrows(Rejected::class.java) { sessions.acquire(first) }.code)
         assertNotEquals(old.id, sessions.open(renamed).id)
         assertEquals("active", sessions.callerStatus(first)["callerState"])
-        assertEquals("none", Sessions { 0L }.callerStatus(first)["callerState"])
+        assertEquals("none", Sessions({ 0L }) { }.callerStatus(first)["callerState"])
     }
 
-    @Test fun revokedPairingLosesItsLeaseAndAuthorization() {
-        val sessions = Sessions { 0L }
-        val lease = sessions.acquire(first)
-        assertEquals(setOf(first.pairing), sessions.retainedPairings())
-        sessions.revoke(first.pairing)
-        assertEquals("revoked", assertThrows(Rejected::class.java) { sessions.requireCurrent(lease) }.code)
+    @Test fun lateResourceKeepsMutexButCannotPublishIntoNewLease() {
+        val sessions = Sessions({ 0L }) { }
+        val old = sessions.acquire(first)
+        val resource = sessions.reserve(old, ResourceKind.UI, changing = true)
+        sessions.releaseLocal(old.id)
+        val next = sessions.acquire(second)
+        var written = false
+        assertEquals("sessionChanged", assertThrows(Rejected::class.java) { sessions.withCurrentLease(old) { written = true } }.code)
+        assertFalse(written)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.reserve(next, ResourceKind.UI, changing = false) }.code)
+        sessions.finished(resource)
+        sessions.withCurrentLease(next) { written = true }
+        assertTrue(written)
+        sessions.finished(sessions.reserve(next, ResourceKind.UI, changing = true))
+    }
+
+    @Test fun revokedReleasedResourcesRemainBusyUntilTheyActuallyFinish() {
+        lateinit var sessions: Sessions
+        lateinit var closing: Resource
+        sessions = Sessions({ 0L }) { closing = sessions.closing(it) }
+        val old = sessions.acquire(first)
+        val file = sessions.reserve(old, ResourceKind.FILE, changing = true)
+        sessions.releaseLocal(old.id)
+        val allowed = first.copy(pairing = "pair-b")
+        val next = sessions.acquire(allowed)
+        val removed = sessions.retainedPairings() - setOf(allowed.pairing)
+        assertEquals(setOf(first.pairing), removed)
+        removed.forEach(sessions::revoke)
         assertEquals("revoked", assertThrows(Rejected::class.java) { sessions.requireAuthorized(first) }.code)
-        assertTrue(sessions.retainedPairings().isEmpty())
-        assertTrue(sessions.localStatus().isNull("name"))
+        assertTrue(sessions.isCurrent(next))
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.requireIdle() }.code)
+        sessions.finished(file)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.requireIdle() }.code)
+        sessions.finished(closing)
+        sessions.requireIdle()
+        assertEquals(setOf(allowed.pairing), sessions.retainedPairings())
+        sessions.finished(sessions.reserve(next, ResourceKind.UI, changing = true))
     }
 
     @Test fun idleStartsAfterActualResourceEnds() {
         var time = 0L
-        val sessions = Sessions { time }
+        var cleared = 0
+        val sessions = Sessions({ time }) { cleared++ }
         val lease = sessions.open(first, idleMs = 1000)
         val task = sessions.reserve(lease, ResourceKind.FILE, changing = true)
         time = 9000
         sessions.expire()
-        assertEquals(first.name, sessions.callerStatus(first)["name"])
-        assertEquals("active", sessions.callerStatus(first)["callerState"])
-        assertEquals(lease.id, sessions.localStatus()["leaseId"])
+        assertEquals(0, cleared)
         assertEquals("busy", assertThrows(Rejected::class.java) { sessions.close(first) }.code)
         assertEquals("busy", assertThrows(Rejected::class.java) { sessions.takeover(second) }.code)
         sessions.finished(task)
         time = 9999
         sessions.expire()
-        assertEquals(first.name, sessions.callerStatus(first)["name"])
-        assertEquals("active", sessions.callerStatus(first)["callerState"])
-        assertEquals(lease.id, sessions.localStatus()["leaseId"])
+        assertEquals(0, cleared)
         time = 10000
         sessions.expire()
-        assertEquals("none", sessions.callerStatus(first)["callerState"])
-        assertTrue(sessions.callerStatus(first).isNull("name"))
-        assertTrue(sessions.localStatus().isNull("leaseId"))
+        assertEquals(1, cleared)
+    }
+
+    @Test fun shellFrontBlocksMutationButAllowsSameLeaseReadOnlyUi() {
+        val sessions = Sessions({ 0L }) { }
+        val lease = sessions.acquire(first)
+        val shell = sessions.reserve(lease, ResourceKind.SHELL, changing = true)
+        assertEquals("busy", assertThrows(Rejected::class.java) { sessions.reserve(lease, ResourceKind.UI, changing = true) }.code)
+        val snapshot = sessions.reserve(lease, ResourceKind.UI, changing = false)
+        sessions.finished(snapshot)
+        sessions.revoke(first.pairing)
+        assertEquals("revoked", assertThrows(Rejected::class.java) { sessions.requireCurrent(lease) }.code)
+        assertEquals("revoked", assertThrows(Rejected::class.java) { sessions.requireAuthorized(first) }.code)
+        sessions.finished(shell)
+        sessions.requireIdle()
     }
 
     @Test fun stoppingRejectsAlreadyAcquiredButNotReservedWork() {
-        val sessions = Sessions { 0L }
+        val sessions = Sessions({ 0L }) { }
         val lease = sessions.acquire(first)
         val resource = sessions.reserve(lease, ResourceKind.FILE, changing = true)
         assertEquals("busy", assertThrows(Rejected::class.java) { sessions.stop() }.code)

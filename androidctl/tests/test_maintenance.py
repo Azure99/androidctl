@@ -79,7 +79,7 @@ async def test_status_attributes_worker_failures_without_rewriting_valid_results
 
     async def dispatch(method, args):
         calls.append((method, args))
-        if method == "status" and len(calls) == 1 and reuse:
+        if method == "ui.read":
             return completed(method).wire()
         if worker == "refused":
             raise Fault("workerUnavailable", "Worker is unavailable", "worker")
@@ -96,7 +96,7 @@ async def test_status_attributes_worker_failures_without_rewriting_valid_results
         if reuse:
             warmup = await coordinator.dispatch(
                 "call",
-                {"command": "status", "args": {"timeoutMs": 2000}},
+                {"command": "ui.read", "args": {"timeoutMs": 2000}},
                 deadline=time.monotonic() + 2,
             )
             assert warmup["result"] == "done"
@@ -197,7 +197,7 @@ async def test_status_expired_before_dispatch_keeps_not_sent_without_checks(
         output = await asyncio.to_thread(
             CliRunner().invoke,
             cli.app,
-            ["--json", "status"],
+            ["--json", "--workspace-root", str(tmp_path), "status"],
         )
         assert output.exit_code == 2, output.output
         result = Result.model_validate(json.loads(output.stdout))

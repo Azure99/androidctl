@@ -138,6 +138,7 @@ private fun GatewayControls(
 @Composable
 private fun ExecutorDiagnostics(facts: ManagementState) {
     facts.executor?.diagnostics?.let { diagnostics ->
+        diagnostics.uiCleanup?.let { Text(stringResource(R.string.ui_cleanup, it), color = MaterialTheme.colorScheme.error) }
         diagnostics.maintenance.forEach { (key, value) -> Text("$key: $value", color = MaterialTheme.colorScheme.error) }
     }
 }
@@ -196,7 +197,9 @@ private fun SessionControls(
         AlertDialog(
             onDismissRequest = { releasing = null },
             title = { Text(stringResource(R.string.release_session_title)) },
-            text = { Text(stringResource(R.string.release_session_body, TimeUnit.MILLISECONDS.toMinutes(FileJob.TRANSFER_IDLE_MS))) },
+            text = {
+                Text(stringResource(R.string.release_session_body, TimeUnit.MILLISECONDS.toMinutes(FileJob.TRANSFER_IDLE_MS)))
+            },
             confirmButton = {
                 TextButton(onClick = {
                     releasing = null
@@ -214,7 +217,7 @@ private fun SessionSummary(session: SessionStatus) {
         Text("${displayName(session.pairingName.orEmpty())} / ${displayName(session.name.orEmpty())}")
         Text(stringResource(R.string.session_idle, session.idleSeconds))
     }
-    Text(stringResource(R.string.session_resources, session.shell, session.file))
+    Text(stringResource(R.string.session_resources, session.ui, session.shell, session.file))
 }
 
 @Composable

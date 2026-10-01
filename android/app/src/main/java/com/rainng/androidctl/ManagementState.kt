@@ -94,6 +94,7 @@ internal data class SessionStatus(
     val name: String?,
     val pairingName: String?,
     val idleSeconds: Long,
+    val ui: Int,
     val shell: Int,
     val file: Int,
     val leaseId: Long?,
@@ -104,6 +105,7 @@ internal data class SessionStatus(
                 value.nullableString("name"),
                 value.nullableString("pairingName"),
                 value.getLong("idleSeconds"),
+                value.getInt("ui"),
                 value.getInt("shell"),
                 value.getInt("file"),
                 if (value.isNull("leaseId")) null else value.getLong("leaseId"),
@@ -121,11 +123,13 @@ internal data class HelperStatus(
 }
 
 internal data class WorkerDiagnostics(
+    val uiCleanup: String?,
     val maintenance: Map<String, String>,
 ) {
     companion object {
         fun fromJson(value: JSONObject): WorkerDiagnostics =
             WorkerDiagnostics(
+                value.nullableString("uiCleanup"),
                 value.getJSONObject("maintenance").let { entries -> entries.keys().asSequence().associateWith(entries::getString) },
             )
     }

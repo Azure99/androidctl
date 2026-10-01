@@ -5,7 +5,8 @@ Use the accompanying [SKILL](SKILL.md) for an agent's task workflow and
 [device setup](#device-setup-and-adb-route) for connection prerequisites.
 `androidctl COMMAND --help` gives accepted parameters.
 
-Global `--device`, `-s`/`--session` and `--json` precede the command.
+Global `--device`, `-s`/`--session` and `--json` precede the command. Use
+`androidctl --json snapshot`; the command does not accept a local `--json` option.
 
 ## Command Index
 
@@ -13,6 +14,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
+| Observe and target | `snapshot` | [Observations](#observations-and-targets) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
@@ -62,7 +64,7 @@ in `data.context.deviceSource`. `data.selectionDevice` retains the requested or
 resolved identifier even when unusable; a list item's `selected` flag and
 `context.deviceId` require a confirmed active pairing. Selection errors remain
 in `data.selectionError`, while the listing itself returns done with exit 0.
-A job command keeps its selected device across its requests.
+Job and UI commands keep their selected device and requested session across requests.
 
 Device management requires a positional complete UUID or unique alias:
 `device select DEVICE`, `device forget DEVICE`, `device address DEVICE HOST:PORT`
@@ -105,15 +107,16 @@ Export/renewal remain available when expiration prevents listening. Renewal
 restarts the listener; if cleanup blocks it, the App reports no renewal. Finish
 cleanup, use **Refresh status**, then explicitly renew again.
 
-One device has one owner; different devices can run concurrently.
+One device has
+one owner; different devices can run concurrently. Opening clears old refs.
 Use `session open`, `session close` or `session takeover`; inspect state with `status`.
 Bare `session` shows command help and exits with 2 without contacting the daemon.
 The default idle limit is ten minutes; `session open --idle DURATION` accepts
 whole seconds from `1s` to `24h` (for example `10m`); fractional seconds are rejected.
 `busy` identifies the current holder. Explicit `session takeover` can take a
-session of the same pairing only when no foreground resources remain. It is not
-permission to interrupt another task.
-Device-side **Release current session** does not kill active work;
+session of the same pairing only when no foreground resources remain. Unfinished
+UI cleanup also blocks takeover. It is not permission to interrupt another task.
+Device-side **Release current session** clears refs but does not kill active work;
 the released caller must explicitly reopen before new work.
 
 `connectionBusy` reports another session occupying the connection. Same-session
@@ -141,14 +144,14 @@ Wait for stopping to finish; if it fails, use **Refresh status** after the work 
 worker ID, session and jobs. It can also confirm that the captured worker is already
 dead. Completion confirms that worker ended; helper descendants and temporary
 files may remain. Gateway/pairings survive; calls can become
-UNKNOWN. Refresh does not recover old jobs or replay actions. There is no
+UNKNOWN. Refresh does not recover old refs/jobs or replay actions. There is no
 remote force command.
 
 Use **Refresh status** to reconnect when the worker is unavailable. Cached
 management state may still show the previous worker.
 
 Worker restart loses device `j...`
-jobs; a surviving daemon can retain local `t...` transfer facts.
+jobs, refs; a surviving daemon can retain local `t...` transfer facts.
 Unused device connections close after 45 seconds; the daemon exits after about
 five continuous idle minutes with no local work or connections.
 
@@ -207,7 +210,9 @@ management facts are null, including gateway traffic when no network instance
 exists. Do not start a service just to obtain it. The shared lock paths are
 `/data/local/tmp/androidctl/worker.lock` and
 `/data/local/tmp/androidctl/helpers.lock`. File existence does not prove a held
-lock, and deleting a file does not stop its owner.
+lock, and deleting a file does not stop its owner. UiAutomation may contend with
+other tools using the same platform resource; coordinate known owners before
+continuing, rather than deleting locks or assuming automatic takeover.
 
 ## Results And Budgets
 
@@ -224,6 +229,9 @@ the known main result. Known shell cancellation with only ordinary pending clean
 remains exit 1.
 
 Text headings use the same fixed command path as JSON `command`.
+Ordinary UI text results occupy one line with the full `snapshotPath` and delivery
+errors or warnings. String values use JSON quoting; embedded newlines stay escaped
+on that line. Missing facts are not inferred. `--print` then echoes the saved body.
 Raw shell output retains its own lines.
 
 ### JSON Field Guide
@@ -237,6 +245,7 @@ Nested job facts keep their original meanings.
 | Location | Interpretation |
 | --- | --- |
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
+| `data.snapshotPath` | Absolute path to the saved observation. [Delivery](#images-and-delivery) also reports `snapshotError`, `historyError` and `deliveryError` when applicable. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
 | `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
 | `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
@@ -244,19 +253,143 @@ Nested job facts keep their original meanings.
 | `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
 
 Durations use nonnegative integers with `ms`, `s`, `m` or `h`; only `0` may
-omit its unit. Each option retains its own range. Requests share one finite
-budget across local lookup, connection, authentication and device work.
-Use `--run` for shell/transfer execution limits and `--wait` for shell/transfer or `job get` waiting.
+omit its unit. Each option retains its own range. Use `--run` for shell/transfer
+execution limits and `--wait` for shell/transfer or `job get` waiting.
 
 | Budget | Default / limit |
 | --- | --- |
+| Ordinary UI | `5s`; explicit `--timeout` accepts `1ms`–`60s`. |
 | Ordinary shell execution / initial wait | 10000 ms each. |
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
 | Transfer execution / initial wait | 600000 ms / 10000 ms. |
 | Shell or transfer execution | `--run` accepts `1ms`–`10m`. |
 | Shell/transfer and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
 
-All reported host file paths are absolute, including `job output` exports.
+Connection, queueing, observation and attachment delivery consume one remaining
+request budget, without restarting it at each step. Requests return when complete.
+This budget is not a hard wall-clock CLI limit: local validation,
+decoding and file saving continue after complete attachments arrive, without a
+separate clock cutoff. Resources remain held until actual cleanup ends.
+Network requests and waiting for an occupied history lock keep the original
+deadline.
+
+The device checks the request's cutoff before entering the worker. This does not
+cancel an already started shell or file job; a later cancel request has its own
+budget.
+
+Measured JSON fields are `localConnectMs`, `deviceConnectMs`, `uiConnectMs` and
+`deliveryMs`. Unmeasured/reused connections omit their fields. `deliveryMs` covers fetching and
+local processing through file saving, before output encoding. Stages can overlap;
+they exclude subsequent reading/model work and cannot be added as total task time.
+
+## Observations And Targets
+
+A published observation is the capture available for delivery in the device's
+current session. Publication does not mean the client has received or downloaded
+it; completeness and collection policy remain separate facts.
+
+Every `snapshot` collects, including scope, boxes and global `--json`.
+`--all` changes the XML projection, not collection; `--boxes` includes bounds.
+`snapshot --raw` saves the device's collected,
+processed tree as JSON instead of projected XML. It changes representation,
+not permissions or completeness. Global `--json` independently
+selects Result JSON on stdout; it does not change the saved body.
+
+| File | Contents |
+| --- | --- |
+| XML | Projected screen/window/control tags; `<?androidctl ...?>` holds invocation, source, snapshotFacts. |
+| `snapshot --raw` | The entire current device-processed tree. Works with text or JSON stdout. |
+
+Invocation metadata keeps non-default all/boxes flags; visible screen values remain in the body.
+`source` preserves capture and age, with cache and before-action flags subject to
+the defaults below. `snapshotFacts` retains connection, sequence, sampling times,
+scope and unavailable fields, with non-body gaps summarized below. The complete
+window inventory is in the XML body. JSON stdout retains observation and
+completeness summaries plus successful file paths; the original gap list remains
+in raw. Text stdout gives result and paths,
+with `observationWarning` for partial sampling or completeness gaps.
+Reported unavailable fields remain in raw JSON. An empty `actions=""` means no
+exposed actions.
+
+Raw `checked` uses `"false"`, `"true"` or `"mixed"`. Unknown raw checked integers
+remain decimal strings.
+Raw `checkedModel` identifies the node's binary or tri-state platform reading;
+XML omits the checkable node's reported `triState` default below.
+Window `type` uses application, inputMethod, system, accessibilityOverlay,
+splitScreenDivider or magnificationOverlay, with unknown integers as decimal strings.
+
+### XML Defaults And Gaps
+
+XML omits only the following explicitly reported exact defaults and duplicate
+facts. Missing input fields are not filled in; nulls, errors and non-default
+facts remain. Raw JSON retains its existing facts.
+
+| Location | XML rule |
+| --- | --- |
+| Invocation `args` | Omit `timeoutMs=5000` and `scope={}`. Preserve all/boxes and non-default requests. Do not add an absent args object. |
+| `source` | Omit reported `snapshotCached=false` and `snapshotBeforeAction=false`. Preserve capture and age. A successful snapshot in this version reports both flags before XML rendering. |
+| `snapshotFacts` | Omit the windows copy, keyboard when equal to screen.keyboard, `selectionScope={}`, `partial=false` and empty missing/nodeUnavailable lists. Preserve startedMs/finishedMs, sequence, connection, scope and other facts. |
+| `snapshotFacts.display` | Omit `interactive=true`, `deepIdle=false`, `userId=0`, `displayId=0`, `displayState=2` and `keyguardShowing/keyguardSecure/deviceLocked=false`. With displayError, retain displayId/displayState. Omit sampleMs only when it equals an actually reported, non-null finishedMs. Keep width/height/rotation and errors. |
+| Controls and windows | Omit a checkable node's reported `checkedModel=triState`; keep binary and other reported models. Omit window `active=false` and `focused=false`. Keep rootAvailable true/false; its absence means unreported, not true. Actions, including empty editable actions, and named coordinates keep their existing meaning. |
+| Collections | Render all reported non-null integer dimensions, indexes, spans and selectionMode, including negative values. rows/columns=-1 are unknown platform counts; other negative values are preserved as reported. Omit `selectionMode=0` only with rows or columns, and `rowSpan/columnSpan=1` only with rowIndex or columnIndex on that element. Keep zero, multi-cell and negative spans; absent collection fields add no defaults. These rules use fields, including on textbox/button, rather than list/item tags. |
+| Selected title | Keep screen.title. After XML character cleaning and titleIncomplete checks, omit only the nonempty duplicate window title whose id equals scope.window. Keep explicit empty window titles, both titleIncomplete flags, other window titles, packageName and rootAvailable. Null or absent window titles remain absent. Illegal XML characters use the existing replacement; the header no longer duplicates their original window values. |
+
+The original capture's missing entries whose refs appear in the final XML body
+remain in `snapshotFacts.missing`, in original order, omitting only reported
+unreadChildren/unavailableChildren=0. All other entries appear only in
+`missingSummary`: `entries` is their count; optional unreadChildren and
+unavailableChildren sum only reported counts and are omitted when the sum is
+zero; optional `reasons` counts each reported reason. An absent count does not
+prove zero missing children, and these sums are not a total of all missing
+descendants. Empty missing or missingSummary are omitted.
+
+JSON `snapshotCompleteness.missingCount` remains the original entry count:
+the retained missing length plus missingSummary.entries. `--all` may expose more refs, but ref-unavailable and ref-less entries
+can still be summarized. It does not restore the original missing list.
+Missing/empty missing alone does not establish completeness. Even partial=false
+does not guarantee visual text, provider data or business content is complete.
+
+## Images And Delivery
+
+Observation bodies default to files under the artifact root's `.androidctl/snapshots/`.
+The root is the global `--workspace-root PATH`, then `ANDROIDCTL_WORKSPACE_ROOT`,
+then the CLI working directory. It must be an existing directory; AndroidCtl does
+not search parent directories. This root does not change user-level credentials
+or create a separate daemon. All reported host file paths are absolute, including
+`job output` exports.
+`snapshot --out PATH` writes the body only to that new file in an existing directory;
+relative explicit paths resolve against the CLI cwd.
+Complete files contain all selected collected content, not necessarily a complete
+page. Check missing/partial facts and any host-tool truncation separately.
+
+`snapshot --print` echoes the saved body after the result and paths.
+It cannot be combined with global `--json`. The body is generated once and echoed
+only after saving succeeds; print is neither a body-only stdout format nor a
+fallback for a failed save.
+
+For a cache-path or permission error, preserve the existing object and choose
+an existing `--workspace-root` where AndroidCtl can create a new cache. To repair
+the reported path on Windows, use **Properties → Security → Advanced** and the
+reported permission error. On POSIX, `chmod 700` fixes access bits only when the
+reported owner is correct. Fix delivery before obtaining the missing observation.
+
+Automatic bodies use a 150-file/20-MiB quota. Later saves can reclaim old
+files matching AndroidCtl's complete filename format, including edited or replaced
+files. Matching stems are reclaimed together and current
+file sizes count toward the quota. Copy files elsewhere for lasting retention;
+nonmatching files are left alone and failed deletions still occupy quota.
+This is not a physical directory-size guarantee. Explicit outputs outside these
+cache directories are not rotated. An explicit output inside them with a matching
+filename is reclaimable too. Invalid output paths and print/json conflicts reject before the snapshot RPC.
+The body is not duplicated in history when saved through an explicit --out.
+
+`snapshot` requires a saved body; missing that artifact fails an otherwise
+successful observation.
+Actual write or close failures are reported and removal of that write's file is
+attempted.
+
+Read actual saved content before relying on it; expand the same file when the
+host's display is truncated. Automatic files can contain private screen values.
 
 ## Jobs And Files
 
@@ -278,6 +411,8 @@ execution releases only this shell's session foreground resource after permissio
 to execute. The device's four helper slots are separate: releasing this foreground
 resource does not release a live helper's capacity, which remains occupied until
 that helper exits.
+Same-session read-only snapshots remain available during ordinary shell. No
+screen observation is attached to shell output.
 
 For a completed script, a nonzero exit or signal termination gives `failed` and
 CLI exit 1. Nonzero exits have reason `exit=N` and preserve N in
@@ -395,6 +530,7 @@ processes, directory-authorized principals, shared-storage Apps or an app-specif
 directory's owner is outside the guarantee.
 
 Credentials are private to the current OS user, under `%LOCALAPPDATA%/AndroidCtl`
-on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions and job facts
-are in memory; there is no durable operation history.
-Preserve pairing and recovery materials when outcomes are uncertain.
+on Windows or `~/.local/state/androidctl` on macOS/Linux. Sessions, refs and job
+facts are in memory; there is no durable operation history. Preserve pairing and
+recovery materials when outcomes are uncertain, and preserve verified deliverables
+outside automatic history reclamation when needed.

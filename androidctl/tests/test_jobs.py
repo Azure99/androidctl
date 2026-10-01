@@ -14,7 +14,13 @@ from androidctl import job_commands
 from androidctl.cli_options import CliOptions
 from androidctl.job_commands import JobClient, query_failed
 from androidctl.output import Output
-from androidctl.protocol import CHUNK_BYTES, Fault, Problem, Result, TransportFailure
+from androidctl.protocol import (
+    CHUNK_BYTES,
+    Fault,
+    Problem,
+    Result,
+    TransportFailure,
+)
 
 
 @pytest.mark.parametrize(("job", "budget"), [("jdevice", 50), ("tlocal", 10)])
@@ -209,6 +215,9 @@ def test_job_output_exports_selected_stream_to_real_file(
     tmp_path, monkeypatch, stream, execution_result
 ):
     monkeypatch.chdir(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("ANDROIDCTL_WORKSPACE_ROOT", str(workspace))
     streams = {"stdout": b"out\x00\xff" * 9000, "stderr": b"err\r\n" * 7000}
     metadata = [
         {"stream": name, "size": len(body), "sha256": hashlib.sha256(body).hexdigest()}
@@ -282,6 +291,7 @@ def test_job_output_exports_selected_stream_to_real_file(
         "streams": [next(item for item in metadata if item["stream"] == stream)],
     }
     assert result["reason"] == str(destination)
+    assert not list(workspace.iterdir())
     assert destination.read_bytes() == streams[stream]
     assert result["data"]["size"] == destination.stat().st_size
     assert (

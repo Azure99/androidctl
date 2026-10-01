@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,6 +12,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.util.Base64
+import java.util.Random
+import java.util.zip.InflaterInputStream
 
 class WireContractTest {
     @Test fun deviceProjectionAndTransferMatchTheSharedContract() {
@@ -51,24 +54,33 @@ class WireContractTest {
         assertTrue(failure.message.orEmpty().contains("duplicate input: &amp;"))
     }
 
-    private fun generateContract(fixture: JSONObject): JSONObject =
-        json(
+    private fun generateContract(fixture: JSONObject): JSONObject {
+        val projected = copy(fixture.getJSONObject("raw"))
+        UiSemantics.project(projected.getJSONArray("nodes").objects())
+        projectionFacts(projected)
+        val limits =
+            json(
+                "MESSAGE_BYTES" to Limits.MESSAGE_BYTES,
+                "JSON_UTF8_BYTES" to Limits.JSON_UTF8_BYTES,
+                "CHUNK_BYTES" to Limits.CHUNK_BYTES,
+                "TREE_BYTES" to Limits.TREE_BYTES,
+                "IMAGE_BYTES" to Limits.IMAGE_BYTES,
+                "OUTPUT_BYTES" to Limits.OUTPUT_BYTES,
+                "MAX_RUN_MS" to Limits.MAX_RUN_MS,
+                "PAIRING_NAME_UNITS" to Pairings.PAIRING_NAME_UNITS,
+                "HELPER_PAYLOAD_BYTES" to HELPER_PAYLOAD_BYTES,
+            )
+        return json(
             "raw" to fixture.getJSONObject("raw"),
-            "limits" to
-                json(
-                    "MESSAGE_BYTES" to Limits.MESSAGE_BYTES,
-                    "JSON_UTF8_BYTES" to Limits.JSON_UTF8_BYTES,
-                    "CHUNK_BYTES" to Limits.CHUNK_BYTES,
-                    "OUTPUT_BYTES" to Limits.OUTPUT_BYTES,
-                    "MAX_RUN_MS" to Limits.MAX_RUN_MS,
-                    "HELPER_PAYLOAD_BYTES" to HELPER_PAYLOAD_BYTES,
-                    "PAIRING_NAME_UNITS" to Pairings.PAIRING_NAME_UNITS,
-                ),
-            "fileFailures" to fileFailures(),
+            "projected" to projected,
+            "captures" to captures(projected),
             "output" to outputChunks(),
             "shellCleanupFailure" to shellCleanupFailure(),
+            "fileFailures" to fileFailures(),
+            "limits" to limits,
             "queryMethods" to JSONArray(RpcMethods.QUERY_METHODS.sorted()),
         )
+    }
 
     private fun exportCandidate(
         produced: JSONObject,
@@ -87,6 +99,12 @@ class WireContractTest {
     ) {
         assertEquals("Contract sections differ from the reviewed contract", fields(fixture), fields(produced))
         compareNamedSamples("fileFailures", fixture.getJSONArray("fileFailures"), produced.getJSONArray("fileFailures"))
+        assertEquals(
+            "Device projection differs from the reviewed contract",
+            structure(fixture.getJSONObject("projected")),
+            structure(produced.getJSONObject("projected")),
+        )
+        compareCaptures(fixture.getJSONArray("captures"), produced.getJSONArray("captures"))
         for (section in listOf("output", "shellCleanupFailure")) {
             assertEquals(section, structure(fixture.getJSONObject(section)), structure(produced.getJSONObject(section)))
         }
@@ -100,6 +118,56 @@ class WireContractTest {
             structure(fixture.getJSONArray("queryMethods")),
             structure(produced.getJSONArray("queryMethods")),
         )
+    }
+
+    private fun projectionFacts(tree: JSONObject) {
+        val nodes = tree.getJSONArray("nodes").objects().associateBy { it.getString("ref") }
+        assertEquals("Pay & finish", nodes.getValue("e1").getJSONObject("view").getString("name"))
+        assertEquals("e1", nodes.getValue("e2").getJSONObject("view").getString("selectionTarget"))
+        assertTrue(nodes.getValue("e4").getJSONObject("row").getBoolean("complete"))
+        assertEquals(
+            -1,
+            nodes
+                .getValue("e4")
+                .getJSONObject("row")
+                .getJSONObject("nearest")
+                .getInt("row"),
+        )
+        assertFalse(nodes.getValue("e5").getJSONObject("view").getBoolean("nameComplete"))
+        assertEquals("mixed", nodes.getValue("e3").getString("checked"))
+        assertEquals("triState", nodes.getValue("e3").getString("checkedModel"))
+        assertFalse(nodes.getValue("e3").getBoolean("refAvailable"))
+        assertTrue(tree.getBoolean("partial"))
+    }
+
+    private fun captures(projected: JSONObject): JSONArray {
+        val sessions = Sessions({ 0L }, {})
+        val owner = SessionOwner("pair", "task", "host")
+        val lease = sessions.acquire(owner)
+        val delivery = UiDelivery(sessions, "contract")
+        val result = JSONArray()
+        var capture = delivery.createCapture(lease, UiDelivery.prepareTree(projected), false)
+        result.put(
+            read(delivery, owner, capture, "tree", multiple = false)
+                .put("name", "projected-tree")
+                .put("expect", json("encoding" to "zlib", "tree" to "projected")),
+        )
+        val large = copy(projected)
+        val noise = ByteArray(Limits.CHUNK_BYTES + 1).also { Random(23).nextBytes(it) }
+        large.getJSONArray("nodes").getJSONObject(0).put("stateDescription", Base64.getEncoder().encodeToString(noise))
+        capture = delivery.createCapture(lease, UiDelivery.prepareTree(large), false)
+        result.put(
+            read(delivery, owner, capture, "tree", multiple = true)
+                .put("name", "large-tree")
+                .put("expect", json("encoding" to "zlib", "tree" to "projected-with-noise")),
+        )
+        capture = delivery.createCapture(lease, UiDelivery.prepareTree(json("sequence" to 9)), false)
+        result.put(
+            read(delivery, owner, capture, "tree", multiple = false)
+                .put("name", "minimal-tree")
+                .put("expect", json("encoding" to "raw", "tree" to "minimal")),
+        )
+        return result
     }
 
     private fun outputChunks(): JSONObject {
@@ -140,6 +208,68 @@ class WireContractTest {
                 json("name" to "publication-rejected", "expect" to Outcome.FAILED, "response" to rejected),
             ),
         )
+    }
+
+    private fun compareCaptures(
+        reviewed: JSONArray,
+        actual: JSONArray,
+    ) {
+        val golden = indexSamples("captures reviewed", reviewed)
+        val current = indexSamples("captures produced", actual)
+        assertEquals("captures sample names differ from the reviewed contract", golden.keys, current.keys)
+        for ((name, produced) in current) {
+            val saved = golden.getValue(name)
+            assertEquals(fields(saved), fields(produced))
+            assertEquals(saved.getString("kind"), produced.getString("kind"))
+            assertEquals(structure(saved.getJSONObject("expect")), structure(produced.getJSONObject("expect")))
+            val encoding = produced.getJSONObject("expect").getString("encoding")
+            assertEquals(
+                encoding,
+                produced
+                    .getJSONArray("chunks")
+                    .getJSONObject(0)
+                    .getJSONObject("data")
+                    .getString("encoding"),
+            )
+            assertEquals(
+                encoding,
+                saved
+                    .getJSONArray("chunks")
+                    .getJSONObject(0)
+                    .getJSONObject("data")
+                    .getString("encoding"),
+            )
+            val currentBytes = decode(produced)
+            val savedBytes = decode(saved)
+            if (produced.getString("kind") == "tree") {
+                assertEquals(
+                    structure(JSONObject(savedBytes.toString(Charsets.UTF_8))),
+                    structure(JSONObject(currentBytes.toString(Charsets.UTF_8))),
+                )
+            } else {
+                assertArrayEquals(savedBytes, currentBytes)
+                assertEquals(
+                    structure(
+                        saved
+                            .getJSONArray("chunks")
+                            .getJSONObject(0)
+                            .getJSONObject("data")
+                            .getJSONObject("image"),
+                    ),
+                    structure(
+                        produced
+                            .getJSONArray("chunks")
+                            .getJSONObject(0)
+                            .getJSONObject("data")
+                            .getJSONObject("image"),
+                    ),
+                )
+            }
+            assertEquals(
+                fields(saved.getJSONArray("chunks").getJSONObject(0).getJSONObject("data")),
+                fields(produced.getJSONArray("chunks").getJSONObject(0).getJSONObject("data")),
+            )
+        }
     }
 
     private fun shellCleanupFailure(): JSONObject {
@@ -197,4 +327,67 @@ class WireContractTest {
     }
 
     private fun fields(value: JSONObject): Set<String> = value.keys().asSequence().toSet()
+
+    private fun read(
+        delivery: UiDelivery,
+        owner: SessionOwner,
+        capture: String,
+        kind: String,
+        multiple: Boolean,
+    ): JSONObject {
+        val chunks = JSONArray()
+        var offset = 0
+        do {
+            val response = delivery.read(owner, json("capture" to capture, "kind" to kind, "offset" to offset))
+            chunks.put(response)
+            val data = response.getJSONObject("data")
+            assertEquals(capture, data.getString("capture"))
+            offset += Base64.getDecoder().decode(data.getString("bytes")).size
+        } while (offset < data.getInt("size"))
+        return json("kind" to kind, "multiple" to multiple, "chunks" to chunks).also(::decode)
+    }
+
+    private fun decode(capture: JSONObject): ByteArray {
+        val chunks = capture.getJSONArray("chunks").objects()
+        val first = chunks.first().getJSONObject("data")
+        val multiple = capture.getBoolean("multiple")
+        assertEquals(multiple, chunks.size > 1)
+        val output = ByteArrayOutputStream()
+        for (chunk in chunks) {
+            assertEquals(setOf("command", "result", "reason", "data"), fields(chunk))
+            assertEquals("ui.read", chunk.getString("command"))
+            assertEquals("done", chunk.getString("result"))
+            val data = chunk.getJSONObject("data")
+            assertEquals("available", data.getString("state"))
+            assertEquals(fields(first), fields(data))
+            assertEquals(output.size(), data.getInt("offset"))
+            for (field in listOf("capture", "state", "size", "sha256", "encoding", "decodedSize", "decodedSha256")) {
+                assertEquals(first.get(field), data.get(field))
+            }
+            val bytes = Base64.getDecoder().decode(data.getString("bytes"))
+            assertTrue(bytes.size in 1..Limits.CHUNK_BYTES)
+            if (multiple) {
+                assertEquals(
+                    if (chunk ===
+                        chunks.last()
+                    ) {
+                        first.getInt("size") % Limits.CHUNK_BYTES
+                    } else {
+                        Limits.CHUNK_BYTES
+                    },
+                    bytes.size,
+                )
+            }
+            output.write(bytes)
+        }
+        val encoded = output.toByteArray()
+        assertEquals(first.getInt("size"), encoded.size)
+        assertEquals(first.getString("sha256"), sha256(encoded))
+        val encoding = first.getString("encoding")
+        assertTrue(encoding in if (capture.getString("kind") == "image") setOf("raw") else setOf("raw", "zlib"))
+        val decoded = if (encoding == "raw") encoded else InflaterInputStream(encoded.inputStream()).use { it.readBytes() }
+        assertEquals(first.getInt("decodedSize"), decoded.size)
+        assertEquals(first.getString("decodedSha256"), sha256(decoded))
+        return decoded
+    }
 }

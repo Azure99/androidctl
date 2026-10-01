@@ -1,5 +1,6 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 import typer
@@ -13,6 +14,7 @@ class CliOptions:
     device: str | None
     session: str
     as_json: bool
+    workspace_root: Path = field(default_factory=Path.cwd)
 
 
 def options(ctx: typer.Context) -> CliOptions:
@@ -56,6 +58,12 @@ def parse_duration(value: str | int) -> int:
             "Use an integer with ms, s, m or h; only 0 may omit the unit"
         )
     return int(match[1]) * {"ms": 1, "s": 1000, "m": 60000, "h": 3600000}[match[2]]
+
+
+def timeout_duration(value: int) -> int:
+    if not 1 <= value <= 60000:
+        raise typer.BadParameter("Duration must be between 1ms and 60s")
+    return value
 
 
 def wait_duration(value: int | None) -> int | None:

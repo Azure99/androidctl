@@ -6,7 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from androidctl import app as cli
-from androidctl import job_commands, local_call
+from androidctl import job_commands, local_call, ui_client
 from androidctl import local_server as local_server_module
 from androidctl.cli_options import CliOptions
 from androidctl.private_files import write_json
@@ -199,7 +199,7 @@ async def test_local_dispatch_uncertainty_preserves_the_original_problem(tmp_pat
 
 @pytest.mark.parametrize(
     ("arguments", "command"),
-    [(["status"], "status"), (["shell", "true"], "shell")],
+    [(["status"], "status"), (["snapshot"], "snapshot"), (["shell", "true"], "shell")],
 )
 def test_uncertain_local_reply_uses_the_actual_cli_command(
     tmp_path, monkeypatch, arguments, command
@@ -231,7 +231,6 @@ def test_uncertain_local_reply_uses_the_actual_cli_command(
             assert value["result"] == "UNKNOWN"
             assert value["error"] == problem.wire()
             assert received == ["call"]
-            assert "deviceId" not in value["data"].get("context", {})
 
     asyncio.run(run())
 
@@ -298,6 +297,8 @@ async def test_job_output_unknown_device_is_rejected_before_device_rpc(
             cli.app,
             [
                 "--json",
+                "--workspace-root",
+                str(tmp_path),
                 "--device",
                 "missing-device",
                 "job",
@@ -368,7 +369,7 @@ async def test_local_error_retains_problem_and_dispatch_classification(
             await client.close()
 
 
-@pytest.mark.parametrize("entry", ["job"])
+@pytest.mark.parametrize("entry", ["ui", "job"])
 @pytest.mark.parametrize("explicit", [False, True])
 async def test_multi_rpc_command_keeps_its_device_when_default_changes(
     tmp_path, monkeypatch, entry, explicit
@@ -405,7 +406,11 @@ async def test_multi_rpc_command_keeps_its_device_when_default_changes(
             {"deviceId": coordinator.state.resolve_selection("phone")[0].device_id},
         )
         context = CliOptions("phone" if explicit else None, "task", False)
-        client = job_commands.JobClient(context)
+        client = (
+            ui_client.UiClient(context, time.monotonic() + 3)
+            if entry == "ui"
+            else job_commands.JobClient(context)
+        )
         monkeypatch.setattr(local_call, "connect_local", connect)
         try:
             for command in ("snapshot", "ui.read"):

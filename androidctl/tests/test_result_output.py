@@ -12,12 +12,15 @@ from typer.main import get_command
 from typer.testing import CliRunner
 
 from androidctl import app as cli
-from androidctl import job_commands
+from androidctl import job_commands, ui_client
 from androidctl.cli_options import CliOptions
 from androidctl.coordinator import Coordinator
 from androidctl.output import Output, display_name
 from androidctl.private_files import private_directory, write_json
-from androidctl.protocol import Result, completed
+from androidctl.protocol import (
+    Result,
+    completed,
+)
 from androidctl.state import HostState
 from certificate_test_support import certificate
 from pairing_test_support import Gateway, new_device_identity, paired, save_active
@@ -72,13 +75,29 @@ def test_device_listing_preserves_complete_ids_and_record_facts(capsys):
     assert json.loads(capsys.readouterr().out) == original
 
 
+def test_prior_delivery_error_reaches_json_even_when_stderr_is_broken(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "stderr", BrokenStream())
+    result = completed(
+        "click",
+        {"dispatchStarted": True, "deliveryError": "stdout: broken output"},
+    )
+    ui_client.print_delivery(result, observed=False, command="click", as_json=True)
+    value = json.loads(capsys.readouterr().out)
+    assert value["result"] == "done"
+    assert value["data"]["dispatchStarted"] is True
+    assert value["data"]["deliveryError"] == "stdout: broken output"
+    assert result.exit_code() == 0
+
+
 def test_session_names_are_escaped_only_in_human_output(capsys):
     facts = {"name": "task\u202e", "pairingName": "desk\u2066", "idleSeconds": 0}
     with pytest.raises(cli.typer.Exit) as result:
         cli.emit(Result(command="session open", result="done", data=facts))
     assert result.value.exit_code == 0
     assert 'name="task\\u202e"' in capsys.readouterr().out
-    session = {**facts, "shell": 0, "file": 0}
+    session = {**facts, "ui": 0, "shell": 0, "file": 0}
     value = Result(
         command="status",
         result="done",
@@ -109,7 +128,7 @@ def test_device_alias_is_escaped_only_in_text(capsys, command, alias, display):
         data={
             "device": alias,
             "worker": "ready",
-            "session": {"shell": 0, "file": 0},
+            "session": {"ui": 0, "shell": 0, "file": 0},
         },
     )
     original = value.wire()
@@ -365,6 +384,7 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
                 "pairingName": "another-host",
                 "idleSeconds": 12,
                 "callerState": "none",
+                "ui": 0,
                 "shell": 0,
                 "file": 0,
             },
@@ -388,7 +408,7 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         assert "callerSession=none\n" in output
         assert "workerId=worker-1\n" in output
         assert 'gateway={"state": "listening"}\n' in output
-        assert "shell=0 file=0\n" in output
+        assert "ui=0 shell=0 file=0\n" in output
         assert "helper pids=42\njobs=j1\n" in output
 
 

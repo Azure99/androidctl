@@ -15,6 +15,8 @@
     <string name="executor_attached">执行器已连接</string>
     <string name="executor_unavailable">执行器不可用</string>
     <string name="worker_identity">执行器 %1$s</string>
+    <string name="ui_cleanup">UI 清理：%1$s</string>
+    <string name="helper_jobs">辅助任务：%1$s</string>
     <string name="battery_unrestricted">电池优化：不受限</string>
     <string name="battery_optimized">电池优化：已启用</string>
     <string name="battery_unchecked">电池优化：未检查</string>
@@ -22,11 +24,13 @@
     <string name="battery_settings_unavailable">请打开 Android 设置，查找 AndroidCtl 的电池优化设置。</string>
     <string name="current_session">当前会话</string>
     <string name="session_idle">空闲 %1$d 秒</string>
+    <string name="session_resources">UI: %1$d / Shell: %2$d / 文件: %3$d</string>
     <string name="release_session">释放当前会话</string>
     <string name="no_session">无当前会话</string>
     <string name="session_unavailable">会话状态不可用</string>
     <string name="stop_executor">停止空闲执行器</string>
     <string name="release_session_title">释放当前会话？</string>
+    <string name="release_session_body">已开始的传输和 shell 任务会继续（电脑端断开后，传输约 %1$d 分钟内自动停止）；如需尽快停止，请撤销该配对。</string>
     <string name="release">释放</string>
     <string name="cancel">取消</string>
     <string name="pair_host">配对电脑</string>
@@ -52,7 +56,4 @@
     <string name="renew_certificate_title">续期设备证书？</string>
     <string name="renew_certificate_body">连接将关闭。请导出新证书，并在每台电脑上更新信任。配对和设备密钥保留。</string>
     <string name="renew">续期</string>
-    <string name="session_resources">Shell: %1$d / 文件: %2$d</string>
-    <string name="helper_jobs">辅助任务：%1$s</string>
-    <string name="release_session_body">已开始的传输和 shell 任务会继续（电脑端断开后，传输约 %1$d 分钟内自动停止）；如需尽快停止，请撤销该配对。</string>
 </resources>

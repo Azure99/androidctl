@@ -15,6 +15,8 @@
     <string name="executor_attached">Executor attached</string>
     <string name="executor_unavailable">Executor unavailable</string>
     <string name="worker_identity">Worker %1$s</string>
+    <string name="ui_cleanup">UI cleanup: %1$s</string>
+    <string name="helper_jobs">Helpers: %1$s</string>
     <string name="battery_unrestricted">Battery optimization: unrestricted</string>
     <string name="battery_optimized">Battery optimization: enabled</string>
     <string name="battery_unchecked">Battery optimization: not checked</string>
@@ -22,11 +24,14 @@
     <string name="battery_settings_unavailable">Open Android Settings and find Battery optimization for AndroidCtl.</string>
     <string name="current_session">Current session</string>
     <string name="session_idle">Idle %1$ds</string>
+    <string name="session_resources">UI: %1$d / Shell: %2$d / File: %3$d</string>
     <string name="release_session">Release current session</string>
     <string name="no_session">No current session</string>
     <string name="session_unavailable">Session status unavailable</string>
     <string name="stop_executor">Stop idle executor</string>
     <string name="release_session_title">Release current session?</string>
+    <!-- The quantities in these policy descriptions are fixed limits, not live counters. -->
+    <string name="release_session_body" tools:ignore="PluralsCandidate">Started transfers and shell jobs continue (transfers stop after about %1$d minutes without the host). Revoke this pairing to request an earlier stop.</string>
     <string name="release">Release</string>
     <string name="cancel">Cancel</string>
     <string name="pair_host">Pair host</string>
@@ -52,7 +57,4 @@
     <string name="renew_certificate_title">Renew device certificate?</string>
     <string name="renew_certificate_body">Connections will close. Export the new certificate and update trust on each host. Pairings and the device key are retained.</string>
     <string name="renew">Renew</string>
-    <string name="session_resources">Shell: %1$d / File: %2$d</string>
-    <string name="helper_jobs">Helpers: %1$s</string>
-    <string name="release_session_body" tools:ignore="PluralsCandidate">Started transfers and shell jobs continue (transfers stop after about %1$d minutes without the host). Revoke this pairing to request an earlier stop.</string>
 </resources>

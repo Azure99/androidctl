@@ -15,10 +15,15 @@ internal object Limits {
     const val QUEUE = 8
     const val NETWORK_HANDSHAKE_MS = 5000L
     const val IDLE_MS = 60000L
+    const val TREE_BYTES = 4 * 1024 * 1024
+    const val IMAGE_BYTES = 8 * 1024 * 1024
+    const val TEXT_BYTES = 65536
     const val OUTPUT_BYTES = 128 * 1024
     const val OUTPUTS = 8
     const val OUTPUT_MS = 120000L
     const val MAX_RUN_MS = 600000L
+    const val NODES = 1024
+    const val WINDOWS = 20
     const val PORT = 18843
 }
 

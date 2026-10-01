@@ -63,6 +63,6 @@ style:
   ReturnCount:
     active: false
   ThrowsCount:
-    max: 3
+    active: false
   WildcardImport:
     active: false

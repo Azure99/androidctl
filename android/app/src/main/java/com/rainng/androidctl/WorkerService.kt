@@ -19,9 +19,10 @@ class WorkerService(
     private val appUid = context.applicationInfo.uid
     private val workerLock = WorkerLock()
     private val workerId = token()
-    private val sessions = Sessions(SystemClock::elapsedRealtime)
-    private val files = FileJobs(sessions)
+    private val sessions: Sessions = Sessions(SystemClock::elapsedRealtime) { lease -> ui.clear(lease) }
+    private val ui: UiBackend = UiBackend(context, sessions, workerId)
     private val shell = ShellJobs(context, sessions, workerLock.directory, workerLock::check)
+    private val files = FileJobs(sessions)
     private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "androidctl-idle") }
     private val maintenanceFailures = ConcurrentHashMap<String, String>()
 
@@ -68,13 +69,14 @@ class WorkerService(
                     "job.get" -> shell.get(owner, body.getJSONObject("args"))
                     "job.cancel" -> shell.cancel(owner, body.getJSONObject("args"))
                     "output.read" -> shell.output(owner, body.getJSONObject("args"))
-
                     "session.open", "session.close", "session.takeover" ->
                         sessionCommand(
                             method,
                             owner,
                             body.getJSONObject("args"),
                         )
+                    "ui.read" -> ui.delivery.read(owner, body.getJSONObject("args"))
+                    in RpcMethods.UI_COMMANDS -> ui.execute(owner, method, body.getJSONObject("args"), deadline)
                     else -> throw Rejected("method", "Unsupported worker method")
                 }
             }
@@ -90,15 +92,15 @@ class WorkerService(
                 val seconds = args.getLong("idleSeconds")
                 if (seconds !in 1L..MAX_IDLE_SECONDS) throw Rejected("idle", "Idle timeout must be 1 to $MAX_IDLE_SECONDS seconds")
                 sessions.open(owner, idleMs = TimeUnit.SECONDS.toMillis(seconds))
-                outcome("session open", reason = displayName(owner.name))
+                outcome("session open", reason = "${displayName(owner.name)}; refs cleared")
             }
             "session.close" -> {
                 sessions.close(owner)
-                outcome("session close")
+                outcome("session close", reason = "refs cleared")
             }
             else -> {
                 val previous = sessions.takeover(owner)
-                outcome("session", reason = "took over ${previous?.let(::displayName) ?: "idle device"}")
+                outcome("session", reason = "took over ${previous?.let(::displayName) ?: "idle device"}; refs cleared")
             }
         }
 
@@ -169,7 +171,7 @@ class WorkerService(
             "worker" to if (sessions.stopped) "stopping" else "ready",
             "session" to session,
             "helpers" to shell.snapshot(owner),
-            "diagnostics" to json("maintenance" to JSONObject(maintenanceFailures)),
+            "diagnostics" to json("uiCleanup" to ui.cleanupFailure, "maintenance" to JSONObject(maintenanceFailures)),
         )
 
     // Binder returns structured platform failures to the gateway.

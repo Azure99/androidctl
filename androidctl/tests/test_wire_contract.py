@@ -1,16 +1,19 @@
 import asyncio
+import json
 import math
 import re
+import time
 from pathlib import Path
 
 import pytest
 import typer
 
-from androidctl import job_commands, protocol
+from androidctl import job_commands, protocol, ui_view
 from androidctl.cli_options import CliOptions
 from androidctl.coordinator import QUERY_METHODS
 from androidctl.output import Output
 from androidctl.protocol import CHUNK_BYTES, Result
+from androidctl.ui_client import UiClient
 from ui_test_support import load_wire_contract
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +30,7 @@ def index_samples(section, samples, key="name"):
     return {sample[key]: sample for sample in samples}
 
 
+CAPTURES = index_samples("captures", WIRE_CONTRACT["captures"])
 FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
 
 FILE_FAILURE_EXPECTED = {
@@ -94,6 +98,8 @@ def test_wire_limits_agree_across_boundaries():
         "MESSAGE_BYTES": protocol.MAX_MESSAGE,
         "JSON_UTF8_BYTES": protocol.JSON_UTF8_BYTES,
         "CHUNK_BYTES": protocol.CHUNK_BYTES,
+        "TREE_BYTES": protocol.TREE_BYTES,
+        "IMAGE_BYTES": protocol.IMAGE_BYTES,
         "OUTPUT_BYTES": protocol.OUTPUT_BYTES,
         "MAX_RUN_MS": protocol.MAX_RUN_MS,
         "PAIRING_NAME_UNITS": protocol.PAIRING_NAME_UNITS,
@@ -117,6 +123,54 @@ def constant(source, name):
     match = re.search(rf"\b{name}\s*(?:=\s*)?\(?([0-9][0-9uL *]*)", source)
     assert match, f"Production constant {name} was not found"
     return math.prod(int(part.strip().rstrip("uL")) for part in match[1].split("*"))
+
+
+@pytest.mark.parametrize("capture", CAPTURES.values(), ids=CAPTURES)
+def test_host_consumes_device_produced_chunks_without_reencoding(capture, monkeypatch):
+    chunks = capture["chunks"]
+    identifier = chunks[0]["data"]["capture"]
+    responses = {chunk["data"]["offset"]: chunk for chunk in chunks}
+    requested = []
+
+    async def read(command, args):
+        assert command == "ui.read"
+        assert args["capture"] == identifier
+        assert args["kind"] == capture["kind"]
+        requested.append(args["offset"])
+        return Result.model_validate(responses[args["offset"]])
+
+    client = UiClient(CliOptions(None, "default", False), time.monotonic() + 10)
+    monkeypatch.setattr(client, "call", read)
+    body, metadata = asyncio.run(client.blob(identifier, capture["kind"]))
+    assert requested == list(responses)
+    assert (len(chunks) > 1) == capture["multiple"]
+    expected = capture["expect"]
+    assert chunks[0]["data"]["encoding"] == expected["encoding"]
+    tree = json.loads(body)
+    if expected["tree"] == "minimal":
+        assert tree == {"sequence": 9}
+        return
+    if expected["tree"] == "projected-with-noise":
+        assert len(tree["nodes"][0].pop("stateDescription")) > protocol.CHUNK_BYTES
+    assert_json(WIRE_CONTRACT["projected"], tree)
+    screen = ui_view.screen(tree, ui_view.project(tree))
+    assert screen.attrib["unreadable"] == "true"
+    button = screen.find(".//button[@name='Pay & finish']")
+    assert button is not None
+    assert button.attrib["ref"] == "e1"
+    assert screen.find(".//text[@name='Pay & finish']") is None
+    checkbox = screen.find(".//checkbox")
+    assert checkbox is not None
+    assert checkbox.attrib["checked"] == "mixed"
+    assert "ref" not in checkbox.attrib
+    assert checkbox.attrib["ref-unavailable"] == "Original identity unavailable"
+    indexed = screen.find(".//button[@name='Delete']")
+    assert indexed is not None
+    assert indexed.attrib["ref"] == "e4"
+    assert "unreadable" not in indexed.attrib
+    prefix = screen.find(".//text[@name='Readable prefix']")
+    assert prefix is not None
+    assert prefix.attrib["unreadable"] == "true"
 
 
 def test_device_shell_cleanup_overrides_the_public_exit_without_losing_execution():
@@ -163,9 +217,10 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
 @pytest.mark.parametrize(
     ("samples", "names"),
     [
+        (CAPTURES, {"projected-tree", "large-tree", "minimal-tree"}),
         (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
     ],
-    ids=["fileFailures"],
+    ids=["captures", "fileFailures"],
 )
 def test_named_sample_coverage_is_exact(samples, names):
     assert samples.keys() == names

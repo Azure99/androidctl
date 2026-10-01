@@ -1,6 +1,6 @@
 ---
 name: androidctl
-description: Use when pairing with an Android device and managing its AndroidCtl session, running supervised device shell scripts and transferring files through the CLI.
+description: Use when pairing with an Android device and managing its AndroidCtl session, reading UI observations and snapshots, running supervised device shell scripts and transferring files through the CLI.
 ---
 
 # AndroidCtl
@@ -24,12 +24,54 @@ options precede the command.
 ```sh
 androidctl pair 192.168.1.20:18843 000042 --name phone
 androidctl --device DEVICE -s task session open
+androidctl --device DEVICE -s task snapshot
 ```
 
-Read the result before continuing.
+Read the result before continuing. Open once: reopening clears refs.
 The unnamed `default` session is shared. Respect `busy`/`connectionBusy`; use
 takeover only on explicit user instruction. After device-side release, explicitly
 open again only when continuing is intended.
+
+## Read Observations
+
+Read the absolute `snapshotPath` with host file tools.
+Paths in text output are JSON-quoted; decode them as JSON strings before
+opening the files. XML is the default;
+`--raw` saves the tree as JSON. Global `--json` independently selects result JSON
+on stdout. See [XML defaults and gaps](reference.md#xml-defaults-and-gaps) and
+[delivery options](reference.md#images-and-delivery).
+
+Real App JSON result excerpts follow. The reported absolute paths use symbolic
+values; omitted fields remain in the original results.
+
+```json
+{
+  "command": "snapshot",
+  "result": "done",
+  "data": {
+    "snapshotPath": "SNAPSHOT_PATH",
+    "snapshotCached": false,
+    "snapshotCompleteness": {
+      "partial": true,
+      "missingCount": 1,
+      "unavailableNodeCount": 0
+    }
+  }
+}
+```
+
+Keep the App/window, sampling time, completeness, full values, relevant ancestors
+and all candidate matches. When host output is truncated, expand the same file
+before collecting again. A failed file read needs diagnosis, not another action.
+
+Reuse the returned observation when it answers the next decision. Collect again
+for transitions, changed targets or missing facts. Partial observations can
+establish reliable positive facts; gaps cannot prove absence or selector
+uniqueness. A complete sample does not establish business readiness.
+
+Automatic observations are temporary workspace files. Read them while available
+and copy lasting deliverables elsewhere; the cache can reclaim even edited files.
+See [artifact paths and retention](reference.md#images-and-delivery).
 
 ## Results
 
@@ -77,6 +119,7 @@ a job ID, use the reference's
 
 ## Recover And Finish
 
+For attachment/save/read failures, obtain only the missing observation.
 `status` reports worker/session/resources and failed connection checks.
 Use the reference's [connection
 recovery](reference.md#connection-and-sessions), [ADB route setup](reference.md#device-setup-and-adb-route)

@@ -1,24 +1,31 @@
 import asyncio
+import io
 import json
 import time
+from contextlib import redirect_stdout
 from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
+import typer
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from androidctl import app as cli
-from androidctl import local_call
+from androidctl import job_commands, local_call, ui_client
 from androidctl import local_server as local_server_module
+from androidctl.cli_options import CliOptions
 from androidctl.coordinator import Coordinator
 from androidctl.private_files import private_directory
 from androidctl.protocol import (
     Fault,
+    Result,
     TransportFailure,
     completed,
 )
 from androidctl.state import HostState
 from androidctl.transport import Peer, encode_message
+from androidctl.ui_client import UiClient
 from connection_test_support import connections, local_server
 from pairing_test_support import Gateway, save_active
 
@@ -224,6 +231,48 @@ async def test_local_message_limit_rejects_before_dispatch_and_releases_slot(tmp
             await peer.close()
 
 
+@pytest.mark.parametrize("entry", ["ui", "job"])
+async def test_ui_keeps_total_deadline_while_job_calls_get_separate_budgets(
+    tmp_path, entry
+):
+    received = []
+
+    async def dispatch(method, args, deadline):
+        if method == "devices":
+            return completed(
+                method,
+                {
+                    "devices": [{"deviceId": "phone", "selected": True}],
+                    "context": {"deviceId": "phone", "deviceSource": "explicit"},
+                },
+            ).wire()
+        received.append(args["command"])
+        return completed(args["command"]).wire()
+
+    async with local_server(tmp_path / "ipc", dispatch) as (material, _):
+        peer = await Peer.open(material, source="local")
+        context = CliOptions("phone", "task", False)
+        client = (
+            ui_client.UiClient(context, time.monotonic() + 0.5)
+            if entry == "ui"
+            else job_commands.JobClient(context)
+        )
+        client.local.peer = peer
+        options = {"timeout": 0.5} if entry == "job" else {}
+        try:
+            assert (await client.call("first", {}, **options)).result == "done"
+            await asyncio.sleep(0.6)
+            if entry == "ui":
+                with pytest.raises(Fault, match="budget exhausted"):
+                    await client.call("second", {})
+                assert received == ["first"]
+            else:
+                assert (await client.call("second", {}, **options)).result == "done"
+                assert received == ["first", "second"]
+        finally:
+            await client.close()
+
+
 @pytest.mark.parametrize("shape", ["missing-timeout", "missing-args", "explicit"])
 async def test_local_call_keeps_business_parameters_without_changing_input(
     tmp_path, shape
@@ -332,6 +381,54 @@ async def test_queue_deadline_prevents_dispatch_even_when_its_reply_is_lost(
             await peer.close()
 
 
+@pytest.mark.parametrize("entry", ["app", "ui", "job"])
+async def test_cli_entries_deliver_results_with_their_normal_budget(
+    tmp_path, monkeypatch, entry
+):
+    received = []
+
+    async def dispatch(method, args):
+        received.append((method, args))
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        command = "job.get" if entry == "job" else "snapshot"
+        context = CliOptions("phone", "ours", True)
+        monkeypatch.setattr(local_call, "connect_local", connect)
+
+        def app_call():
+            output = io.StringIO()
+            with redirect_stdout(output), pytest.raises(cli.typer.Exit):
+                cli.device_call(
+                    typer.Context(
+                        get_command(cli.app).commands["snapshot"],
+                        info_name="snapshot",
+                        parent=typer.Context(get_command(cli.app)),
+                        obj=context,
+                    ),
+                    command,
+                )
+            return Result.model_validate(json.loads(output.getvalue()))
+
+        client = None
+        try:
+            if entry == "app":
+                result = await asyncio.to_thread(app_call)
+            else:
+                client = (
+                    ui_client.UiClient(context, time.monotonic() + 20)
+                    if entry == "ui"
+                    else job_commands.JobClient(context)
+                )
+                result = await client.call(command, {})
+            assert result.result == "done", result
+            assert [method for method, _ in received] == [command]
+            assert 0 < received[0][1]["timeoutMs"] <= 20000
+        finally:
+            if client:
+                await client.close()
+
+
 @pytest.mark.parametrize("release_slot", [False, True])
 async def test_request_queue_spends_the_original_deadline(
     tmp_path, monkeypatch, release_slot
@@ -377,3 +474,100 @@ async def test_request_queue_spends_the_original_deadline(
         finally:
             released.set()
             await peer.close()
+
+
+@pytest.mark.parametrize("delayed_hop", ["local", "device"])
+async def test_welcome_read_timeout_closes_connection_without_business(
+    tmp_path, monkeypatch, delayed_hop
+):
+    root = tmp_path / "private"
+    calls = []
+
+    async def dispatch(method, args):
+        calls.append(method)
+        return {"command": method, "result": "done", "data": {}}
+
+    release, entered = asyncio.Event(), asyncio.Event()
+    if delayed_hop == "device":
+        root.mkdir()
+        gateway = Gateway(root / "gateway", dispatch=dispatch)
+        gateway.credentials["test"] = "pair"
+        context = gateway.listening()
+    else:
+
+        async def local_dispatch(method, args, deadline):
+            calls.append(method)
+            return completed(method).wire()
+
+        context = local_server(root, local_dispatch, credential="test")
+    async with context as connection:
+        if delayed_hop == "device":
+            material = {
+                **gateway.identity,
+                "credential": "test",
+                "alias": "fixture",
+            }
+            server = gateway
+        else:
+            material, server = connection
+        original = server.reply if delayed_hop == "device" else local_server_module.send
+
+        async def reply(connection, value):
+            if (value if delayed_hop == "device" else json.loads(value)).get(
+                "event"
+            ) == "connected":
+                entered.set()
+                await release.wait()
+            await original(connection, value)
+
+        if delayed_hop == "device":
+            monkeypatch.setattr(server, "reply", reply)
+        else:
+            monkeypatch.setattr(local_server_module, "send", reply)
+        private_directory(root / "state")
+        state = HostState(root / "state")
+        if delayed_hop == "device":
+            save_active(state, material)
+        coordinator = Coordinator(state, instance="test")
+        client = UiClient(CliOptions(None, "default", False), time.monotonic() + 10)
+        original_receive = Peer.receive
+
+        async def receive(peer):
+            await asyncio.wait_for(entered.wait(), 3)
+            return await asyncio.wait_for(original_receive(peer), 0.2)
+
+        monkeypatch.setattr(Peer, "receive", receive)
+
+        async def connect_local(*, deadline, start=True):
+            return await Peer.open(material, deadline=deadline, source="local")
+
+        monkeypatch.setattr(local_call, "connect_local", connect_local)
+        try:
+            request = (
+                client.call("snapshot", {})
+                if delayed_hop == "local"
+                else coordinator.dispatch(
+                    "call",
+                    {"command": "snapshot", "args": {"timeoutMs": 10000}},
+                    deadline=time.monotonic() + 10,
+                )
+            )
+            if delayed_hop == "local":
+                with pytest.raises(Fault, match="within the request budget") as error:
+                    await request
+                assert error.value.problem.stage == "local.authentication"
+            else:
+                result = await request
+                assert result["result"] == "not sent"
+                assert "within the request budget" in result["reason"]
+                assert result["error"]["stage"] == "device.authentication"
+            assert entered.is_set()
+            assert not release.is_set()
+            assert not calls
+            assert server.connections
+            for connection in tuple(server.connections):
+                await asyncio.wait_for(connection.wait_closed(), 3)
+        finally:
+            release.set()
+            await client.close()
+            await coordinator.close()
