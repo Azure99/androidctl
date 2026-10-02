@@ -16,6 +16,7 @@ accepts a local `--json` option.
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
+| Navigate | `apps` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
@@ -235,7 +236,7 @@ Ordinary UI text results occupy one line with full `snapshotPath` / `imagePath`,
 image dimensions and delivery errors or warnings. String values use JSON quoting;
 embedded newlines stay escaped on that line. Missing facts are not inferred.
 `--print` then echoes the saved body.
-Raw shell output retains its own lines.
+App lists and raw shell output retain their own lines.
 
 ### JSON Field Guide
 
@@ -378,6 +379,8 @@ cache has changed, fresh raw cannot recover an old XML's summarized distribution
 
 `find` counts matching projected subtrees, not unique actionable targets.
 Read the original observation when row or ancestor context is needed.
+
+`apps [QUERY]` filters launchable names/packages by case-insensitive substring.
 
 ## Images And Delivery
 

@@ -218,6 +218,21 @@ def render_devices(result: Result, output: Output) -> None:
         output.echo("Selection: " + facts["selectionError"]["message"])
 
 
+def render_apps(result: Result, output: Output) -> None:
+    if result.result != "done":
+        render_summary(result, output)
+        return
+    facts = result.data
+    output.heading(
+        result,
+        after_reason="; no matching launchable applications"
+        if not facts["apps"]
+        else "",
+    )
+    for item in facts["apps"]:
+        output.echo(f"{item['package']} {display_name(item['name'])}")
+
+
 def render_status(result: Result, output: Output) -> None:
     output.heading(result)
     if result.result == "done":
@@ -343,6 +358,16 @@ def devices(ctx: typer.Context) -> None:
 )
 def status(ctx: typer.Context) -> None:
     device_call(ctx, "status", render=render_status)
+
+
+@app.command(
+    cls=CliCommand,
+    help="List launchable apps, optionally filtering name/package by substring.",
+)
+def apps(
+    ctx: typer.Context, query: Annotated[str | None, typer.Argument()] = None
+) -> None:
+    device_call(ctx, "apps", {"query": query or ""}, render=render_apps)
 
 
 @device_app.command(

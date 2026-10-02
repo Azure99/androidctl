@@ -75,6 +75,32 @@ def test_device_listing_preserves_complete_ids_and_record_facts(capsys):
     assert json.loads(capsys.readouterr().out) == original
 
 
+@pytest.mark.parametrize(
+    ("command", "message", "render"),
+    [
+        ("devices", "no paired devices", cli.render_devices),
+        ("apps", "no matching launchable applications", cli.render_apps),
+    ],
+)
+def test_empty_lists_keep_one_heading_and_selection_error(
+    capsys, command, message, render
+):
+    facts = {command: []}
+    if command == "devices":
+        facts["selectionError"] = {"message": "choose a device"}
+    result = completed(command, facts)
+    original = result.wire()
+    with pytest.raises(typer.Exit) as stopped:
+        cli.emit(result, render=render)
+    assert stopped.value.exit_code == 0
+    lines = capsys.readouterr().out.splitlines()
+    expected = [f"{command}: done; {message}"]
+    if command == "devices":
+        expected.append("Selection: choose a device")
+    assert lines == expected
+    assert result.wire() == original
+
+
 def test_prior_delivery_error_reaches_json_even_when_stderr_is_broken(
     monkeypatch, capsys
 ):
@@ -206,6 +232,27 @@ def test_output_does_not_swallow_program_value_error(monkeypatch):
 
 def test_terminal_fields_escape_controls_without_changing_json_or_bytes(capsys):
     label = "\u7535\u8bdd\nnext\r\x1b]0;title\x07\x9b\t\u202e"
+    apps = completed(
+        "apps",
+        {
+            "apps": [
+                {"package": "fixture.normal", "name": "\u8bbe\u7f6e"},
+                {"package": "fixture.controls", "name": label},
+            ]
+        },
+    )
+    with pytest.raises(typer.Exit):
+        cli.emit(apps, render=cli.render_apps)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines == [
+        "apps: done",
+        'fixture.normal "\u8bbe\u7f6e"',
+        'fixture.controls "\u7535\u8bdd\\nnext\\r'
+        '\\u001b]0;title\\u0007\\u009b\\t\\u202e"',
+    ]
+    with pytest.raises(typer.Exit):
+        cli.emit(apps, as_json=True)
+    assert json.loads(capsys.readouterr().out)["data"]["apps"][1]["name"] == label
     job = Result(
         command="job cancel",
         result="failed",

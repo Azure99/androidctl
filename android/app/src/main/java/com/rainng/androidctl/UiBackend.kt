@@ -33,6 +33,7 @@ internal class UiBackend(
     val snapshots = UiSnapshot()
     val delivery = UiDelivery(sessions, workerId)
     private val visuals = VisualInput(this)
+    private val system = SystemActions(context)
 
     @Volatile private var closeError: String? = null
     val cleanupFailure: String? get() = closeError
@@ -77,6 +78,10 @@ internal class UiBackend(
     }
 
     private fun perform(run: UiRun) {
+        if (run.command == "apps") {
+            run.remember(system.apps())
+            return
+        }
         if (run.command == "snapshot") {
             val tree = if (run.args.optBoolean("cached")) snapshots.cached() else capture(run)
             if (run.args.has("renderRef") &&

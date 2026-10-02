@@ -69,6 +69,147 @@ async def test_ordinary_status_call_keeps_failed_checks_without_a_selected_devic
         ]
 
 
+async def test_status_facts_apps_filter_and_forget_with_real_connection(
+    tmp_path, monkeypatch
+):
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    status = {
+        "worker": "stopping",
+        "workerId": "worker-1",
+        "session": {
+            "name": "another-task",
+            "pairingName": "another-host",
+            "callerState": "none",
+            "idleSeconds": 12,
+            "ui": 1,
+            "shell": 0,
+            "file": 0,
+        },
+        "helpers": {"pids": [42], "active": ["j1"], "error": "helper unavailable"},
+        "capabilities": {"ui": False},
+        "diagnostics": {"uiCleanup": "cleanup pending"},
+        "gateway": {"state": "stopping", "active": 1},
+    }
+
+    async def dispatch(method, args):
+        calls.append(method)
+        if method == "hold":
+            entered.set()
+            await release.wait()
+        if method == "apps":
+            assert "query" not in args
+            return completed(
+                "apps",
+                {
+                    "apps": [
+                        {"name": "Shop", "package": "com.example.store"},
+                        {"name": "Notes", "package": "com.example.notes"},
+                    ]
+                },
+            ).wire()
+        if method == "status":
+            return completed(method, status).wire()
+        return completed(method).wire()
+
+    async with connections(tmp_path, dispatch) as (coordinator, saved, _):
+        state = coordinator.state
+        write_json(
+            state.selection, {"deviceId": state.resolve_selection("phone")[0].device_id}
+        )
+        try:
+            for new_connection in (True, False):
+                result = await coordinator.dispatch(
+                    "call",
+                    {"args": {"timeoutMs": 15000}, "command": "status"},
+                    deadline=time.monotonic() + 15,
+                )
+                assert result["result"] == "done"
+                assert "checks" not in result["data"]
+                assert ("deviceConnectMs" in result["data"]) is new_connection
+                assert {key: result["data"][key] for key in status} == status
+            assert calls == ["status", "status"]
+            for query in ("sHo", ".STORE"):
+                result = await coordinator.dispatch(
+                    "call",
+                    {"command": "apps", "args": {"timeoutMs": 15000, "query": query}},
+                    deadline=time.monotonic() + 15,
+                )
+                assert result["data"]["apps"] == [
+                    {"name": "Shop", "package": "com.example.store"}
+                ]
+            held = asyncio.create_task(
+                coordinator.dispatch(
+                    "call",
+                    {"args": {"timeoutMs": 15000}, "command": "hold"},
+                    deadline=time.monotonic() + 15,
+                )
+            )
+            await asyncio.wait_for(entered.wait(), 3)
+            with pytest.raises(Fault, match="Finish local"):
+                await coordinator.forget("phone")
+            assert active_material(state, None) == saved
+            release.set()
+            assert (await held)["result"] == "done"
+            device = coordinator.devices[saved["deviceId"]]
+            for peer in device._peers.values():
+                if peer.ack_task is not None:
+                    await peer.ack_task
+            peer = device._peers["mutation"]
+            acknowledge = peer.acknowledge
+            ack_entered, ack_release = asyncio.Event(), asyncio.Event()
+
+            async def held_ack(response):
+                ack_entered.set()
+                await asyncio.wait_for(ack_release.wait(), 3)
+                await acknowledge(response)
+
+            monkeypatch.setattr(peer, "acknowledge", held_ack)
+            assert (
+                await coordinator.dispatch(
+                    "call",
+                    {"args": {"timeoutMs": 15000}, "command": "ack-held"},
+                    deadline=time.monotonic() + 15,
+                )
+            )["result"] == "done"
+            await asyncio.wait_for(ack_entered.wait(), 3)
+            try:
+                assert device.in_use()
+                with pytest.raises(Fault, match="Finish local"):
+                    await coordinator.forget("phone")
+                assert active_material(state, None) == saved
+            finally:
+                ack_release.set()
+                await peer.ack_task
+            assert (await coordinator.forget("phone")).result == "done"
+            assert state.devices()["devices"] == []
+            unavailable = await coordinator.dispatch(
+                "call",
+                {"args": {"timeoutMs": 15000}, "command": "status"},
+                deadline=time.monotonic() + 15,
+            )
+            assert unavailable["result"] == "failed"
+            assert [c["result"] for c in unavailable["data"]["checks"]] == [
+                "failed",
+                "not checked",
+                "not checked",
+            ]
+            save_active(state, {**saved, "credential": "rejected"})
+            refused = await coordinator.dispatch(
+                "call",
+                {"args": {"timeoutMs": 15000}, "command": "status"},
+                deadline=time.monotonic() + 15,
+            )
+            assert refused["result"] == "failed"
+            assert [c["result"] for c in refused["data"]["checks"]] == [
+                "done",
+                "failed",
+                "not checked",
+            ]
+        finally:
+            release.set()
+
+
 @pytest.mark.parametrize("worker", ["failed", "UNKNOWN", "refused", "lost"])
 @pytest.mark.parametrize("reuse", [False, True])
 async def test_status_attributes_worker_failures_without_rewriting_valid_results(

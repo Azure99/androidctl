@@ -97,6 +97,8 @@ Automatic observations are temporary workspace files. Read them while available
 and copy lasting deliverables elsewhere; the cache can reclaim even edited files.
 See [artifact paths and retention](reference.md#images-and-delivery).
 
+Use `apps` to discover launchable applications.
+
 ## Results
 
 | Result | Next action |

@@ -517,12 +517,21 @@ class Coordinator:
         elif command == "status":
             result = await self.status(device, args, deadline)
         else:
+            query = parameters.pop("query", "") if command == "apps" else ""
             result = await device.request(
                 command,
                 parameters,
                 session=args.get("session", "default"),
                 deadline=deadline,
             )
+            if command == "apps" and result.result == "done":
+                query = query.casefold()
+                result.data["apps"] = [
+                    item
+                    for item in result.data["apps"]
+                    if query in item["name"].casefold()
+                    or query in item["package"].casefold()
+                ]
         result.data["context"] = {
             "deviceId": device.record.device_id,
             "deviceSource": source,
