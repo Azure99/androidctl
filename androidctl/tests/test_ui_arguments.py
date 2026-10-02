@@ -127,6 +127,12 @@ def test_print_and_json_reject_before_rpc(monkeypatch, tmp_path, capsys):
         (["--json", "snapshot"], False),
         (["--json", "snapshot", "--all", "--boxes"], False),
         (["snapshot", "--window", "12"], False),
+        (["snapshot", "--cached", "--all"], True),
+        (["snapshot", "e15"], True),
+        (["find", "Pay"], True),
+        (["--json", "find", "Pay"], True),
+        (["find", "Pay", "--all", "--boxes"], True),
+        (["--json", "find", "Pay", "--all", "--boxes"], True),
     ],
 )
 def test_collection_is_explicit_and_cache_is_identified(
@@ -149,7 +155,7 @@ def test_collection_is_explicit_and_cache_is_identified(
             result="done",
             data={
                 "capture": "c7",
-                "snapshotCached": cached,
+                "snapshotCached": parameters["cached"],
                 "snapshotSequence": 7,
                 "snapshotSampleMs": 100,
                 "snapshotAgeMs": 10,
@@ -160,11 +166,21 @@ def test_collection_is_explicit_and_cache_is_identified(
     monkeypatch.setattr(ui_client.UiClient, "call", call)
     output = CliRunner().invoke(cli.app, args)
     assert output.exit_code == 0, output.output
+    assert calls[0][1]["cached"] is cached
     (saved,) = tmp_path.glob(".androidctl/snapshots/*.xml")
+    if cached and "--json" not in args:
+        command = args[0]
+        assert output.output.startswith(
+            command + ": done; cached; sequence=7; sample=100ms; age=10ms;"
+        )
     if "--json" in args:
         wire = json.loads(output.output)
         assert "snapshot" not in wire["data"]
         assert "snapshotFacts" not in wire["data"]
+        if "find" in args:
+            assert wire["data"]["matches"] == 1
+    elif "find" in args:
+        assert "matches=1;" in output.output
     contents = saved.read_text(encoding="utf-8")
     metadata = xml_metadata(contents)
     ET.fromstring(contents)

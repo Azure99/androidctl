@@ -85,6 +85,14 @@ for transitions, changed targets or missing facts. Partial observations can
 establish reliable positive facts; gaps cannot prove absence or selector
 uniqueness. A complete sample does not establish business readiness.
 
+`snapshot` collects a new sample. `snapshot --cached [REF]`, `snapshot REF` and
+`find TEXT` reuse the previous sample; check sequence and age. These cached reads
+cannot request a new screenshot. Use a fresh snapshot with screenshot when both
+are needed. Scroll off-screen nodes into view and observe again before acting.
+
+For same-sample raw diagnostics of summarized gaps or image/tree differences,
+see [XML defaults and gaps](reference.md#xml-defaults-and-gaps).
+
 Automatic observations are temporary workspace files. Read them while available
 and copy lasting deliverables elsewhere; the cache can reclaim even edited files.
 See [artifact paths and retention](reference.md#images-and-delivery).

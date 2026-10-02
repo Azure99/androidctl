@@ -6,7 +6,8 @@ Use the accompanying [SKILL](SKILL.md) for an agent's task workflow and
 `androidctl COMMAND --help` gives accepted parameters.
 
 Global `--device`, `-s`/`--session` and `--json` precede the command. Use
-`androidctl --json snapshot`; the command does not accept a local `--json` option.
+`androidctl --json snapshot` or `androidctl --json find TEXT`; neither command
+accepts a local `--json` option.
 
 ## Command Index
 
@@ -14,7 +15,7 @@ Global `--device`, `-s`/`--session` and `--json` precede the command. Use
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
-| Observe and target | `snapshot` | [Observations](#observations-and-targets) |
+| Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
 | Images and coordinates | `screenshot` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
@@ -291,19 +292,23 @@ A published observation is the capture available for delivery in the device's
 current session. Publication does not mean the client has received or downloaded
 it; completeness and collection policy remain separate facts.
 
-Every `snapshot` collects, including scope, boxes and global `--json`.
-`--all` changes the XML projection, not collection; `--boxes` includes bounds.
-`snapshot --raw` saves the device's collected,
+`snapshot` without REF or `--cached` collects a new sample, including when scope,
+boxes or global `--json` are specified. `snapshot --cached [REF]`, `snapshot REF`
+and `find` reuse the current sample.
+They save a new file, retaining sampling identity/sequence/age. `--all` may include
+off-screen nodes; observe them in view before acting. It changes the XML
+projection, not collection. `snapshot/find --raw` saves the device's collected,
 processed tree as JSON instead of projected XML. It changes representation,
 not permissions or completeness. Global `--json` independently
 selects Result JSON on stdout; it does not change the saved body.
 
 | File | Contents |
 | --- | --- |
-| XML | Projected screen/window/control tags; `<?androidctl ...?>` holds invocation, source, snapshotFacts. |
-| `snapshot --raw` | The entire current device-processed tree. Works with text or JSON stdout. |
+| XML | Projected screen/window/control tags; `<?androidctl ...?>` holds invocation, source, snapshotFacts and optional image metadata. |
+| `snapshot/find --raw` | The entire current device-processed tree, including on REF/find; match counts stay in the result. Works with text or JSON stdout. |
 
-Invocation metadata keeps non-default all/boxes flags; visible screen values remain in the body.
+Invocation metadata keeps non-default query/all/boxes and the existing renderRef;
+visible screen values still appear.
 `source` preserves capture and age, with cache and before-action flags subject to
 the defaults below. `snapshotFacts` retains connection, sequence, sampling times,
 scope and unavailable fields, with non-body gaps summarized below. The complete
@@ -329,7 +334,7 @@ facts remain. Raw JSON retains its existing facts.
 
 | Location | XML rule |
 | --- | --- |
-| Invocation `args` | Omit `timeoutMs=5000` and `scope={}`. Preserve all/boxes and non-default requests. Do not add an absent args object. |
+| Invocation `args` | Omit `timeoutMs=5000`, `screenshot=false` and `scope={}`. Preserve query/renderRef/all/boxes/cached and non-default requests. Do not add an absent args object. |
 | `source` | Omit reported `snapshotCached=false` and `snapshotBeforeAction=false`. Preserve capture and age. A successful snapshot in this version reports both flags before XML rendering. |
 | `snapshotFacts` | Omit the windows copy, keyboard when equal to screen.keyboard, `selectionScope={}`, `partial=false` and empty missing/nodeUnavailable lists. Preserve startedMs/finishedMs, sequence, connection, scope and other facts. |
 | `snapshotFacts.display` | Omit `interactive=true`, `deepIdle=false`, `userId=0`, `displayId=0`, `displayState=2` and `keyguardShowing/keyguardSecure/deviceLocked=false`. With displayError, retain displayId/displayState. Omit sampleMs only when it equals an actually reported, non-null finishedMs. Keep width/height/rotation and errors. |
@@ -348,24 +353,47 @@ prove zero missing children, and these sums are not a total of all missing
 descendants. Empty missing or missingSummary are omitted.
 
 JSON `snapshotCompleteness.missingCount` remains the original entry count:
-the retained missing length plus missingSummary.entries. `--all` may expose more refs, but ref-unavailable and ref-less entries
+the retained missing length plus missingSummary.entries. REF/find change which
+refs remain individual entries; the summary still covers the whole capture.
+A parent find match retains its subtree and match counts keep their existing
+meaning. `--all` may expose more refs, but ref-unavailable and ref-less entries
 can still be summarized. It does not restore the original missing list.
 Missing/empty missing alone does not establish completeness. Even partial=false
 does not guarantee visual text, provider data or business content is complete.
 
+To locate summarized gaps or diagnose image/tree differences, preserve the same
+sample before another fresh snapshot or action replaces the cache. On the same
+device/session, run:
+
+```sh
+androidctl --device DEVICE -s SESSION --json snapshot --cached --raw
+```
+
+Save the JSON result. Check its `data.capture` against the original XML's
+`source.capture`, and the raw tree's sequence against XML `snapshotFacts.sequence`.
+Read raw missing and the relevant nodes/ancestors with host file tools. Keep the
+existing PNG; a later image cannot establish the old visual state. Raw has no XML
+source header, so the raw file alone cannot complete this capture check. Once the
+cache has changed, fresh raw cannot recover an old XML's summarized distribution.
+
+`find` counts matching projected subtrees, not unique actionable targets.
+Read the original observation when row or ancestor context is needed.
+
 ## Images And Delivery
 
-Observation bodies default to files under the artifact root's `.androidctl/snapshots/`.
+Observation bodies, including cached/find/REF results,
+default to files under the artifact root's `.androidctl/snapshots/`.
 The root is the global `--workspace-root PATH`, then `ANDROIDCTL_WORKSPACE_ROOT`,
 then the CLI working directory. It must be an existing directory; AndroidCtl does
 not search parent directories. This root does not change user-level credentials
 or create a separate daemon. All reported host file paths are absolute, including
 `job output` exports.
-`snapshot --out PATH` writes the body only to that new file in an existing directory;
+`snapshot/find --out PATH` writes the body only to that new file in an existing directory;
 relative explicit paths resolve against the CLI cwd. Automatic PNGs use
 `.androidctl/shots/`. Matching filename stems identify a delivery, not an atomic
 tree/image frame. Fresh `snapshot --screenshot` adds a current PNG.
-JSON stdout's image is a summary;
+`find`, `snapshot --cached` and `snapshot REF` cannot request images; cached bodies
+keep their original sample identity and age. JSON stdout's image is a summary;
 XML metadata retains delivered image facts under the
 [shape default rules](#xml-defaults-and-gaps).
 Text output includes `imagePath="..."` and `imageSize=W x H px` on the result line;
@@ -373,7 +401,7 @@ JSON uses `data.imagePath` and `data.image.width` / `data.image.height`.
 Complete files contain all selected collected content, not necessarily a complete
 page. Check missing/partial facts and any host-tool truncation separately.
 
-`snapshot --print` and `screenshot --print` echo the saved body after
+`snapshot/find --print` and `screenshot --print` echo the saved body after
 the result and paths.
 It cannot be combined with global `--json`. The body is generated once and echoed
 only after saving succeeds; print is neither a body-only stdout format nor a
@@ -398,7 +426,7 @@ Invalid output paths and print/json conflicts reject before the snapshot RPC.
 With an explicit body output, automatic PNGs still
 use the shared history quota; the body is not duplicated in history.
 
-`snapshot` requires a saved body, and `screenshot` requires a saved PNG;
+`snapshot`/`find` require a saved body, and `screenshot` requires a saved PNG;
 missing that artifact fails an otherwise successful observation.
 Actual write or close failures are reported and removal of that write's file is
 attempted.

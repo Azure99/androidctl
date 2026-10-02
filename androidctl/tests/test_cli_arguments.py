@@ -280,6 +280,8 @@ def test_crlf_in_either_script_source_is_not_sent_before_connection(
         (["--json", "snapshot", "--bad"], "snapshot"),
         (["--json", "snapshot", "--json", "--timeout", "bad"], "snapshot"),
         (["--json", "snapshot", "--timeout", "bad"], "snapshot"),
+        (["--json", "find"], "find"),
+        (["--json", "snapshot", "--cached", "--window", "12"], "snapshot"),
         (["--json", "--bad", "snapshot"], "arguments"),
         (["--json", "missing"], "arguments"),
         (["--json", "session", "missing"], "session"),
@@ -299,7 +301,9 @@ def test_argument_errors_are_json_without_connection(
     "args",
     [
         ["snapshot", "--json"],
+        ["find", "needle", "--json"],
         ["snapshot", "--json=value"],
+        ["find", "needle", "--json=value"],
         ["--", "snapshot", "--json"],
     ],
 )
@@ -315,6 +319,7 @@ def test_local_json_is_rejected_as_misplaced_global_option(monkeypatch, capsys, 
     [
         ["shell", "--", "--json"],
         ["snapshot", "--", "--json"],
+        ["find", "--", "--json"],
         ["--device", "--json", "snapshot", "--bad"],
         ["-s--json", "snapshot", "--bad"],
         ["--session=--json", "snapshot", "--bad"],
@@ -348,6 +353,20 @@ def test_main_does_not_hide_program_value_error(monkeypatch):
     monkeypatch.setattr(cli, "app", application)
     with pytest.raises(ValueError, match="program failure"):
         cli.main()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["snapshot", "--cached", "--screenshot"],
+        ["snapshot", "--cached", "--image-out", "cached.png"],
+        ["snapshot", "e15", "--screenshot"],
+        ["snapshot", "e15", "--image-out", "cached.png"],
+    ],
+)
+def test_invalid_read_conditions_never_connect(monkeypatch, capsys, args):
+    run_main(monkeypatch, args)
+    assert "not sent" in capsys.readouterr().out
 
 
 def test_bare_session_shows_all_operations_without_connection():

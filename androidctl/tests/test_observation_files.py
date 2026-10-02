@@ -364,6 +364,39 @@ def test_xml_image_shape_preserves_null_error_and_nondefault_facts(shape):
             None,
         ),
         (
+            View(ref="e16"),
+            {"e16"},
+            {
+                "entries": 6,
+                "unreadChildren": 10,
+                "unavailableChildren": 7,
+                "reasons": {"repeatedSource": 2, "collectionLimit": 2},
+            },
+            None,
+        ),
+        (
+            View(query="Branch"),
+            {"e15", "e16"},
+            {
+                "entries": 5,
+                "unreadChildren": 10,
+                "unavailableChildren": 5,
+                "reasons": {"repeatedSource": 2, "collectionLimit": 2},
+            },
+            1,
+        ),
+        (
+            View(query="absent"),
+            set(),
+            {
+                "entries": 7,
+                "unreadChildren": 13,
+                "unavailableChildren": 7,
+                "reasons": {"repeatedSource": 2, "collectionLimit": 2},
+            },
+            0,
+        ),
+        (
             View(all_nodes=True),
             {"e15", "e16", "e17", "e18"},
             {"entries": 3, "unreadChildren": 6, "reasons": {"collectionLimit": 2}},
@@ -428,7 +461,7 @@ def test_xml_missing_groups_by_final_public_refs_without_changing_capture(
     assert screen.get("unreadable") == "true"
     raw_rendered = ui_client.render_observation(
         raw,
-        View(raw=True, all_nodes=view.all_nodes),
+        View(raw=True, ref=view.ref, query=view.query, all_nodes=view.all_nodes),
         {"command": "snapshot"},
         source={},
         image=None,
@@ -588,6 +621,43 @@ def test_raw_json_does_not_require_xml_projection(monkeypatch, capsys, tmp_path)
     assert (
         json.loads((tmp_path / output["data"]["snapshotPath"]).read_bytes()) == tree()
     )
+
+
+@pytest.mark.parametrize(("all_nodes", "boxes"), [(False, False), (True, True)])
+def test_xml_body_keeps_cached_source_with_json_stdout(
+    tmp_path, monkeypatch, capsys, all_nodes, boxes
+):
+    monkeypatch.chdir(tmp_path)
+    source = tree()
+    source["nodes"] += [node("e16", "text", "Details", clickable=False, parent="e15")]
+    source["nodes"].append(
+        node("e17", "textbox", "Search", editable=True, actions=["focus", "fill"])
+    )
+    source["nodes"][0]["bounds"] = [0, 1, 2, 3]
+    facts = {
+        "snapshotCached": True,
+        "snapshotSequence": 7,
+        "snapshotSampleMs": 100,
+        "snapshotAgeMs": 30,
+    }
+    result = Result(command="snapshot", result="done", data=facts)
+    deliver_snapshot(
+        result,
+        source,
+        ui_client.View(all_nodes=all_nodes, boxes=boxes),
+        as_json=True,
+    )
+    output = json.loads(capsys.readouterr().out)
+    saved_xml = tmp_path / output["data"]["snapshotPath"]
+    saved = saved_xml.read_text(encoding="utf-8")
+    metadata = xml_metadata(saved)
+    assert metadata["snapshotFacts"]["sequence"] == 7
+    assert metadata["source"]["snapshotCached"] is True
+    screen = ET.fromstring(saved)
+    assert screen.find("textbox").get("actions") == "focus fill"
+    assert saved_xml.suffix == ".xml"
+    assert screen.find("button").get("ref") == "e15"
+    assert (screen.find("button").get("box") is not None) is boxes
 
 
 @pytest.mark.parametrize("format_name", ["xml", "raw-json"])

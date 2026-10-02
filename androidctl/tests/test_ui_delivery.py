@@ -11,7 +11,7 @@ from androidctl import app as cli
 from androidctl import local_call, ui_commands
 from androidctl.protocol import Result, completed
 from connection_test_support import connections
-from ui_test_support import raw_read_data, tree
+from ui_test_support import node, raw_read_data, tree, xml_metadata
 
 
 async def test_workspace_roots_keep_explicit_paths_at_caller_cwd(tmp_path, monkeypatch):
@@ -101,6 +101,124 @@ async def test_workspace_roots_keep_explicit_paths_at_caller_cwd(tmp_path, monke
     assert args["screenshot"] is False
     assert view.image_out == Path("image.png")
     assert not list((tmp_path / ".androidctl").iterdir())
+
+
+async def test_cli_body_formats_and_images_follow_observation_freshness(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    source = tree()
+    source["nodes"].append(node("e16", "text", "Other row", clickable=False))
+    received = []
+    image = {"id": "current-image", "width": 1, "height": 1}
+
+    async def dispatch(method, args):
+        received.append((method, args))
+        if method == "ui.read":
+            data = raw_read_data(
+                json.dumps(source).encode()
+                if args["kind"] == "tree"
+                else b"PNG fixture",
+                "capture",
+            )
+            if args["kind"] == "image":
+                data["image"] = image
+            return completed(method, data).wire()
+        return completed(
+            method,
+            {
+                "capture": "capture",
+                "snapshotCached": args["cached"],
+                "snapshotAgeMs": 30,
+                "snapshotSequence": 7,
+                "snapshotSampleMs": 100,
+            },
+        ).wire()
+
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        cases = [
+            (["snapshot"], False, False, False),
+            (["snapshot"], True, True, False),
+            (["snapshot", "--cached"], False, False, True),
+            (["snapshot", "e15"], True, False, True),
+            (["find", "Pay"], False, True, True),
+            (["find", "Pay"], True, True, True),
+        ]
+        for index, (command, raw, as_json, cached) in enumerate(cases):
+            destination = tmp_path / (
+                f"body-{index}.json" if raw else f"body-{index}.xml"
+            )
+            before = len(received)
+            output = await asyncio.to_thread(
+                CliRunner().invoke,
+                cli.app,
+                [
+                    *(["--json"] if as_json else []),
+                    "--device",
+                    "phone",
+                    "-s",
+                    "formats",
+                    *command,
+                    "--out",
+                    str(destination),
+                    *([] if cached else ["--screenshot"]),
+                    *(["--raw"] if raw else []),
+                    *([] if as_json else ["--print"]),
+                ],
+            )
+            assert output.exit_code == 0, output.output
+            calls = received[before:]
+            kinds = ["tree"] if cached else ["tree", "image"]
+            assert [method for method, _ in calls] == [
+                "snapshot",
+                *(["ui.read"] * len(kinds)),
+            ]
+            assert calls[0][1]["cached"] is cached
+            assert calls[0][1].get("screenshot", False) is (not cached)
+            assert [args["kind"] for _, args in calls[1:]] == kinds
+            saved = destination.read_text(encoding="utf-8")
+            if raw:
+                assert json.loads(saved) == source
+            else:
+                metadata = xml_metadata(saved)
+                if cached:
+                    assert metadata["source"]["snapshotCached"] is True
+                else:
+                    assert "snapshotCached" not in metadata["source"]
+                assert metadata["source"]["snapshotAgeMs"] == 30
+                assert metadata["snapshotFacts"]["sequence"] == 7
+                assert metadata.get("image") == (None if cached else image)
+            if as_json:
+                value = json.loads(output.stdout)
+                assert value["command"] == command[0]
+                assert value["data"]["snapshotPath"] == str(destination)
+                assert value["data"]["snapshotCached"] is cached
+                assert value["data"]["snapshotAgeMs"] == 30
+                if command[0] == "find":
+                    assert value["data"]["matches"] == 1
+                if cached:
+                    assert "image" not in value["data"]
+                    assert "imagePath" not in value["data"]
+                else:
+                    assert value["data"]["image"]["width"] == 1
+                    assert value["data"]["image"]["height"] == 1
+                    assert (
+                        Path(value["data"]["imagePath"]).read_bytes() == b"PNG fixture"
+                    )
+                assert "snapshot" not in value["data"]
+            else:
+                assert output.stdout.endswith(saved)
+                assert "snapshotPath=" + json.dumps(str(destination)) in output.stdout
+                if cached:
+                    assert "age=30ms" in output.stdout
+                    assert "imagePath=" not in output.stdout
+                else:
+                    assert "imageSize=1 x 1 px" in output.stdout
+            assert not list(tmp_path.glob(".androidctl/snapshots/*"))
+        assert [
+            path.read_bytes() for path in tmp_path.glob(".androidctl/shots/*.png")
+        ] == [b"PNG fixture"] * 2
 
 
 @pytest.mark.parametrize(

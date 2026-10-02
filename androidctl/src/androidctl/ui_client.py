@@ -33,6 +33,8 @@ class View:
     all_nodes: bool = False
     boxes: bool = False
     raw: bool = False
+    ref: str | None = None
+    query: str | None = None
     image_out: Path | None = None
     out: Path | None = None
     print_body: bool = False
@@ -73,6 +75,17 @@ def result_line(
         parts.append(f"code={result.error.code}")
         if result.error.stage:
             parts.append(f"stage={result.error.stage}")
+    if result.data.get("snapshotCached"):
+        parts.extend(
+            (
+                "cached",
+                f"sequence={result.data['snapshotSequence']}",
+                f"sample={result.data['snapshotSampleMs']}ms",
+                f"age={result.data['snapshotAgeMs']}ms",
+            )
+        )
+    if "matches" in result.data:
+        parts.append(f"matches={result.data['matches']}")
     if result.data.get("notice"):
         parts.append(display_name(result.data["notice"], quoted=False))
     completeness = result.data.get("snapshotCompleteness", {})
@@ -96,7 +109,7 @@ def result_line(
     for field in ("snapshotError", "imageError", "historyError"):
         if result.data.get(field):
             parts.append(field + "=" + compact(result.data[field]))
-    if result.result == "UNKNOWN" and command in {"snapshot", "screenshot"}:
+    if result.result == "UNKNOWN" and command in {"snapshot", "screenshot", "find"}:
         parts.append(
             "Read-only reply unavailable; query again. For a new sample, run snapshot."
         )
@@ -249,10 +262,14 @@ def execute(
     if paths.image is not None:
         wire_args["screenshot"] = True
     wants_image = command == "screenshot" or wire_args.get("screenshot", False)
+    if view.ref is not None:
+        wire_args["renderRef"] = view.ref
     invocation: dict[str, Any] = {
         "command": command,
         "args": {key: value for key, value in wire_args.items() if key != "value"},
     }
+    if view.query is not None:
+        invocation["args"]["query"] = view.query
     if view.all_nodes:
         invocation["args"]["all"] = True
     if view.boxes:
@@ -263,7 +280,9 @@ def execute(
         tree, png = None, None
         try:
             try:
-                result = await client.call(command, wire_args)
+                result = await client.call(
+                    "snapshot" if command == "find" else command, wire_args
+                )
             except TransportFailure as error:
                 result = uncertain(actual_command, error)
             except Fault as error:
@@ -398,23 +417,29 @@ def render_observation(
             "missingCount": len(tree.get("missing", [])),
             "unavailableNodeCount": len(unavailable),
         }
-        if not view.raw:
-            elements = ui_view.project(tree, all_nodes=view.all_nodes, boxes=view.boxes)
-            screen = ui_view.screen(tree, elements)
-            public_refs = {
-                element.attrib["ref"]
-                for element in screen.iter()
-                if "ref" in element.attrib
-            }
-            metadata = ui_view.metadata(
-                invocation,
-                source=source,
-                snapshot_facts=snapshot_facts,
-                image=image,
-                public_refs=public_refs,
-                keyboard=screen.attrib["keyboard"],
+        if not view.raw or view.query is not None:
+            elements = ui_view.project(
+                tree, all_nodes=view.all_nodes, boxes=view.boxes, ref=view.ref
             )
-            body = ui_view.header(metadata) + ui_view.render(screen)
+            if view.query is not None:
+                elements = ui_view.find(elements, view.query)
+                facts["matches"] = len(elements)
+            if not view.raw:
+                screen = ui_view.screen(tree, elements)
+                public_refs = {
+                    element.attrib["ref"]
+                    for element in screen.iter()
+                    if "ref" in element.attrib
+                }
+                metadata = ui_view.metadata(
+                    invocation,
+                    source=source,
+                    snapshot_facts=snapshot_facts,
+                    image=image,
+                    public_refs=public_refs,
+                    keyboard=screen.attrib["keyboard"],
+                )
+                body = ui_view.header(metadata) + ui_view.render(screen)
         if view.raw:
             body = json.dumps(tree, ensure_ascii=False, separators=(",", ":")) + "\n"
     except (Fault, KeyError, TypeError) as error:
@@ -485,7 +510,7 @@ def save_delivery(
 
 def finish_primary_result(result: Result, *, command: str) -> None:
     if result.result == "done":
-        if command == "snapshot" and "snapshotPath" not in result.data:
+        if command in {"snapshot", "find"} and "snapshotPath" not in result.data:
             result.result = "failed"
             result.reason = (
                 result.data.get("historyError")

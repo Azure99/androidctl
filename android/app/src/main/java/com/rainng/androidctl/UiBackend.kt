@@ -53,6 +53,9 @@ internal class UiBackend(
         args: JSONObject,
         deadline: Long,
     ): JSONObject {
+        if (command == "snapshot" && args.optBoolean("cached") && args.optBoolean("screenshot")) {
+            throw Rejected("cachedScreenshot", "Cached observations cannot request a new screenshot")
+        }
         val budget = UiBudget(deadline)
         val run = UiRun(command, sessions.acquire(owner), args, budget)
         closeError?.let { throw Rejected("uiCleanup", "UI cleanup failed: $it; restart the worker") }
@@ -74,7 +77,16 @@ internal class UiBackend(
     }
 
     private fun perform(run: UiRun) {
-        capture(run)
+        if (run.command == "snapshot") {
+            val tree = if (run.args.optBoolean("cached")) snapshots.cached() else capture(run)
+            if (run.args.has("renderRef") &&
+                tree.getJSONArray("nodes").objects().none { it.getString("ref") == run.args.getString("renderRef") }
+            ) {
+                throw Rejected("staleRef", "Ref is not in the current snapshot; run snapshot")
+            }
+        } else {
+            capture(run)
+        }
         finish(run, outcome(run.command))
     }
 
@@ -168,7 +180,11 @@ internal class UiBackend(
         if (snapshots.tree == null) return null
         if (!sessions.isCurrent(run.lease)) return null
         val prepared = requireNotNull(snapshots.deliveryTree())
-        return delivery.createCapture(run.lease, prepared, screenshot && run.budget.remaining() > 0)
+        return if (run.args.optBoolean("cached")) {
+            delivery.cached(run.lease, prepared)
+        } else {
+            delivery.createCapture(run.lease, prepared, screenshot && run.budget.remaining() > 0)
+        }
     }
 
     private fun attachImage(
