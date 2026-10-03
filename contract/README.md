@@ -5,6 +5,10 @@ and complete responses from the Kotlin producers described below.
 Raw checked values and window types use the names published by `NodeFacts`.
 The projector publishes `nameConsumed` and `selectionTarget` after resolving
 name sources; the source reference remains internal to projection.
+The same fixture carries the allowed role vocabulary; Python compares
+it with its offline selector choices. Kotlin also checks actual node classification.
+`entityForms` shares the literal and once-decoded XML entity candidates used by
+device selectors and host find; candidate order is not significant.
 `refAvailable` and `refReason` are published input facts here; their production
 and stability across snapshots are checked separately.
 
@@ -15,11 +19,15 @@ the distinction between booleans and numbers, and replays responses through `Res
 `UiClient.blob`, and the XML renderer. The image payload and metadata are synthetic
 inputs for raw transfer testing; they do not establish PNG or screenshot correctness.
 
-The `captures` and `fileFailures` sections match samples by unique `name`, with
-exactly the same names required on both sides. Their outer array order does not
-determine coverage; arrays within each sample retain their semantic order. Captures
-retain explicit encoding/content expectations and checks on their actual chunks and
-decoded content. These samples do not simulate platform sampling.
+The `captures`, `actionResults` and `fileFailures` sections match samples by
+unique `name`, with exactly the same names required on both sides. Their outer
+array order does not determine coverage; arrays within each sample retain their
+semantic order. `entityForms` instead matches unique `input` values and compares
+each collection of forms as a set. Captures retain explicit encoding/content
+expectations and checks on their actual chunks and decoded content.
+`actionResults` contains plain-click and selector-click from the production
+`UiRun` result owner with supplied receipt facts. These samples do not simulate
+platform dispatch or platform sampling.
 
 The fixture also records `OutputStore` metadata and bounded chunks for both shell
 streams, consumed by Python's `JobClient.output`, plus `fileFailures` results

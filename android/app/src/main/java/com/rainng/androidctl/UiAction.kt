@@ -1,6 +1,7 @@
 package com.rainng.androidctl
 
 import android.view.accessibility.AccessibilityNodeInfo
+import org.json.JSONObject
 
 internal enum class UiAction(
     val wire: String,
@@ -26,4 +27,32 @@ internal enum class UiAction(
 
     val changesChecked: Boolean get() = this == CHECK || this == UNCHECK
     val platformName: String get() = if (changesChecked) CLICK.wire else wire
+
+    fun ready(node: JSONObject): Boolean = notReadyReason(node) == null
+
+    fun notReadyReason(node: JSONObject): String? {
+        if (!node.getBoolean("visible")) return "target is not visible"
+        if (!node.getBoolean("enabled")) return "target is disabled"
+        if (!available(node)) return "target does not expose the $platformName action"
+        if (this == IME && !UiSelector.focused(node)) return "target is not input-focused"
+        return null
+    }
+
+    fun alreadySatisfied(node: JSONObject): Boolean {
+        if (!node.getBoolean("visible")) return false
+        if (this == FOCUS) return UiSelector.focused(node)
+        return false
+    }
+
+    private fun available(node: JSONObject): Boolean {
+        if (this == FOCUS && UiSelector.focused(node)) return true
+        val actions = node.getJSONArray("actions")
+        return (0 until actions.length()).any { actions.getString(it) == platformName }
+    }
+
+    companion object {
+        fun parse(value: String): UiAction =
+            entries.firstOrNull { it.wire == value }
+                ?: throw Rejected("action", "Unsupported action: $value; use ${entries.joinToString("|") { it.wire }}")
+    }
 }

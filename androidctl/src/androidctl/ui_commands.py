@@ -5,11 +5,33 @@ from typing import Annotated, Any
 
 import typer
 
-from .cli_options import CliCommand, parse_duration, timeout_duration
+from .cli_options import CliCommand, parse_duration, timeout_duration, wait_duration
 from .protocol import Fault
 from .ui_client import View, execute
 
 DEFAULT_TIMEOUT_MS = 5000
+DEFAULT_SETTLE_MS = 1500
+
+ROLES = (
+    "button",
+    "textbox",
+    "checkbox",
+    "radio",
+    "switch",
+    "list",
+    "item",
+    "scroll",
+    "image",
+    "text",
+)
+Role = Annotated[
+    str | None, typer.Option("--role", help="Exact role: " + ", ".join(ROLES))
+]
+Name = Annotated[str | None, typer.Option("--name", help="Exact accessible name.")]
+Text = Annotated[str | None, typer.Option("--text", help="Exact node text.")]
+Identifier = Annotated[
+    str | None, typer.Option("--id", help="Full resource ID or :id/ suffix.")
+]
 Package = Annotated[str | None, typer.Option("--in", help="Task package.")]
 Window = Annotated[int | None, typer.Option("--window", help="Task window ID.")]
 Timeout = Annotated[
@@ -21,6 +43,17 @@ Timeout = Annotated[
         metavar="DURATION",
         show_default="5s",
         help="Total request budget: 1ms–60s.",
+    ),
+]
+Settle = Annotated[
+    int,
+    typer.Option(
+        "--settle",
+        parser=parse_duration,
+        callback=wait_duration,
+        metavar="DURATION",
+        show_default="1500ms",
+        help="Ordinary observation cap (0–60s) within --timeout.",
     ),
 ]
 Screenshot = Annotated[
@@ -61,6 +94,55 @@ def scope(package: str | None, window: int | None) -> dict[str, Any]:
         else {"window": window}
         if window is not None
         else {}
+    )
+
+
+def selector(
+    role: str | None, name: str | None, text: str | None, identifier: str | None
+) -> dict[str, str]:
+    if role is not None and role not in ROLES:
+        raise Fault("arguments", "Use --role " + "|".join(ROLES))
+    return {
+        key: value
+        for key, value in (
+            ("role", role),
+            ("name", name),
+            ("text", text),
+            ("id", identifier),
+        )
+        if value is not None
+    }
+
+
+def target(
+    ref: str | None, fields: dict[str, str], selected: dict[str, Any]
+) -> dict[str, Any]:
+    if ref is not None and fields:
+        raise Fault("arguments", "Use a ref or selector flags, not both")
+    if ref is None and not fields:
+        raise Fault("arguments", "Provide a ref or at least one selector flag")
+    return (
+        {"ref": ref, "scope": selected}
+        if ref is not None
+        else {"selector": fields, "scope": selected}
+    )
+
+
+def run_action(
+    ctx: typer.Context,
+    command: str,
+    args: dict[str, Any],
+    timeout: int,
+    settle_ms: int,
+    screenshot: bool,
+    image_out: Path | None,
+    print_body: bool,
+) -> None:
+    execute(
+        ctx,
+        command,
+        {**args, "timeoutMs": timeout, "settleMs": settle_ms, "screenshot": screenshot},
+        View(image_out=image_out, print_body=print_body),
     )
 
 
@@ -175,6 +257,47 @@ def register(app: typer.Typer) -> None:
                 print_body=print_body,
             ),
         )
+
+    def add_action(command: str, help_text: str) -> None:
+        @app.command(command, cls=CliCommand, help=help_text)
+        def action(
+            ctx: typer.Context,
+            ref: Ref = None,
+            role: Role = None,
+            name: Name = None,
+            text: Text = None,
+            identifier: Identifier = None,
+            package: Package = None,
+            window: Window = None,
+            timeout: Timeout = DEFAULT_TIMEOUT_MS,
+            settle_ms: Settle = DEFAULT_SETTLE_MS,
+            screenshot: Screenshot = False,
+            image_out: ImageOut = None,
+            print_body: Print = False,
+        ) -> None:
+            args = target(
+                ref, selector(role, name, text, identifier), scope(package, window)
+            )
+            run_action(
+                ctx,
+                command,
+                args,
+                timeout,
+                settle_ms,
+                screenshot,
+                image_out,
+                print_body,
+            )
+
+    add_action(
+        "click", "Request the target's default action once; this is not a touch."
+    )
+    add_action("focus", "Request focus on the target once.")
+    add_action("long-click", "Request the target's long-click action once.")
+    add_action("expand", "Request the target's exposed expand action once.")
+    add_action("collapse", "Request the target's exposed collapse action once.")
+    add_action("dismiss", "Request the target's exposed dismiss action once.")
+    add_action("ime", "Request the focused target's exposed IME action once.")
 
     @app.command(
         "screenshot", cls=CliCommand, help="Capture PNG and its task snapshot."

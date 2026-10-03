@@ -58,6 +58,13 @@ class WireContractTest {
         val projected = copy(fixture.getJSONObject("raw"))
         UiSemantics.project(projected.getJSONArray("nodes").objects())
         projectionFacts(projected)
+        val entityForms =
+            JSONArray(
+                fixture.getJSONArray("entityForms").objects().map { sample ->
+                    val input = sample.getString("input")
+                    json("input" to input, "forms" to JSONArray(UiSelector.forms(input)))
+                },
+            )
         val limits =
             json(
                 "MESSAGE_BYTES" to Limits.MESSAGE_BYTES,
@@ -74,9 +81,12 @@ class WireContractTest {
             "raw" to fixture.getJSONObject("raw"),
             "projected" to projected,
             "captures" to captures(projected),
+            "actionResults" to actionResults(),
             "output" to outputChunks(),
             "shellCleanupFailure" to shellCleanupFailure(),
             "fileFailures" to fileFailures(),
+            "vocabulary" to selectorVocabulary(),
+            "entityForms" to entityForms,
             "limits" to limits,
             "queryMethods" to JSONArray(RpcMethods.QUERY_METHODS.sorted()),
         )
@@ -98,15 +108,27 @@ class WireContractTest {
         produced: JSONObject,
     ) {
         assertEquals("Contract sections differ from the reviewed contract", fields(fixture), fields(produced))
-        compareNamedSamples("fileFailures", fixture.getJSONArray("fileFailures"), produced.getJSONArray("fileFailures"))
         assertEquals(
             "Device projection differs from the reviewed contract",
             structure(fixture.getJSONObject("projected")),
             structure(produced.getJSONObject("projected")),
         )
         compareCaptures(fixture.getJSONArray("captures"), produced.getJSONArray("captures"))
+        for (section in listOf("actionResults")) {
+            compareNamedSamples(section, fixture.getJSONArray(section), produced.getJSONArray(section))
+        }
         for (section in listOf("output", "shellCleanupFailure")) {
             assertEquals(section, structure(fixture.getJSONObject(section)), structure(produced.getJSONObject(section)))
+        }
+        compareNamedSamples("fileFailures", fixture.getJSONArray("fileFailures"), produced.getJSONArray("fileFailures"))
+        assertEquals(structure(fixture.getJSONObject("vocabulary")), structure(produced.getJSONObject("vocabulary")))
+        val savedForms = indexSamples("entityForms reviewed", fixture.getJSONArray("entityForms"), "input")
+        val actualForms = indexSamples("entityForms produced", produced.getJSONArray("entityForms"), "input")
+        assertEquals("entityForms inputs differ from the reviewed contract", savedForms.keys, actualForms.keys)
+        for ((input, sample) in actualForms) {
+            fun forms(value: JSONObject): Set<String> =
+                value.getJSONArray("forms").let { values -> (0 until values.length()).map { values.getString(it) }.toSet() }
+            assertEquals(input, forms(savedForms.getValue(input)), forms(sample))
         }
         assertEquals(
             "Shared limits differ from the reviewed contract",
@@ -118,6 +140,25 @@ class WireContractTest {
             structure(fixture.getJSONArray("queryMethods")),
             structure(produced.getJSONArray("queryMethods")),
         )
+    }
+
+    private fun selectorVocabulary(): JSONObject {
+        val samples =
+            listOf(
+                json("editable" to true) to Role.TEXTBOX,
+                json("checkable" to true, "className" to "android.widget.CheckBox") to Role.CHECKBOX,
+                json("checkable" to true, "className" to "android.widget.RadioButton") to Role.RADIO,
+                json("checkable" to true, "className" to "android.widget.Switch") to Role.SWITCH,
+                json("className" to "android.widget.Button") to Role.BUTTON,
+                json("collectionInfo" to json()) to Role.LIST,
+                json("collectionItemInfo" to json()) to Role.ITEM,
+                json("scrollable" to true) to Role.SCROLL,
+                json("className" to "android.widget.ImageView") to Role.IMAGE,
+                json() to Role.TEXT,
+            )
+        for ((node, expected) in samples) assertEquals(expected, UiSemantics.role(node))
+        val roles = Role.entries.map { it.wire }.sorted()
+        return json("roles" to JSONArray(roles))
     }
 
     private fun projectionFacts(tree: JSONObject) {
@@ -189,6 +230,45 @@ class WireContractTest {
                 .put("expect", json("encoding" to "raw", "tree" to "minimal")),
         )
         return result
+    }
+
+    private fun contractRun(
+        command: String,
+        args: JSONObject,
+        budget: UiBudget = UiBudget(5000) { 0 },
+    ): UiRun = UiRun(command, Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS), args, budget)
+
+    private fun actionResults(): JSONArray {
+        val target = node("e7", "Search").put("clickable", true).put("className", "android.widget.Button")
+        UiSemantics.project(listOf(target))
+
+        fun sample(
+            name: String,
+            run: UiRun,
+            result: JSONObject? = null,
+            expired: Boolean = false,
+        ): JSONObject {
+            result?.let(run::remember)
+            return json(
+                "name" to name,
+                "request" to json("command" to run.command, "args" to copy(run.args)),
+                "response" to run.response(expired),
+            )
+        }
+        val click = contractRun("click", json("ref" to "e7"))
+        click.resolve("original", target)
+        click.select("click", target)
+        click.begin(outcome("click", Outcome.UNKNOWN, "Platform action result pending"))
+        val selector = contractRun("click", json("selector" to json("name" to "Search")))
+        selector.resolve("selector", target)
+        selector.select("click", target)
+        selector.begin(null)
+        return JSONArray(
+            listOf(
+                sample("plain-click", click, outcome("click")),
+                sample("selector-click", selector, outcome("click")),
+            ),
+        )
     }
 
     private fun outputChunks(): JSONObject {

@@ -47,4 +47,14 @@ class UiBudgetTest {
             assertEquals("timeout", assertThrows(Rejected::class.java) { UiBudget(5000) { now } }.code)
         }
     }
+
+    @Test fun queuedUiActionCannotDispatchAfterItsOriginalDeadline() {
+        var now = 4000L
+        val lease = Lease(1, SessionOwner("pair", "task", "host"), now, Sessions.DEFAULT_IDLE_MS)
+        val run = UiRun("click", lease, json(), UiBudget(5000) { now })
+        now = 5001L
+        assertEquals("timeout", assertThrows(Rejected::class.java) { run.begin(null) }.code)
+        assertFalse(run.dispatchStarted)
+        assertEquals(Outcome.NOT_SENT, run.response().getString("result"))
+    }
 }

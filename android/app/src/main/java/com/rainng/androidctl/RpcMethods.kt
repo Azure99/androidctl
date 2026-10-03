@@ -16,5 +16,5 @@ internal object RpcMethods {
     val ALLOWED_WHILE_STOPPING = setOf("job.get", "job.cancel", "output.read", "file.get", "file.cancel", "file.chunk", "file.finish")
 
     val UI_READ_ONLY = setOf("snapshot", "screenshot", "apps")
-    val UI_COMMANDS = UI_READ_ONLY
+    val UI_COMMANDS = UI_READ_ONLY + setOf("click", "focus", "long-click", "expand", "collapse", "dismiss", "ime")
 }

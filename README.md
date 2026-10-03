@@ -1,7 +1,8 @@
 # AndroidCtl
 
-AndroidCtl connects a local CLI to an Android app through Shizuku.
-Daily use does not require ADB.
+AndroidCtl lets people and AI agents operate Android apps through a local CLI
+and Shizuku. The host connects to the Android app over the network; daily use
+does not require ADB.
 
 The App's Gateway accepts connections, and its shell-UID worker operates the
 device.
@@ -92,6 +93,10 @@ Close your session when finished:
 androidctl --device DEVICE_UUID -s trial screenshot
 androidctl --device DEVICE_UUID -s trial session close
 ```
+
+Preserve `UNKNOWN` results and diagnose before further changes; never
+automatically resend the input. See the SKILL's
+[recovery guidance](skills/androidctl/SKILL.md#recover-and-finish).
 
 ## Development
 

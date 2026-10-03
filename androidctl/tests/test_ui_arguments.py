@@ -13,7 +13,7 @@ from androidctl import app as cli
 from androidctl import ui_client
 from androidctl.cli_options import CliOptions
 from androidctl.protocol import Fault, Result
-from androidctl.ui_commands import DEFAULT_TIMEOUT_MS
+from androidctl.ui_commands import DEFAULT_SETTLE_MS, DEFAULT_TIMEOUT_MS
 from ui_test_support import raw_read_data, tree, xml_metadata
 
 
@@ -26,6 +26,7 @@ def captured_ui_calls(monkeypatch):
         raise Fault("testRejected", "Stop at the client boundary")
 
     monkeypatch.setattr(ui_client.UiClient, "call", call)
+    monkeypatch.setattr(ui_client.UiClient, "action", call)
     return calls
 
 
@@ -34,6 +35,8 @@ def captured_ui_calls(monkeypatch):
     [
         (["snapshot", "--timeout", "1ms"], "timeoutMs", 1),
         (["snapshot", "--timeout", "1m"], "timeoutMs", 60000),
+        (["click", "e1", "--settle", "0"], "settleMs", 0),
+        (["click", "e1", "--settle", "60s"], "settleMs", 60000),
     ],
 )
 def test_duration_units_reach_ui_wire(captured_ui_calls, args, field, expected):
@@ -248,6 +251,8 @@ def test_output_path_rejects_ads_before_request(tmp_path, args):
         (["screenshot", "--timeout", "5s"], 5000),
         (["screenshot", "--timeout=20s"], 20000),
         (["snapshot"], DEFAULT_TIMEOUT_MS),
+        (["click", "e1"], DEFAULT_TIMEOUT_MS),
+        (["click", "e1", "--screenshot"], DEFAULT_TIMEOUT_MS),
     ],
 )
 def test_ui_budget_reaches_client(captured_ui_calls, tmp_path, args, timeout):
@@ -261,3 +266,36 @@ def test_ui_budget_reaches_client(captured_ui_calls, tmp_path, args, timeout):
     command, payload = calls[0]
     assert command == args[0]
     assert payload["timeoutMs"] == timeout
+    if "settleMs" in payload:
+        assert payload["settleMs"] == DEFAULT_SETTLE_MS
+    if "--screenshot" in args:
+        assert payload["screenshot"] is True
+
+
+@pytest.mark.parametrize("action", ["expand", "collapse", "dismiss"])
+@pytest.mark.parametrize("by_ref", [False, True])
+def test_named_action_uses_existing_target_and_observation_options(
+    captured_ui_calls, action, by_ref
+):
+    calls = captured_ui_calls
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            action,
+            *(["e1"] if by_ref else ["--name", "Panel"]),
+            "--in",
+            "example.app",
+            "--settle",
+            "700ms",
+        ],
+    )
+    assert result.exit_code == 2, result.output
+    assert len(calls) == 1
+    command, payload = calls[0]
+    assert command == action
+    assert payload["scope"] == {"package": "example.app"}
+    assert payload["settleMs"] == 700
+    if by_ref:
+        assert payload["ref"] == "e1"
+    else:
+        assert payload["selector"] == {"name": "Panel"}

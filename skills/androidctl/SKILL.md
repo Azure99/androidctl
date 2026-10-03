@@ -1,6 +1,6 @@
 ---
 name: androidctl
-description: Use when pairing with an Android device and managing its AndroidCtl session, reading UI observations and snapshots, running supervised device shell scripts and transferring files through the CLI.
+description: Use when operating or inspecting apps on an Android phone, tablet, or emulator through the AndroidCtl CLI, including UI actions, screenshots, device shell scripts, and file transfers.
 ---
 
 # AndroidCtl
@@ -97,23 +97,68 @@ Automatic observations are temporary workspace files. Read them while available
 and copy lasting deliverables elsewhere; the cache can reclaim even edited files.
 See [artifact paths and retention](reference.md#images-and-delivery).
 
+## Select And Act
+
+Use current refs or exact `--role`, `--name`, `--text`, `--id` filters. Filters
+combine on one original node; these are not Playwright locator strings. Scope
+with `--in PACKAGE` or `--window ID`. Repeat a non-active window's explicit
+`--window` on every targeted action. Disabled/unavailable candidates still count
+toward ambiguity. `ref-unavailable` is not actionable.
+
+Replace symbolic refs with observed targets and check their business identity.
+Inspect requested/resolved/selected targets. See [ref and action rules](reference.md#observations-and-targets).
+
+Standalone `ime REF` requests the exposed IME action on the already-focused
+original field; it does not focus the field.
+
+`expand`, `collapse` and `dismiss` request those exposed actions. There is no
+automatic coordinate fallback.
+
 Use `apps` to discover launchable applications.
 
 ## Results
 
 | Result | Next action |
 | --- | --- |
-| `done` | Read the completed facts. |
+| `done` | Verify the business outcome. |
 | `failed` | Read the reason and retained registration or confirmation facts. |
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
 | `still running` | For a shell/transfer job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
 
+`selected` describes the chosen action. `dispatchStarted` says whether the command
+entered dispatch. Missing facts do not mean false.
+
+Use `--json` for the [complete result fields](reference.md#json-field-guide).
+
+`changed`, `unchanged`, `loading` and `unsettled` describe observations, not
+business success. `--timeout` sets the request budget; `--settle` limits ordinary
+observation waiting. A returned sample may precede later App effects.
+See [budgets and duration formats](reference.md#results-and-budgets).
+
+### UNKNOWN
+
+1. Preserve UNKNOWN; after the original CLI ends, inspect effects read-only. Continue on reliable success.
+2. Check UI resource release using the [capture rules](reference.md#results-and-budgets); elapsed time is insufficient.
+3. Proved non-occurrence and an ended operation permit one new action on a current target; verify it.
+4. Stop after another UNKNOWN; switching input methods does not resolve uncertainty.
+5. For payment, sending or deletion, require authoritative records or clear object state; otherwise report uncertainty.
+
+Example result prefix:
+
+```text
+click: done; settle=unsettled; changed
+```
+
+The click was accepted and the tree changed, but settling did not finish. Read
+the observation at the reported path to decide whether the business state is ready.
+
 ## Use Images
 
 When semantics lack a needed fact, run `screenshot` and view its actual `imagePath`
 PNG with the host image tool before choosing an image-dependent action.
-`--image-out PATH` implies screenshot.
+`--image-out PATH` implies screenshot; action screenshots share the action budget.
+A known action with a failed image needs the missing screenshot, not another dispatch.
 
 ## Run Jobs And Transfer Files
 
@@ -151,9 +196,10 @@ a job ID, use the reference's
 
 ## Recover And Finish
 
-For attachment/save/read failures, obtain only the missing observation.
-`status` reports worker/session/resources and failed connection checks.
-Use the reference's [connection
+For attachment/save/read failures, preserve the action result and obtain only the
+missing observation. For stale targets, collect fresh facts and select the current
+target. `status` reports worker/session/resources and failed connection checks;
+it does not prove action readiness. Use the reference's [connection
 recovery](reference.md#connection-and-sessions), [ADB route setup](reference.md#device-setup-and-adb-route)
 or [device diagnostics](reference.md#device-diagnostics) for those specific failures.
 Certificate changes require a trusted export. Forgetting a pairing does not stop

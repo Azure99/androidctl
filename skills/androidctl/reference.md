@@ -16,6 +16,7 @@ accepts a local `--json` option.
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
+| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `focus`, `ime` | [Targets](#observations-and-targets) |
 | Navigate | `apps` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
@@ -132,7 +133,7 @@ Successful `status` reports worker, actual session holder, resources and Gateway
 state without duplicate checks. A failed observation includes local pairing,
 actual authentication (new or reused) and worker checks; later checks stay not
 checked after an earlier failure. A valid device `UNKNOWN` remains `UNKNOWN`.
-These checks do not prove a credential was revoked when
+These checks do not test action readiness or prove a credential was revoked when
 the device is unreachable.
 Connection `stage=local.*` names IPC and `device.*` names device transport, including
 connect/TLS/WebSocket/authentication phases; remote errors retain their own stage.
@@ -221,22 +222,48 @@ continuing, rather than deleting locks or assuming automatic takeover.
 
 | Result | Usual exit | Meaning |
 | --- | ---: | --- |
-| `done` | 0 | The command's stated condition completed. |
-| `failed` | 1 | A known failure; partial effects can remain. |
-| `not sent` | 2 | The request was not dispatched; transfer admission also requires no execution/publication effects. |
-| `UNKNOWN` | 3 | Dispatch or its final outcome is uncertain. |
+| `done` | 0 | The command's stated condition completed, possibly only platform dispatch. |
+| `failed` | 1 | A known failure, unmet condition or known cancellation; partial effects can remain. |
+| `not sent` | 2 | Requested input was not dispatched; transfer admission also requires no execution/publication effects. |
+| `UNKNOWN` | 3 | Dispatch or execution receipt is uncertain. |
 | `still running` | 4 | A shell/transfer job has no final result yet, or `daemon stop` has not confirmed shutdown. Query or cancel the original job ID, or recheck the daemon with `daemon status`, respectively. |
 
 Cleanup failure, uncertainty or signal failure overrides exit to 3 while retaining
 the known main result. Known shell cancellation with only ordinary pending cleanup
-remains exit 1.
+remains exit 1. Ordinary UI has no general job ID. Read-only results have no
+dispatch facts. A rejected platform action may have requested focus already.
+Late callbacks cannot revise a terminal UNKNOWN already returned.
+
+Follow the [UNKNOWN checklist](SKILL.md#unknown). For its snapshot-based UI
+resource release check, obtain each capture from the corresponding JSON
+`data.capture` or XML header's `source.capture`, for both the original UNKNOWN
+and the new snapshot. Both must share the worker UUID before the colon.
+For `--raw`, preserve its JSON result too; see the
+[same-sample diagnostics](#xml-defaults-and-gaps).
+The new snapshot must succeed on the same device/session without REF or
+`--cached`. Check JSON's explicit `snapshotCached=false`, or its equivalent
+omitted `source.snapshotCached` in this version's successful snapshot XML under
+the [exact default rules](#xml-defaults-and-gaps). Missing fields in other inputs
+do not establish false. A screenshot or unrelated old
+capture is insufficient. A partial sample can establish UI resource release,
+but cannot prove business absence or completion. Without the original capture,
+with a changed worker or after a failed snapshot, the check is inconclusive;
+waiting out the budget supplies no missing proof. Reliable business success
+permits continuing without this capture check.
 
 Text headings use the same fixed command path as JSON `command`.
-Ordinary UI text results occupy one line with full `snapshotPath` / `imagePath`,
-image dimensions and delivery errors or warnings. String values use JSON quoting;
-embedded newlines stay escaped on that line. Missing facts are not inferred.
-`--print` then echoes the saved body.
-App lists and raw shell output retain their own lines.
+Ordinary UI text results occupy one line with available action facts, full
+`snapshotPath` / `imagePath`, image dimensions and delivery errors or warnings.
+String values use JSON quoting; embedded newlines stay escaped on that line.
+Done results omit `dispatchStarted=true`; explicit false and dispatch facts on
+non-done results remain visible. Missing dispatch facts on non-done results
+show unknown.
+A different existing ref or selected action expands Requested, Resolved and Selected
+lines; refreshed names/bounds and ordinary selector resolution keep one line.
+Observed change uses `changed` / `semantic observation unchanged`, or
+`change=unknown` with its available reason; JSON retains comparison metadata.
+Missing facts are not inferred. `--print` then echoes the saved body. App lists and
+raw shell output retain their own lines.
 
 ### JSON Field Guide
 
@@ -244,17 +271,26 @@ Fields depend on the command and outcome; absence does not mean false.
 Top-level `command` is the fixed public command path, including on failure and
 pre-dispatch rejection. Targets and flags do not become part of that field.
 Argument errors preserve an identified command path; without one they use `arguments`.
-Nested job facts keep their original meanings.
+Nested action and job facts keep their original meanings.
 
 | Location | Interpretation |
 | --- | --- |
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
 | `data.snapshotPath`, `imagePath` | Absolute paths to the saved observation and PNG. [Delivery](#images-and-delivery) also reports `snapshotError`, `imageError`, `historyError` and `deliveryError` when applicable. |
+| `data.requested`, `resolved` | Original target/action and the resolved target. `resolved.method` is original for a published ref or selector for selector discovery; resolution does not prove admission or dispatch. |
+| `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. |
+| `data.dispatchStarted`, `attempts` | Whether the command entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
+| `data.platform` | For semantic input receipts, `accepted` is the synchronous platform call's return value, `callback` is the platform action-completion callback value (null when unavailable), and `acceptedError` is an exception while obtaining acceptance. A positive receipt does not prove App business completion. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
 | `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
 | `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
 | `data.queryError`, `outputError` | Failure to query or export a job, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
 | `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
+
+`resolved.target` and each non-null `selected.target` contain
+`{ref, role, name, windowId, bounds}`. Names keep the first 256 UTF-16 units,
+then append `... (N chars omitted)` when longer. Read the original observation
+for other node facts.
 
 Durations use nonnegative integers with `ms`, `s`, `m` or `h`; only `0` may
 omit its unit. Each option retains its own range. Use `--run` for shell/transfer
@@ -264,15 +300,17 @@ execution limits and `--wait` for shell/transfer or `job get` waiting.
 | --- | --- |
 | Ordinary UI | `5s`; explicit `--timeout` accepts `1ms`–`60s`. |
 | Standalone screenshot | `15s`; explicit timeout takes precedence. |
+| Action settling | `--settle` accepts `0`–`60s`, default cap `1500ms`, within the original request budget. |
 | Ordinary shell execution / initial wait | 10000 ms each. |
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
 | Transfer execution / initial wait | 600000 ms / 10000 ms. |
 | Shell or transfer execution | `--run` accepts `1ms`–`10m`. |
 | Shell/transfer and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
 
-Connection, queueing, observation and attachment delivery consume one remaining
-request budget, without restarting it at each step. Requests return when complete.
-This budget is not a hard wall-clock CLI limit: local validation,
+Connection, queueing, dispatch, callback, observation and attachment
+delivery consume one remaining request budget, without restarting it at each step.
+An action's screenshot does not receive an extra 15 seconds. Requests return when
+complete. This budget is not a hard wall-clock CLI limit: local validation,
 decoding and file saving continue after complete attachments arrive, without a
 separate clock cutoff. Resources remain held until actual cleanup ends.
 Network requests and waiting for an occupied history lock keep the original
@@ -282,8 +320,9 @@ The device checks the request's cutoff before entering the worker. This does not
 cancel an already started shell or file job; a later cancel request has its own
 budget.
 
-Measured JSON fields are `localConnectMs`, `deviceConnectMs`, `uiConnectMs` and
-`deliveryMs`. Unmeasured/reused connections omit their fields. `deliveryMs` covers fetching and
+Measured JSON fields are `localConnectMs`, `deviceConnectMs`, `uiConnectMs`,
+`preWaitMs`, `settleMs`, `deliveryMs`. Unmeasured/reused connections omit their
+fields; cached reads do not replay old timing. `deliveryMs` covers fetching and
 local processing through file saving, before output encoding. Stages can overlap;
 they exclude subsequent reading/model work and cannot be added as total task time.
 
@@ -317,6 +356,7 @@ window inventory is in the XML body. JSON stdout retains observation and
 completeness summaries plus successful file paths; the original gap list remains
 in raw. Text stdout gives result and paths,
 with `observationWarning` for partial sampling or completeness gaps.
+`timing=before-action` remains meaningful even if saving fails.
 Reported unavailable fields remain in raw JSON. An empty `actions=""` means no
 exposed actions.
 
@@ -335,7 +375,7 @@ facts remain. Raw JSON retains its existing facts.
 
 | Location | XML rule |
 | --- | --- |
-| Invocation `args` | Omit `timeoutMs=5000`, `screenshot=false` and `scope={}`. Preserve query/renderRef/all/boxes/cached and non-default requests. Do not add an absent args object. |
+| Invocation `args` | Omit `timeoutMs=5000`, `settleMs=1500`, `screenshot=false` and `scope={}`. Preserve query/renderRef/all/boxes/cached and non-default requests. Do not add an absent args object. |
 | `source` | Omit reported `snapshotCached=false` and `snapshotBeforeAction=false`. Preserve capture and age. A successful snapshot in this version reports both flags before XML rendering. |
 | `snapshotFacts` | Omit the windows copy, keyboard when equal to screen.keyboard, `selectionScope={}`, `partial=false` and empty missing/nodeUnavailable lists. Preserve startedMs/finishedMs, sequence, connection, scope and other facts. |
 | `snapshotFacts.display` | Omit `interactive=true`, `deepIdle=false`, `userId=0`, `displayId=0`, `displayState=2` and `keyguardShowing/keyguardSecure/deviceLocked=false`. With displayError, retain displayId/displayState. Omit sampleMs only when it equals an actually reported, non-null finishedMs. Keep width/height/rotation and errors. |
@@ -377,14 +417,60 @@ existing PNG; a later image cannot establish the old visual state. Raw has no XM
 source header, so the raw file alone cannot complete this capture check. Once the
 cache has changed, fresh raw cannot recover an old XML's summarized distribution.
 
+Fresh partial samples replace previous ones. Reliable local refs and value facts
+remain usable; gaps cannot prove selector uniqueness, whole-page stability or
+absence. When repeated source expansion is stopped, the observation records the
+gap and provides no usable refs because uniqueness can no longer be established.
+`observedChange` compares the existing observation signatures of complete before/final
+endpoints in the same connection and actual scope. Missing or partial endpoints
+report unknown. Unchanged endpoints do not prove that no effects occurred between them. If an explicitly
+selected window was present before dispatch and is absent from the same
+connection's current default-display inventory, `absentWindow` identifies it and
+observation falls back to the default active scope. If that capture fails, the
+absence fact and error remain, and the old tree and attachments are unavailable.
+This does not prove the window
+closed or was destroyed. It neither repeats input nor redirects IME.
+
+Refs resolve in the latest snapshot while node identity remains.
+`ref-unavailable` nodes have no usable ref. Filters (`--role`, `--name`, `--text`, `--id`) combine on one original
+node, with exact values and one XML-entity decode. Numeric entities decode only
+legal XML characters; literal candidates remain available. IDs accept full names or the
+suffix after `:id/`. A label maps to a parent only if it supplies that parent's
+name. Disabled/unavailable matches still count toward ambiguity; known invisible
+nodes do not. An earlier `--window` snapshot does not authorize a later action:
+repeat the matching explicit window for non-active targets.
+
+REF actions and selectors after discovery recheck the target's full identity
+and readiness through its ancestors. Admission does not repeat the whole-page
+uniqueness check. `observedChange` compares the published observation with the
+observation returned after the action.
+
 `find` counts matching projected subtrees, not unique actionable targets.
 Read the original observation when row or ancestor context is needed.
+
+Actions wait for their target, then dispatch once and normally return an observation.
+A `notReady` reason explains the blocking condition checked for the target, or
+distinguishes no selector match from incomplete uniqueness. Before any completed
+check, it remains neutral.
+
+`expand`, `collapse` and `dismiss` request the corresponding exposed platform
+action. Their names appear in `actions` and make the node a target, including when
+it is also clickable. `done` confirms
+the platform receipt, so read the resulting observation to verify the App effect.
+These actions do not fall back to coordinates or expose custom actions.
+Noneditable, long-clickable nodes show `long-click` only when not clickable;
+editable nodes retain their full reported `actions` field.
+
+Standalone `ime REF` requires the original field already focused and
+requests its exposed IME action without an automatic focus step. A multiline IME
+action may insert a newline. Verify business effects independently of the
+platform receipt.
 
 `apps [QUERY]` filters launchable names/packages by case-insensitive substring.
 
 ## Images And Delivery
 
-Observation bodies, including cached/find/REF results,
+Observation bodies, including action/rejection and cached/find/REF results,
 default to files under the artifact root's `.androidctl/snapshots/`.
 The root is the global `--workspace-root PATH`, then `ANDROIDCTL_WORKSPACE_ROOT`,
 then the CLI working directory. It must be an existing directory; AndroidCtl does
@@ -404,7 +490,7 @@ JSON uses `data.imagePath` and `data.image.width` / `data.image.height`.
 Complete files contain all selected collected content, not necessarily a complete
 page. Check missing/partial facts and any host-tool truncation separately.
 
-`snapshot/find --print` and `screenshot --print` echo the saved body after
+UI observation and action commands accept `--print` to echo the saved body after
 the result and paths.
 It cannot be combined with global `--json`. The body is generated once and echoed
 only after saving succeeds; print is neither a body-only stdout format nor a
@@ -414,7 +500,8 @@ For a cache-path or permission error, preserve the existing object and choose
 an existing `--workspace-root` where AndroidCtl can create a new cache. To repair
 the reported path on Windows, use **Properties → Security → Advanced** and the
 reported permission error. On POSIX, `chmod 700` fixes access bits only when the
-reported owner is correct. Fix delivery before obtaining the missing observation.
+reported owner is correct. Fix delivery before obtaining the missing observation;
+do not repeat a known or UNKNOWN action to repair its output.
 
 Automatic bodies and PNGs share a 150-file/20-MiB quota. Later saves can reclaim old
 files matching AndroidCtl's complete filename format, including edited or replaced
@@ -424,13 +511,15 @@ nonmatching files are left alone and failed deletions still occupy quota.
 This is not a physical directory-size guarantee. Explicit outputs outside these
 cache directories are not rotated. An explicit output inside them with a matching
 filename is reclaimable too. `--image-out` requires a new file and an existing
-directory and implies `--screenshot`. Giving both options requests one image.
-Invalid output paths and print/json conflicts reject before the snapshot RPC.
-With an explicit body output, automatic PNGs still
+directory and implies `--screenshot`. Giving both options requests one image,
+without repeating the main action. Invalid output paths and print/json conflicts
+reject before the action RPC. With an explicit body output, automatic PNGs still
 use the shared history quota; the body is not duplicated in history.
 
 `snapshot`/`find` require a saved body, and `screenshot` requires a saved PNG;
-missing that artifact fails an otherwise successful observation.
+missing that artifact fails an otherwise successful observation. An attachment or
+stdout failure preserves a known action result. Read the reported errors and
+saved files, then obtain only the missing observation; do not resend the action.
 Actual write or close failures are reported and removal of that write's file is
 attempted.
 

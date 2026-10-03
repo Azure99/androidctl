@@ -303,6 +303,358 @@
     }],
     "partial": true
   },
+  "actionResults": [
+    {
+      "request": {
+        "args": {"ref": "e7"},
+        "command": "click"
+      },
+      "response": {
+        "result": "done",
+        "reason": null,
+        "data": {
+          "dispatchStarted": true,
+          "selected": {
+            "action": "click",
+            "target": {
+              "ref": "e7",
+              "role": "button",
+              "name": "Search",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          },
+          "resolved": {
+            "method": "original",
+            "target": {
+              "ref": "e7",
+              "role": "button",
+              "name": "Search",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "command": "click"
+      },
+      "name": "plain-click"
+    },
+    {
+      "request": {
+        "args": {"selector": {"name": "Search"}},
+        "command": "click"
+      },
+      "response": {
+        "result": "done",
+        "reason": null,
+        "data": {
+          "dispatchStarted": true,
+          "selected": {
+            "action": "click",
+            "target": {
+              "ref": "e7",
+              "role": "button",
+              "name": "Search",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          },
+          "resolved": {
+            "method": "selector",
+            "target": {
+              "ref": "e7",
+              "role": "button",
+              "name": "Search",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "command": "click"
+      },
+      "name": "selector-click"
+    }
+  ],
+  "entityForms": [
+    {
+      "input": "A &amp; B",
+      "forms": [
+        "A &amp; B",
+        "A & B"
+      ]
+    },
+    {
+      "input": "&amp;lt;",
+      "forms": [
+        "&amp;lt;",
+        "&lt;"
+      ]
+    },
+    {
+      "input": "&#9;",
+      "forms": [
+        "&#9;",
+        "\t"
+      ]
+    },
+    {
+      "input": "&#x9;",
+      "forms": [
+        "&#x9;",
+        "\t"
+      ]
+    },
+    {
+      "input": "&#10;",
+      "forms": [
+        "&#10;",
+        "\n"
+      ]
+    },
+    {
+      "input": "&#xA;",
+      "forms": [
+        "&#xA;",
+        "\n"
+      ]
+    },
+    {
+      "input": "&#xa;",
+      "forms": [
+        "&#xa;",
+        "\n"
+      ]
+    },
+    {
+      "input": "&#13;",
+      "forms": [
+        "&#13;",
+        "\r"
+      ]
+    },
+    {
+      "input": "&#xD;",
+      "forms": [
+        "&#xD;",
+        "\r"
+      ]
+    },
+    {
+      "input": "&#xd;",
+      "forms": [
+        "&#xd;",
+        "\r"
+      ]
+    },
+    {
+      "input": "&#32;",
+      "forms": [
+        "&#32;",
+        " "
+      ]
+    },
+    {
+      "input": "&#x20;",
+      "forms": [
+        "&#x20;",
+        " "
+      ]
+    },
+    {
+      "input": "&#55295;",
+      "forms": [
+        "&#55295;",
+        "퟿"
+      ]
+    },
+    {
+      "input": "&#xD7FF;",
+      "forms": [
+        "&#xD7FF;",
+        "퟿"
+      ]
+    },
+    {
+      "input": "&#xd7ff;",
+      "forms": [
+        "&#xd7ff;",
+        "퟿"
+      ]
+    },
+    {
+      "input": "&#57344;",
+      "forms": [
+        "&#57344;",
+        ""
+      ]
+    },
+    {
+      "input": "&#xE000;",
+      "forms": [
+        "&#xE000;",
+        ""
+      ]
+    },
+    {
+      "input": "&#xe000;",
+      "forms": [
+        "&#xe000;",
+        ""
+      ]
+    },
+    {
+      "input": "&#65533;",
+      "forms": [
+        "&#65533;",
+        "�"
+      ]
+    },
+    {
+      "input": "&#xFFFD;",
+      "forms": [
+        "&#xFFFD;",
+        "�"
+      ]
+    },
+    {
+      "input": "&#xfffd;",
+      "forms": [
+        "&#xfffd;",
+        "�"
+      ]
+    },
+    {
+      "input": "&#65536;",
+      "forms": [
+        "&#65536;",
+        "𐀀"
+      ]
+    },
+    {
+      "input": "&#x10000;",
+      "forms": [
+        "&#x10000;",
+        "𐀀"
+      ]
+    },
+    {
+      "input": "&#1114111;",
+      "forms": [
+        "&#1114111;",
+        "􏿿"
+      ]
+    },
+    {
+      "input": "&#x10FFFF;",
+      "forms": [
+        "&#x10FFFF;",
+        "􏿿"
+      ]
+    },
+    {
+      "input": "&#x10ffff;",
+      "forms": [
+        "&#x10ffff;",
+        "􏿿"
+      ]
+    },
+    {
+      "input": "&#0;",
+      "forms": ["&#0;"]
+    },
+    {
+      "input": "&#x0;",
+      "forms": ["&#x0;"]
+    },
+    {
+      "input": "&#8;",
+      "forms": ["&#8;"]
+    },
+    {
+      "input": "&#x8;",
+      "forms": ["&#x8;"]
+    },
+    {
+      "input": "&#11;",
+      "forms": ["&#11;"]
+    },
+    {
+      "input": "&#xB;",
+      "forms": ["&#xB;"]
+    },
+    {
+      "input": "&#55296;",
+      "forms": ["&#55296;"]
+    },
+    {
+      "input": "&#xD800;",
+      "forms": ["&#xD800;"]
+    },
+    {
+      "input": "&#57343;",
+      "forms": ["&#57343;"]
+    },
+    {
+      "input": "&#xDFFF;",
+      "forms": ["&#xDFFF;"]
+    },
+    {
+      "input": "&#65534;",
+      "forms": ["&#65534;"]
+    },
+    {
+      "input": "&#xFFFE;",
+      "forms": ["&#xFFFE;"]
+    },
+    {
+      "input": "&#65535;",
+      "forms": ["&#65535;"]
+    },
+    {
+      "input": "&#xFFFF;",
+      "forms": ["&#xFFFF;"]
+    },
+    {
+      "input": "&#1114112;",
+      "forms": ["&#1114112;"]
+    },
+    {
+      "input": "&#x110000;",
+      "forms": ["&#x110000;"]
+    },
+    {
+      "input": "&#999999999999;",
+      "forms": ["&#999999999999;"]
+    },
+    {
+      "input": "&#xE8D4A50FFF;",
+      "forms": ["&#xE8D4A50FFF;"]
+    },
+    {
+      "input": "&#99999999999999999;",
+      "forms": ["&#99999999999999999;"]
+    }
+  ],
   "output": {
     "metadata": {
       "streams": [
@@ -659,6 +1011,20 @@
       "title": "Cart"
     }],
     "partial": true
+  },
+  "vocabulary": {
+    "roles": [
+      "button",
+      "checkbox",
+      "image",
+      "item",
+      "list",
+      "radio",
+      "scroll",
+      "switch",
+      "text",
+      "textbox"
+    ]
   },
   "queryMethods": [
     "file.cancel",

@@ -12,6 +12,7 @@ from androidctl import local_call
 from androidctl.protocol import (
     completed,
 )
+from androidctl.ui_commands import ROLES
 
 
 def run_main(monkeypatch, args):
@@ -28,6 +29,7 @@ def run_main(monkeypatch, args):
             ["snapshot", "--timeout", value]
             for value in ["5", "00", "0", "60001ms", "1h", "1.5s", "-1s", "1d"]
         ),
+        ["click", "e1", "--settle", "60001ms"],
         ["shell", "--run", "0", "--", "true"],
         ["shell", "--run", "600001ms", "--", "true"],
         ["job", "get", "j1", "--wait", "60001ms"],
@@ -67,8 +69,9 @@ def test_idle_duration_converts_once(monkeypatch, value, seconds):
 @pytest.mark.parametrize(
     ("command", "defaults", "options"),
     [
-        (["screenshot"], ["15s"], ["--timeout"]),
         (["snapshot"], ["5s"], ["--timeout"]),
+        (["screenshot"], ["15s"], ["--timeout"]),
+        (["click"], ["5s", "1500ms"], ["--settle"]),
         (["session", "open"], ["10m"], ["--idle"]),
         (["push"], ["10m", "10s"], ["--run", "--wait"]),
         (["shell"], ["10s", "10m"], ["--run", "--wait"]),
@@ -367,6 +370,33 @@ def test_main_does_not_hide_program_value_error(monkeypatch):
 def test_invalid_read_conditions_never_connect(monkeypatch, capsys, args):
     run_main(monkeypatch, args)
     assert "not sent" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("args", "detail"),
+    [
+        (["click", "--role", "entry"], "--role button|textbox|"),
+        (["click", "--unrecognized"], "No such option"),
+    ],
+)
+def test_invalid_selector_arguments_show_choices_without_connection(
+    monkeypatch, capsys, args, detail
+):
+    run_main(monkeypatch, args)
+    output = capsys.readouterr().out
+    assert output.startswith(args[0] + ": not sent;")
+    assert len(output.splitlines()) == 1
+    assert detail in output
+
+
+@pytest.mark.parametrize(("command", "values"), [("click", ROLES)])
+def test_help_keeps_complete_selector_choices(command, values):
+    result = CliRunner().invoke(cli.app, [command, "--help"])
+    assert result.exit_code == 0, result.output
+    for value in values:
+        assert re.search(rf"(?<![\w-]){re.escape(value)}(?![\w-])", result.output), (
+            result.output
+        )
 
 
 def test_bare_session_shows_all_operations_without_connection():

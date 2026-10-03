@@ -18,6 +18,7 @@ from androidctl import app as cli
 from androidctl import history, ui_client, ui_view
 from androidctl.cli_options import CliOptions
 from androidctl.local_call import BoundDevice
+from androidctl.private_files import private_directory
 from androidctl.protocol import CHUNK_BYTES, Fault, Result, completed
 from androidctl.ui_client import View, deliver
 from ui_test_support import BrokenStream, node, tree, xml_metadata
@@ -539,6 +540,41 @@ def test_history_failure_reports_missing_primary_file(monkeypatch, tmp_path, cap
 
 
 @pytest.mark.parametrize("saved", [False, True])
+def test_before_action_timing_is_not_a_snapshot_path(
+    monkeypatch, tmp_path, capsys, saved
+):
+    monkeypatch.chdir(tmp_path)
+    if not saved:
+        (tmp_path / ".androidctl").write_text("owned blocker")
+    result = Result(
+        command="click e1",
+        result="not sent",
+        data={"dispatchStarted": False, "snapshotBeforeAction": True},
+    )
+    ui_client.deliver(
+        result,
+        tree(),
+        None,
+        ui_client.View(),
+        time.monotonic() + 3,
+        command="click",
+        invocation={"command": "click", "args": {}},
+        context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    output = capsys.readouterr().out
+    assert len(output.splitlines()) == 1
+    assert "timing=before-action" in output
+    assert ("snapshotPath=" in output) is saved
+    if saved:
+        path = result.data["snapshotPath"]
+        assert "snapshotPath=" + json.dumps(path) in output
+        assert (tmp_path / path).is_file()
+    assert result.result == "not sent"
+    assert result.exit_code() == 2
+
+
+@pytest.mark.parametrize("saved", [False, True])
 @pytest.mark.parametrize("state", ["done", "UNKNOWN", "not sent"])
 @pytest.mark.parametrize("as_json", [False, True])
 def test_only_undelivered_primary_snapshot_downgrades_done(
@@ -574,6 +610,35 @@ def test_presentation_program_error_propagates(monkeypatch, tmp_path, operation)
             tree(),
             ui_client.View(),
         )
+
+
+def test_malformed_observation_preserves_known_action_and_explicit_exit(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    result = Result(
+        command="click e1", result="done", exit=3, data={"dispatchStarted": True}
+    )
+    ui_client.deliver(
+        result,
+        {"nodes": [], "windows": [], "scope": {}, "missing": None},
+        None,
+        ui_client.View(),
+        time.monotonic() + 1,
+        command="click",
+        invocation={"command": "click", "args": {}},
+        context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    output = capsys.readouterr().out
+    assert output.startswith("click e1: done;")
+    assert "dispatchStarted=true" not in output
+    assert 'snapshotError="' in output
+    assert "<screen" not in output
+    assert "snapshotPath" not in result.data
+    assert "snapshotCompleteness" not in result.data
+    assert result.result == "done"
+    assert result.exit_code() == 3
 
 
 @pytest.mark.parametrize("command", ["snapshot", "screenshot"])
@@ -727,6 +792,127 @@ def test_required_observation_save_failure_keeps_cleanup_exit(
     assert "snapshotPath" not in value["data"]
 
 
+@pytest.mark.parametrize("kind", ["fresh", "cached", "unavailable"])
+def test_rejection_guidance_names_the_observation_actually_delivered(
+    tmp_path, monkeypatch, capsys, kind
+):
+    monkeypatch.chdir(tmp_path)
+    value = Result(
+        command="click", result="not sent", data={"snapshotCached": kind == "cached"}
+    )
+    if kind == "cached":
+        value.data.update(snapshotSequence=7, snapshotSampleMs=100, snapshotAgeMs=50)
+    ui_client.deliver(
+        value,
+        None if kind == "unavailable" else tree(),
+        None,
+        ui_client.View(),
+        time.monotonic() + 2,
+        command="click",
+        invocation={"command": "click", "args": {}},
+        context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    output = capsys.readouterr().out
+    if kind == "unavailable":
+        assert "Observation: unavailable;" in output
+        assert "snapshotPath" not in value.data
+    else:
+        assert (tmp_path / value.data["snapshotPath"]).is_file()
+        saved = (tmp_path / value.data["snapshotPath"]).read_text(encoding="utf-8")
+        metadata = xml_metadata(saved)
+        if kind == "cached":
+            assert metadata["source"]["snapshotCached"] is True
+        else:
+            assert "snapshotCached" not in metadata["source"]
+        assert value.data["snapshotCached"] is (kind == "cached")
+        assert "observationWarning=" not in output
+        assert "<screen" not in output
+    assert value.result == "not sent"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        Fault("snapshotInvalid", "cannot render tree"),
+        KeyError("cannot render tree"),
+        TypeError("cannot render tree"),
+    ],
+)
+def test_rejection_with_undeliverable_tree_keeps_known_observation_facts(
+    tmp_path, monkeypatch, capsys, error
+):
+    monkeypatch.chdir(tmp_path)
+
+    def fail(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(ui_view, "render", fail)
+    value = Result(command="click", result="not sent")
+    source = tree()
+    source.update(connection=5, partial=True, missing=[{"reason": "budget"}])
+    ui_client.deliver(
+        value,
+        source,
+        None,
+        ui_client.View(query="Pay"),
+        time.monotonic() + 2,
+        command="click",
+        invocation={"command": "click", "args": {}},
+        context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    output = capsys.readouterr().out
+    assert "snapshotError=" + json.dumps(str(error)) in output
+    assert "snapshotPath" not in value.data
+    assert value.data["snapshotError"] == str(error)
+    assert value.data["snapshotConnection"] == 5
+    assert value.data["snapshotCompleteness"] == {
+        "partial": True,
+        "missingCount": 1,
+        "unavailableNodeCount": 0,
+    }
+    assert value.data["matches"] == 1
+
+
+def test_bad_history_keeps_action_done_without_stdout_body(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / ".androidctl"
+    private_directory(root)
+    blocker = root / "snapshots"
+    blocker.write_bytes(b"directory blocker")
+    tree = {
+        "scope": {"window": 12, "package": "example.shop"},
+        "windows": [{"id": 12, "title": "Cart"}],
+        "keyboard": "hidden",
+        "nodes": [node("e15")],
+    }
+    result = Result(command="click", result="done", data={"settle": "unchanged"})
+    ui_client.deliver(
+        result,
+        tree,
+        None,
+        ui_client.View(print_body=True),
+        time.monotonic() + 5,
+        command="click",
+        invocation={"command": "click", "args": {}},
+        context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    output = capsys.readouterr().out
+    assert output.startswith("click: done; settle=unchanged;")
+    assert "<button" not in output
+    assert 'historyError="' in output
+    assert json.dumps(str(blocker))[1:-1] in output
+    assert "snapshotPath=" not in output
+    assert "<?androidctl" not in output
+    assert result.result == "done"
+    assert result.exit_code() == 0
+    assert blocker.read_bytes() == b"directory blocker"
+
+
 def test_delivery_timing_counts_local_rendering_without_fabricating_other_stages(
     tmp_path, monkeypatch, capsys
 ):
@@ -764,6 +950,19 @@ def test_delivery_timing_counts_local_rendering_without_fabricating_other_stages
     assert not any(
         name in wire["data"] for name in ("settleMs", "preWaitMs", "uiConnectMs")
     )
+    untouched = completed("click")
+    deliver(
+        untouched,
+        None,
+        None,
+        View(),
+        time.monotonic() + 5,
+        command="click",
+        invocation={"command": "click", "args": {}},
+        context=CliOptions(None, "default", True, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    assert json.loads(capsys.readouterr().out)["data"] == {}
 
 
 def attachment_reader(monkeypatch, body, encoded, encoding):

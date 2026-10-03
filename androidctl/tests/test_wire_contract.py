@@ -8,12 +8,13 @@ from pathlib import Path
 import pytest
 import typer
 
-from androidctl import job_commands, protocol, ui_view
+from androidctl import job_commands, protocol, ui_client, ui_view
 from androidctl.cli_options import CliOptions
 from androidctl.coordinator import QUERY_METHODS
 from androidctl.output import Output
 from androidctl.protocol import CHUNK_BYTES, Result
 from androidctl.ui_client import UiClient
+from androidctl.ui_commands import ROLES
 from ui_test_support import load_wire_contract
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,7 +32,14 @@ def index_samples(section, samples, key="name"):
 
 
 CAPTURES = index_samples("captures", WIRE_CONTRACT["captures"])
+ACTION_RESULTS = index_samples("actionResults", WIRE_CONTRACT["actionResults"])
+ENTITY_FORMS = index_samples("entityForms", WIRE_CONTRACT["entityForms"], "input")
 FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
+
+ACTION_EXPECTED = {
+    "plain-click": (1, "done", 0, ["click: done"]),
+    "selector-click": (1, "done", 0, ["click: done; ref=e7"]),
+}
 
 FILE_FAILURE_EXPECTED = {
     "before-open": (
@@ -115,6 +123,10 @@ def test_wire_limits_agree_across_boundaries():
     )
 
 
+def test_offline_selector_choices_match_device_classification_and_actions():
+    assert sorted(ROLES) == WIRE_CONTRACT["vocabulary"]["roles"]
+
+
 def test_query_pools_share_the_expected_control_methods():
     assert WIRE_CONTRACT["queryMethods"] == sorted(QUERY_METHODS | {"pair.register"})
 
@@ -123,6 +135,11 @@ def constant(source, name):
     match = re.search(rf"\b{name}\s*(?:=\s*)?\(?([0-9][0-9uL *]*)", source)
     assert match, f"Production constant {name} was not found"
     return math.prod(int(part.strip().rstrip("uL")) for part in match[1].split("*"))
+
+
+@pytest.mark.parametrize("sample", ENTITY_FORMS.values(), ids=ENTITY_FORMS)
+def test_entity_candidates_match_device_forms(sample):
+    assert ui_view.query_forms(sample["input"]) == set(sample["forms"])
 
 
 @pytest.mark.parametrize("capture", CAPTURES.values(), ids=CAPTURES)
@@ -186,6 +203,28 @@ def test_device_shell_cleanup_overrides_the_public_exit_without_losing_execution
     assert result.data["cleanup"] == "unknown"
 
 
+@pytest.mark.parametrize("name", ACTION_EXPECTED)
+def test_host_consumes_device_action_facts_including_pending_responses(name, capsys):
+    case = ACTION_RESULTS[name]
+    attempts, expected_result, expected_exit, expected_lines = ACTION_EXPECTED[name]
+    result = Result.model_validate(case["response"])
+    assert_json(
+        case["response"],
+        result.model_dump(mode="json", by_alias=True, exclude_unset=True),
+    )
+    request = case["request"]
+    result.data["requested"] = ui_client.requested_action(
+        request["command"], request["args"]
+    )
+    result.data["attempts"] = attempts
+    original = result.wire()
+    assert result.result == expected_result
+    assert result.exit_code() == expected_exit
+    ui_client.result_line(result, result.command, Output())
+    assert capsys.readouterr().out.splitlines() == expected_lines
+    assert_json(original, result.wire())
+
+
 @pytest.mark.parametrize("stream", ["stdout", "stderr"])
 def test_host_consumes_device_output_chunks(stream, monkeypatch):
     fixture = WIRE_CONTRACT["output"]
@@ -222,9 +261,10 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
     ("samples", "names"),
     [
         (CAPTURES, {"projected-tree", "raw-image", "large-tree", "minimal-tree"}),
+        (ACTION_RESULTS, ACTION_EXPECTED.keys()),
         (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
     ],
-    ids=["captures", "fileFailures"],
+    ids=["captures", "actionResults", "fileFailures"],
 )
 def test_named_sample_coverage_is_exact(samples, names):
     assert samples.keys() == names

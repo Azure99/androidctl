@@ -1,5 +1,6 @@
 package com.rainng.androidctl
 
+import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -7,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,6 +26,65 @@ class UiSemanticsTest {
         val orphan = node("orphan", "Target", "uncollected")
         UiSemantics.project(listOf(orphan))
         assertNull(UiSemantics.identity(orphan))
+    }
+
+    @Test fun actionAdmissionKeepsAliasesAndExcludesObservationOnlyActions() {
+        val supported =
+            mapOf(
+                "click" to AccessibilityNodeInfo.ACTION_CLICK,
+                "check" to AccessibilityNodeInfo.ACTION_CLICK,
+                "uncheck" to AccessibilityNodeInfo.ACTION_CLICK,
+                "fill" to AccessibilityNodeInfo.ACTION_SET_TEXT,
+                "focus" to AccessibilityNodeInfo.ACTION_FOCUS,
+                "long-click" to AccessibilityNodeInfo.ACTION_LONG_CLICK,
+                "expand" to AccessibilityNodeInfo.ACTION_EXPAND,
+                "collapse" to AccessibilityNodeInfo.ACTION_COLLAPSE,
+                "dismiss" to AccessibilityNodeInfo.ACTION_DISMISS,
+                "ime" to android.R.id.accessibilityActionImeEnter,
+                "scroll-forward" to AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,
+                "scroll-backward" to AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,
+                "scroll-up" to android.R.id.accessibilityActionScrollUp,
+                "scroll-down" to android.R.id.accessibilityActionScrollDown,
+                "scroll-left" to android.R.id.accessibilityActionScrollLeft,
+                "scroll-right" to android.R.id.accessibilityActionScrollRight,
+            )
+        for ((name, id) in supported) assertEquals(name, id, UiAction.parse(name).platformId)
+        val pages =
+            mapOf(
+                android.R.id.accessibilityActionPageUp to "page-up",
+                android.R.id.accessibilityActionPageDown to "page-down",
+                android.R.id.accessibilityActionPageLeft to "page-left",
+                android.R.id.accessibilityActionPageRight to "page-right",
+            )
+        for ((id, name) in pages) assertEquals(name, UiSemantics.actionName(id))
+        for (name in listOf("copy", "cut", "paste", "select", "clear-focus", "set-selection", "unknown") + pages.values) {
+            assertEquals("action", assertThrows(Rejected::class.java) { UiAction.parse(name).platformId }.code)
+        }
+    }
+
+    @Test fun onlyNamedActionChildrenStopNameAbsorption() {
+        for (action in listOf("expand", "collapse", "dismiss", "select")) {
+            val parent = node("parent").put("clickable", true)
+            val child = node("child", "Panel", "parent")
+            val nodes = listOf(parent, child)
+            UiSemantics.project(nodes)
+            val key = UiSemantics.identity(parent)
+            child.put("actions", JSONArray(listOf(action)))
+            UiSemantics.project(nodes)
+            val named = action in listOf("expand", "collapse", "dismiss")
+            assertEquals(if (named) "" else "Panel", parent.getJSONObject("view").getString("name"))
+            assertEquals(named, child.getJSONObject("view").isNull("selectionTarget"))
+            if (named) {
+                assertNotEquals(key, UiSemantics.identity(parent))
+                assertTrue(action in RpcMethods.UI_COMMANDS)
+                assertFalse(action in RpcMethods.UI_READ_ONLY)
+                assertTrue(UiAction.parse(action).ready(child))
+                child.put("actions", JSONArray())
+                assertFalse(UiAction.parse(action).ready(child))
+            } else {
+                assertEquals(key, UiSemantics.identity(parent))
+            }
+        }
     }
 
     @Test fun namedBoundaryDoesNotExpandRootNamingOrAbsorbItsGrandchildren() {
@@ -107,6 +168,87 @@ class UiSemanticsTest {
         UiSemantics.project(nodes)
         assertEquals("Record A", target.getJSONObject("row").getString("label"))
         assertNotNull(UiSemantics.identity(target))
+    }
+
+    @Test fun deepUnnamedRowsRemainAmbiguousWithSharedDescriptions() {
+        val rows =
+            (0..1).map { index ->
+                node("r$index")
+                    .put("clickable", true)
+                    .put("description", "Shared route label")
+                    .put("collectionItemInfo", json("rowIndex" to index, "columnIndex" to 0))
+            }
+        val nodes =
+            rows.flatMap { row ->
+                val prefix = row.getString("ref")
+                listOf(row) + (1..10).map { node("$prefix-$it", parent = if (it == 1) prefix else "$prefix-${it - 1}") }
+            }
+        UiSemantics.project(nodes)
+        assertTrue(rows.all { UiSemantics.identity(it) != null })
+        for (selector in listOf(json("name" to "Shared route label"), json("role" to "item", "name" to "Shared route label"))) {
+            assertEquals(listOf(true, true), rows.map(UiSelector(selector)::matches))
+        }
+        val first = rows.first()
+        val original = UiSemantics.identity(first)
+        first.getJSONObject("collectionItemInfo").put("rowIndex", 2)
+        UiSemantics.project(nodes)
+        assertNotEquals(original, UiSemantics.identity(first))
+        first.put("description", "Another description")
+        UiSemantics.project(nodes)
+        assertEquals("Another description", first.getJSONObject("row").getString("label"))
+        first.put("unavailable", JSONArray().put(json("field" to "description")))
+        UiSemantics.project(nodes)
+        assertNull(UiSemantics.identity(first))
+    }
+
+    @Test fun callbackFactsDoNotUpgradeConflictingOrMissingEvidence() {
+        assertEquals("done", ActionReceipt(ActionAcceptance.Accepted(true), true).classify())
+        assertEquals("failed", ActionReceipt(ActionAcceptance.Accepted(false), null).classify())
+        assertEquals("UNKNOWN", ActionReceipt(ActionAcceptance.Accepted(false), true).classify())
+        assertEquals("UNKNOWN", ActionReceipt(ActionAcceptance.Accepted(true), null).classify())
+        assertEquals("UNKNOWN", ActionReceipt(ActionAcceptance.Failed(json("message" to "binder")), true).classify())
+        assertEquals("failed", ActionReceipt(ActionAcceptance.Accepted(true), false).classify())
+        val failed = ActionReceipt(ActionAcceptance.Failed(json("code" to "binder", "message" to "Unavailable")), null)
+        assertEquals("UNKNOWN", failed.classify())
+        assertFalse(failed.json().has("accepted"))
+        assertTrue(failed.json().isNull("callback"))
+        assertEquals("binder", failed.json().getJSONObject("acceptedError").getString("code"))
+    }
+
+    @Test fun selectedNameSurvivesMissingDetailsButNotAnEarlierUnknown() {
+        val parent = node("p").put("clickable", true)
+        val children = (0..70).map { node("c$it", if (it == 0) "Ready" else "Detail $it", "p") }
+        UiSemantics.project(listOf(parent) + children)
+        val view = parent.getJSONObject("view")
+        assertEquals("Ready", view.getString("name"))
+        assertTrue(view.getBoolean("nameComplete"))
+        assertFalse(view.getBoolean("detailComplete"))
+        assertEquals("p", children.first().getJSONObject("view").getString("selectionTarget"))
+        assertTrue(children[1].getJSONObject("view").isNull("selectionTarget"))
+        assertEquals(true, UiSelector(json("name" to "Ready")).matches(parent))
+        children.first().getJSONArray("unavailable").put(json("field" to "text"))
+        UiSemantics.project(listOf(parent) + children)
+        assertFalse(parent.getJSONObject("view").getBoolean("nameComplete"))
+        assertNull(UiSemantics.identity(parent))
+    }
+
+    @Test fun absorptionDoesNotCombineSelectorFieldsOrCrossItemBoundaries() {
+        val parent = node("p").put("clickable", true).put("className", "android.widget.Button")
+        val label = node("label", "Open", "p")
+        UiSemantics.project(listOf(parent, label))
+        val both = UiSelector(json("text" to "Open", "role" to "button"))
+        assertEquals(false, both.matches(parent))
+        assertEquals(false, both.matches(label))
+        assertEquals("p", label.getJSONObject("view").getString("selectionTarget"))
+        assertTrue(label.getJSONObject("view").getBoolean("nameConsumed"))
+        label.put("collectionItemInfo", json("rowIndex" to 0, "columnIndex" to 0))
+        UiSemantics.project(listOf(parent, label))
+        assertEquals("Open", parent.getJSONObject("view").getString("name"))
+        assertTrue(label.getJSONObject("view").isNull("selectionTarget"))
+        assertFalse(label.getJSONObject("view").getBoolean("nameConsumed"))
+        label.put("collectionItemInfo", JSONObject.NULL).put("windowId", 2)
+        UiSemantics.project(listOf(parent, label))
+        assertEquals("", parent.getJSONObject("view").getString("name"))
     }
 
     @Test fun crossItemBodyRemainsVisibleWithoutChangingParentNameOrKey() {

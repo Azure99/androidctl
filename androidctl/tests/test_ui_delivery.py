@@ -1,6 +1,10 @@
 import asyncio
+import base64
+import io
 import json
+import os
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 from pathlib import Path
 
@@ -9,7 +13,7 @@ from typer.testing import CliRunner
 
 from androidctl import app as cli
 from androidctl import local_call, ui_commands
-from androidctl.protocol import Result, completed
+from androidctl.protocol import CHUNK_BYTES, Result, completed
 from connection_test_support import connections
 from ui_test_support import node, raw_read_data, tree, xml_metadata
 
@@ -221,12 +225,7 @@ async def test_cli_body_formats_and_images_follow_observation_freshness(
         ] == [b"PNG fixture"] * 2
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        "body",
-    ],
-)
+@pytest.mark.parametrize("case", ["body", "action-image", "unknown-image"])
 async def test_create_new_races_keep_independent_delivery_facts(
     tmp_path, monkeypatch, case
 ):
@@ -321,3 +320,65 @@ def test_cli_delivery_preflight_rejects_without_rpc(tmp_path, monkeypatch, capsy
         assert value["result"] == "not sent"
         assert "imageError" not in value["data"]
     assert destination.read_bytes() == b"keep"
+
+
+async def test_print_broken_os_pipe_preserves_action_and_saved_body(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    source = tree()
+    source["nodes"][0]["view"]["name"] = "large body " * 20000
+    received = []
+
+    async def dispatch(method, args):
+        received.append(method)
+        if method == "ui.read":
+            body = json.dumps(source).encode()
+            data = raw_read_data(body, "capture")
+            offset = args["offset"]
+            data["offset"] = offset
+            data["bytes"] = base64.b64encode(
+                body[offset : offset + CHUNK_BYTES]
+            ).decode()
+            return completed(method, data).wire()
+        return completed(method, {"capture": "capture", "dispatchStarted": True}).wire()
+
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        monkeypatch.setattr(
+            sys, "argv", ["androidctl", "--device", "phone", "click", "e15", "--print"]
+        )
+        reader, writer = os.pipe()
+
+        def close_after_body_header():
+            with os.fdopen(reader, "rb", buffering=0) as stream:
+                prefix = bytearray()
+                while line := stream.readline():
+                    prefix.extend(line)
+                    if line.startswith(b"<?androidctl "):
+                        assert prefix.startswith(b"click: done"), prefix
+                        return bytes(prefix)
+                pytest.fail("Saved body was not echoed to the OS pipe")
+
+        def invoke():
+            errors = io.StringIO()
+            with (
+                os.fdopen(writer, "w", encoding="utf-8", buffering=1) as stream,
+                redirect_stdout(stream),
+                redirect_stderr(errors),
+                pytest.raises(SystemExit) as stopped,
+            ):
+                cli.main()
+            return stopped.value.code, errors.getvalue()
+
+        _, (exit_code, errors) = await asyncio.wait_for(
+            asyncio.gather(
+                asyncio.to_thread(close_after_body_header), asyncio.to_thread(invoke)
+            ),
+            15,
+        )
+        assert exit_code == 0
+        assert "delivery: done; stdout:" in errors
+        assert received.count("click") == 1
+        (saved,) = tmp_path.glob(".androidctl/snapshots/*.xml")
+        assert source["nodes"][0]["view"]["name"] in saved.read_text(encoding="utf-8")

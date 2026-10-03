@@ -33,6 +33,8 @@ internal class UiBackend(
     val snapshots = UiSnapshot()
     val delivery = UiDelivery(sessions, workerId)
     private val visuals = VisualInput(this)
+    val postAction = UiPostAction(this)
+    private val actions = UiActions(this)
     private val system = SystemActions(context)
 
     @Volatile private var closeError: String? = null
@@ -82,17 +84,24 @@ internal class UiBackend(
             run.remember(system.apps())
             return
         }
-        if (run.command == "snapshot") {
-            val tree = if (run.args.optBoolean("cached")) snapshots.cached() else capture(run)
-            if (run.args.has("renderRef") &&
-                tree.getJSONArray("nodes").objects().none { it.getString("ref") == run.args.getString("renderRef") }
-            ) {
-                throw Rejected("staleRef", "Ref is not in the current snapshot; run snapshot")
+        val result =
+            when (run.command) {
+                "snapshot" -> {
+                    val tree = if (run.args.optBoolean("cached")) snapshots.cached() else capture(run)
+                    if (run.args.has("renderRef") &&
+                        tree.getJSONArray("nodes").objects().none { it.getString("ref") == run.args.getString("renderRef") }
+                    ) {
+                        throw Rejected("staleRef", "Ref is not in the current snapshot; run snapshot")
+                    }
+                    outcome("snapshot")
+                }
+                "screenshot" -> {
+                    capture(run)
+                    outcome("screenshot")
+                }
+                else -> actions.act(run)
             }
-        } else {
-            capture(run)
-        }
-        finish(run, outcome(run.command))
+        finish(run, result)
     }
 
     private fun finish(
@@ -211,6 +220,16 @@ internal class UiBackend(
         sessions.requireCurrent(run.lease)
     }
 
+    fun dispatch(
+        run: UiRun,
+        pending: JSONObject? = null,
+    ) {
+        current(run)
+        if (!run.dispatchStarted) run.beforeSequence = snapshots.tree?.getLong("sequence")
+        run.begin(pending)
+        visuals.invalidate()
+    }
+
     fun capture(
         run: UiRun,
         until: Long = run.budget.deadline,
@@ -276,6 +295,34 @@ internal class UiBackend(
             run.snapshotError = message(error)
             visuals.invalidate()
             throw error
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    fun postCapture(
+        run: UiRun,
+        before: JSONObject?,
+        until: Long,
+    ): JSONObject {
+        val requested = run.requestedWindow
+        if (requested == null) return capture(run, until)
+        current(run)
+        connect(run)
+        val windows = requireNotNull(platform).windows()
+        var handedToCollect = false
+        try {
+            val ids = NodeFacts.defaultWindows(windows).map { it.id }
+            // The same default-display inventory establishes absence and owns the following collector.
+            val absent = windowAbsent(requested, before, run.dispatchStarted, generation, ids)
+            if (absent) {
+                run.absentWindow = requested
+                snapshots.close()
+                delivery.clear()
+            }
+            handedToCollect = true
+            return if (absent) collect(run, until, JSONObject(), windows) else collect(run, until, windows = windows)
+        } finally {
+            if (!handedToCollect) windows.forEach { it.recycle() }
         }
     }
 

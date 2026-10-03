@@ -10,15 +10,47 @@ internal class UiRun(
     val args: JSONObject,
     val budget: UiBudget,
 ) {
+    val requestedWindow: Int? get() = args.optJSONObject("scope")?.takeIf { it.has("window") }?.getInt("window")
     val finished = CountDownLatch(1)
 
     @Volatile var dispatchStarted = false
+        private set
     var beforeSequence: Long? = null
     var samples = 0
     var snapshotError: String? = null
+    var absentWindow: Int? = null
 
     private var fact: String? = null
+    private var responded = false
     private val timings = JSONObject()
+    private var resolved: JSONObject? = null
+    private var selected: JSONObject? = null
+
+    @Synchronized fun resolve(
+        method: String,
+        target: JSONObject,
+    ) {
+        resolved = json("method" to method, "target" to targetFacts(target))
+    }
+
+    @Synchronized fun select(
+        action: String,
+        target: JSONObject? = null,
+    ) {
+        selected = selection(action, target)
+    }
+
+    private fun withActionFacts(value: JSONObject): JSONObject {
+        if (command in RpcMethods.UI_READ_ONLY) return value
+        val data = value.getJSONObject("data")
+        data.put("dispatchStarted", dispatchStarted)
+        resolved?.let { data.put("resolved", copy(it)) }
+        val choice = selected
+        if (choice != null) {
+            data.put("selected", copy(choice))
+        }
+        return value
+    }
 
     fun <T> measure(
         field: String,
@@ -32,6 +64,13 @@ internal class UiRun(
                 timings.put(field, timings.optLong(field) + SystemClock.elapsedRealtime() - started)
             }
         }
+    }
+
+    @Synchronized fun begin(pending: JSONObject?) {
+        budget.check()
+        if (responded) throw Rejected("requestEnded", "Request has already returned")
+        dispatchStarted = true
+        fact = pending?.toString()
     }
 
     // Keep the execution fact before fallible observation and attachment delivery.
@@ -52,10 +91,11 @@ internal class UiRun(
         if (result.getString("result") == Outcome.NOT_SENT) {
             result.put("reason", message(error)).put("error", problem(error))
         }
-        return result
+        return withActionFacts(result)
     }
 
     @Synchronized fun response(expired: Boolean = false): JSONObject {
+        responded = true
         val value =
             fact?.let(::JSONObject)
                 ?: outcome(
@@ -73,6 +113,22 @@ internal class UiRun(
                 data.put("imageError", "Request budget exhausted before image delivery")
             }
         }
-        return value
+        return withActionFacts(value)
+    }
+
+    companion object {
+        fun selection(
+            action: String,
+            target: JSONObject? = null,
+        ): JSONObject = json("target" to target?.let(::targetFacts), "action" to action)
+
+        fun targetFacts(node: JSONObject): JSONObject =
+            json(
+                "ref" to node.getString("ref"),
+                "role" to UiSemantics.role(node).wire,
+                "name" to UiSelector.summaryText(node.getJSONObject("view").getString("name")),
+                "windowId" to node.getInt("windowId"),
+                "bounds" to node.get("bounds"),
+            )
     }
 }

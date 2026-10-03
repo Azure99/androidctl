@@ -15,9 +15,13 @@ import java.util.concurrent.ConcurrentHashMap
 // Resolve metadata on demand; callers still acquire thread-bound clients and live services.
 @SuppressLint("PrivateApi", "SoonBlockedPrivateApi", "BlockedPrivateApi")
 internal object HiddenApi {
+    const val CALLBACK_DESCRIPTOR = "android.view.accessibility.IAccessibilityInteractionConnectionCallback"
+
     private val node = AccessibilityNodeInfo::class.java
     private val client: Class<*> by lazy { Class.forName("android.view.accessibility.AccessibilityInteractionClient") }
     private val service: Class<*> by lazy { Class.forName("android.accessibilityservice.IAccessibilityServiceConnection") }
+    private val callback: Class<*> by lazy { Class.forName(CALLBACK_DESCRIPTOR) }
+    private val callbackStub: Class<*> by lazy { Class.forName("$CALLBACK_DESCRIPTOR\$Stub") }
     private val automationConnection: Class<*> by lazy { Class.forName("android.app.UiAutomationConnection") }
     private val windowManager: Class<*> by lazy { Class.forName("android.view.IWindowManager") }
     private val trustManager: Class<*> by lazy { Class.forName("android.app.trust.ITrustManager") }
@@ -68,6 +72,23 @@ internal object HiddenApi {
             Int::class.javaPrimitiveType,
         )
     }
+    val callbackInterface: Method by lazy { callbackStub.getMethod("asInterface", IBinder::class.java) }
+    val actionTransaction: Field by lazy {
+        callbackStub.getDeclaredField("TRANSACTION_setPerformAccessibilityActionResult").apply { isAccessible = true }
+    }
+    val performAction: Method by lazy {
+        service.getMethod(
+            "performAccessibilityAction",
+            Int::class.javaPrimitiveType,
+            Long::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            Bundle::class.java,
+            Int::class.javaPrimitiveType,
+            callback,
+            Long::class.javaPrimitiveType,
+        )
+    }
+
     val currentUser: Method by lazy { Class.forName("android.app.ActivityManager").getMethod("getCurrentUser") }
     val serviceBinder: Method by lazy { Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java) }
     val windowInterface: Method by lazy { Class.forName("android.view.IWindowManager\$Stub").getMethod("asInterface", IBinder::class.java) }

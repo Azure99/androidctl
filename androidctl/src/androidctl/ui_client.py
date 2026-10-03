@@ -27,6 +27,21 @@ from .protocol import (
 )
 from .user_files import create, require_new_file
 
+READ_ONLY_COMMANDS = {"snapshot", "find", "screenshot", "apps"}
+
+
+def requested_action(command: str, args: dict[str, Any]) -> dict[str, Any]:
+    target = None
+    if "ref" in args:
+        target = {"ref": args["ref"]}
+    elif "selector" in args:
+        target = {"selector": dict(args["selector"])}
+    requested: dict[str, Any] = {
+        "target": target,
+        "action": command,
+    }
+    return requested
+
 
 @dataclass(frozen=True)
 class View:
@@ -75,6 +90,10 @@ def result_line(
         parts.append(f"code={result.error.code}")
         if result.error.stage:
             parts.append(f"stage={result.error.stage}")
+    change = result.data.get("observedChange")
+    settle = result.data.get("settle")
+    if settle and (not change or settle != change["state"]):
+        parts.append("settle=" + str(settle))
     if result.data.get("snapshotCached"):
         parts.extend(
             (
@@ -84,10 +103,37 @@ def result_line(
                 f"age={result.data['snapshotAgeMs']}ms",
             )
         )
+    if command not in READ_ONLY_COMMANDS:
+        dispatch = result.data.get("dispatchStarted")
+        if dispatch is False or result.result != "done":
+            parts.append(
+                "dispatchStarted="
+                + (str(dispatch).lower() if isinstance(dispatch, bool) else "unknown")
+            )
+        if result.data.get("samplingStopped"):
+            parts.append(
+                display_name(str(result.data["samplingStopped"]), quoted=False)
+            )
+        resolved = result.data.get("resolved", {})
+        if resolved.get("method") == "selector" and (
+            target := resolved.get("target", {})
+        ).get("ref"):
+            parts.append("ref=" + target["ref"])
+    if result.data.get("snapshotBeforeAction"):
+        parts.append("timing=before-action")
     if "matches" in result.data:
         parts.append(f"matches={result.data['matches']}")
     if result.data.get("notice"):
         parts.append(display_name(result.data["notice"], quoted=False))
+    if change:
+        if change["state"] == "unchanged":
+            parts.append("semantic observation unchanged")
+        elif change["state"] == "unknown":
+            parts.append("change=unknown")
+            if change.get("reason"):
+                parts.append("changeReason=" + compact(change["reason"]))
+        else:
+            parts.append(change["state"])
     completeness = result.data.get("snapshotCompleteness", {})
     gaps = ["partial"] if completeness.get("partial") else []
     for field, name in (
@@ -109,15 +155,54 @@ def result_line(
     for field in ("snapshotError", "imageError", "historyError"):
         if result.data.get(field):
             parts.append(field + "=" + compact(result.data[field]))
-    if result.result == "UNKNOWN" and command in {"snapshot", "screenshot", "find"}:
+    if result.result == "UNKNOWN":
         parts.append(
             "Read-only reply unavailable; query again. For a new sample, run snapshot."
+            if command in {"snapshot", "find", "screenshot"}
+            else "Do not repeat automatically; first check the effect "
+            "with read-only observations."
         )
     output.echo("; ".join(parts))
+    for line in selection_lines(result.data):
+        output.echo(line)
 
 
 def compact(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def selection_lines(
+    data: dict[str, Any],
+) -> list[str]:
+    requested = data.get("requested", {})
+    resolved = data.get("resolved", {})
+    requested_ref = (requested.get("target") or {}).get("ref")
+    resolved_ref = (resolved.get("target") or {}).get("ref")
+    choices = [("", data, requested.get("action"))]
+    changed = bool(requested_ref and resolved_ref and requested_ref != resolved_ref)
+    for _, facts, expected_action in choices:
+        selected = facts.get("selected", {})
+        selected_ref = (selected.get("target") or {}).get("ref")
+        baseline = resolved_ref or requested_ref
+        if baseline and selected_ref and baseline != selected_ref:
+            changed = True
+        if (
+            expected_action
+            and selected.get("action")
+            and expected_action != selected["action"]
+        ):
+            changed = True
+    if not changed:
+        return []
+    lines = ["Requested: " + compact(requested)]
+    if resolved:
+        lines.append("Resolved: " + compact(resolved))
+    for step, facts, _ in choices:
+        prefix = step + " " if step else ""
+        for field, title in (("selected", "Selected"),):
+            if field in facts:
+                lines.append(prefix + title + ": " + compact(facts[field]))
+    return lines
 
 
 class UiClient:
@@ -128,6 +213,11 @@ class UiClient:
 
     async def call(self, command: str, args: dict[str, Any]) -> Result:
         return await self.local.call(command, args, deadline=self.deadline)
+
+    async def action(self, command: str, args: dict[str, Any]) -> Result:
+        result = await self.call(command, args)
+        result.data["attempts"] = 1
+        return result
 
     async def blob(self, capture: str, kind: str) -> tuple[bytes, dict[str, Any]]:
         data = bytearray()
@@ -274,19 +364,31 @@ def execute(
         invocation["args"]["all"] = True
     if view.boxes:
         invocation["args"]["boxes"] = True
+    requested = (
+        requested_action(command, wire_args)
+        if command not in READ_ONLY_COMMANDS
+        else None
+    )
     client = UiClient(context, deadline)
 
     async def request() -> tuple[Result, dict[str, Any] | None, bytes | None]:
         tree, png = None, None
         try:
             try:
-                result = await client.call(
-                    "snapshot" if command == "find" else command, wire_args
+                result = (
+                    await client.action(command, wire_args)
+                    if requested is not None
+                    else await client.call(
+                        "snapshot" if command == "find" else command, wire_args
+                    )
                 )
             except TransportFailure as error:
                 result = uncertain(actual_command, error)
             except Fault as error:
                 result = rejected(actual_command, error)
+            if requested is not None:
+                result.data["requested"] = requested
+                result.data.setdefault("attempts", 1)
             result.command = actual_command
             if client.local.connect_ms is not None:
                 result.data["localConnectMs"] = client.local.connect_ms

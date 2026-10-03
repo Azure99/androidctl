@@ -230,6 +230,29 @@ def test_output_does_not_swallow_program_value_error(monkeypatch):
         Output().echo("prepared text")
 
 
+@pytest.mark.parametrize("state", ["done", "UNKNOWN"])
+def test_output_failure_cannot_reclassify_confirmed_action_as_not_sent(
+    monkeypatch, capsys, state
+):
+    original = cli.typer.echo
+
+    def unavailable(message, **kwargs):
+        if kwargs.get("err"):
+            return original(message, **kwargs)
+        raise OSError("stdout unavailable")
+
+    monkeypatch.setattr(cli.typer, "echo", unavailable)
+    result = Result(command="click", result=state)
+    with pytest.raises(cli.typer.Exit) as caught:
+        cli.emit(result)
+    assert caught.value.exit_code == (0 if state == "done" else 3)
+    assert result.result == state
+    assert result.data["deliveryError"] == "stdout: stdout unavailable"
+    output = capsys.readouterr()
+    assert "not sent" not in output.out + output.err
+    assert "delivery: " + state in output.err
+
+
 def test_terminal_fields_escape_controls_without_changing_json_or_bytes(capsys):
     label = "\u7535\u8bdd\nnext\r\x1b]0;title\x07\x9b\t\u202e"
     apps = completed(
@@ -465,6 +488,71 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
 
 
 @pytest.mark.parametrize(
+    ("state", "data", "expected"),
+    [
+        ("done", {"settle": "changed"}, None),
+        ("done", {"dispatchStarted": True}, None),
+        ("done", {"dispatchStarted": False}, "dispatchStarted=false"),
+        ("UNKNOWN", {"dispatchStarted": True}, "dispatchStarted=true"),
+        ("failed", {"dispatchStarted": True}, "dispatchStarted=true"),
+        ("failed", {"dispatchStarted": False}, "dispatchStarted=false"),
+        ("not sent", {"dispatchStarted": False}, "dispatchStarted=false"),
+        ("not sent", {}, "dispatchStarted=unknown"),
+        ("UNKNOWN", {}, "dispatchStarted=unknown"),
+    ],
+)
+def test_ui_text_omits_only_redundant_known_dispatch(capsys, state, data, expected):
+    result = Result(
+        command="click",
+        result=state,
+        reason="Candidates:\ne1 Save\ne2 Save",
+        data=data,
+    )
+    original = result.wire()
+    ui_client.result_line(result, "click", Output())
+    text = capsys.readouterr().out
+    assert len(text.splitlines()) == 1
+    assert text.startswith("click: " + state)
+    assert "Candidates:\\ne1 Save\\ne2 Save" in text
+    assert ("dispatchStarted=" in text) is (expected is not None)
+    assert "sent=" not in text
+    if expected is not None:
+        assert expected in text
+    assert "observedChange" not in text
+    if data.get("settle"):
+        assert "settle=" + data["settle"] in text
+        assert "; changed" not in text
+    assert result.wire() == original
+
+
+@pytest.mark.parametrize("state", ["changed", "unchanged", "unknown"])
+def test_ui_change_text_uses_the_observed_state_without_copying_metadata(capsys, state):
+    result = completed(
+        "click",
+        {
+            "settle": state if state != "unknown" else "unsettled",
+            "observedChange": {
+                "state": state,
+                "reason": "No baseline\ncomparison unavailable",
+            },
+        },
+    )
+    original = result.wire()
+    ui_client.result_line(result, "click", Output())
+    text = capsys.readouterr().out
+    if state == "changed":
+        assert text == "click: done; changed\n"
+    elif state == "unchanged":
+        assert text == "click: done; semantic observation unchanged\n"
+    else:
+        assert text == (
+            "click: done; settle=unsettled; change=unknown; "
+            'changeReason="No baseline\\ncomparison unavailable"\n'
+        )
+    assert result.wire() == original
+
+
+@pytest.mark.parametrize(
     ("state", "override", "expected"),
     [
         ("done", None, 0),
@@ -479,3 +567,10 @@ def test_visible_result_exit(state, override, expected):
     assert (
         Result(command="fixture", result=state, exit=override).exit_code() == expected
     )
+
+
+def test_sampling_stop_is_visible_in_action_results(capsys):
+    reason = "Estimated next sample exceeds the observation deadline"
+    result = completed("click", {"samplingStopped": reason})
+    ui_client.result_line(result, "click", Output())
+    assert capsys.readouterr().out.count(reason) == 1
