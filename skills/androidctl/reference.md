@@ -16,8 +16,8 @@ accepts a local `--json` option.
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
-| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `focus`, `ime` | [Targets](#observations-and-targets) |
-| Navigate | `apps` | [Navigation](#observations-and-targets) |
+| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
+| Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
@@ -230,7 +230,8 @@ continuing, rather than deleting locks or assuming automatic takeover.
 
 Cleanup failure, uncertainty or signal failure overrides exit to 3 while retaining
 the known main result. Known shell cancellation with only ordinary pending cleanup
-remains exit 1. Ordinary UI has no general job ID. Read-only results have no
+remains exit 1. Ordinary UI has no general job ID. `dispatchStarted=false` alone
+does not imply not sent: a URL with no handler is failed. Read-only results have no
 dispatch facts. A rejected platform action may have requested focus already.
 Late callbacks cannot revise a terminal UNKNOWN already returned.
 
@@ -269,7 +270,7 @@ raw shell output retain their own lines.
 
 Fields depend on the command and outcome; absence does not mean false.
 Top-level `command` is the fixed public command path, including on failure and
-pre-dispatch rejection. Targets and flags do not become part of that field.
+pre-dispatch rejection. Targets, keys and flags do not become part of that field.
 Argument errors preserve an identified command path; without one they use `arguments`.
 Nested action and job facts keep their original meanings.
 
@@ -278,7 +279,7 @@ Nested action and job facts keep their original meanings.
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
 | `data.snapshotPath`, `imagePath` | Absolute paths to the saved observation and PNG. [Delivery](#images-and-delivery) also reports `snapshotError`, `imageError`, `historyError` and `deliveryError` when applicable. |
 | `data.requested`, `resolved` | Original target/action and the resolved target. `resolved.method` is original for a published ref or selector for selector discovery; resolution does not prove admission or dispatch. |
-| `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. |
+| `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. Global actions use target=null; key REF names its focus-admission target. |
 | `data.dispatchStarted`, `attempts` | Whether the command entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
 | `data.platform` | For semantic input receipts, `accepted` is the synchronous platform call's return value, `callback` is the platform action-completion callback value (null when unavailable), and `acceptedError` is an exception while obtaining acceptance. A positive receipt does not prove App business completion. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
@@ -460,13 +461,28 @@ the platform receipt, so read the resulting observation to verify the App effect
 These actions do not fall back to coordinates or expose custom actions.
 Noneditable, long-clickable nodes show `long-click` only when not clickable;
 editable nodes retain their full reported `actions` field.
+System actions without a before observation can stop sampling after two
+consecutive complete, identical, non-loading samples. At that stop, `settle` is
+`unsettled` and `observedChange` is `unknown`.
+`samplingStopped` means sampling stopped before the observation deadline because
+another sample was not expected to fit; the delivered fact is not a later recheck.
 
 Standalone `ime REF` requires the original field already focused and
 requests its exposed IME action without an automatic focus step. A multiline IME
 action may insert a newline. Verify business effects independently of the
 platform receipt.
 
+`key enter|tab|del|escape [REF]` requires a supplied ref already focused in the
+input-focus window. Without a ref it is global and rejects scope. Platform input
+and animation waits can exceed the budget, and effects can arrive after UNKNOWN;
+they do not revise that result or authorize repetition. Key completion does not
+verify animation completion or the App's business result.
+
 `apps [QUERY]` filters launchable names/packages by case-insensitive substring.
+`open PACKAGE` or `open --url URL` navigates. Notifications reports dispatch,
+recents toggles, and wake checks interactive state without unlocking credentials.
+Already interactive wake sends no input. Without a current pre-action observation,
+system actions do not infer changed/unchanged from an old cached page.
 
 ## Images And Delivery
 

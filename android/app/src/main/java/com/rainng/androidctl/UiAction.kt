@@ -51,6 +51,14 @@ internal enum class UiAction(
     }
 
     companion object {
+        fun inputFocusNotReadyReason(node: JSONObject): String? =
+            when {
+                !node.getBoolean("visible") -> "target is not visible"
+                !node.getBoolean("enabled") -> "target is disabled"
+                !UiSelector.focused(node) -> "target is not input-focused"
+                else -> null
+            }
+
         fun parse(value: String): UiAction =
             entries.firstOrNull { it.wire == value }
                 ?: throw Rejected("action", "Unsupported action: $value; use ${entries.joinToString("|") { it.wire }}")

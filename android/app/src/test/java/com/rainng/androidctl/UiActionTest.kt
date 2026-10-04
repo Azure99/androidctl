@@ -3,6 +3,7 @@ package com.rainng.androidctl
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,5 +47,18 @@ class UiActionTest {
         assertTrue(UiAction.FOCUS.alreadySatisfied(target))
         target.put("visible", false)
         assertFalse(UiAction.FOCUS.alreadySatisfied(target))
+    }
+
+    @Test fun inputFocusAdmissionRequiresVisibleEnabledAndFocusedWithoutAnEditableOrActionRequirement() {
+        val target = node("e1").put("focused", true)
+        assertNull(UiAction.inputFocusNotReadyReason(target))
+        target.put("visible", false).put("enabled", false).put("focused", false)
+        assertEquals("target is not visible", UiAction.inputFocusNotReadyReason(target))
+        target.put("visible", true)
+        assertEquals("target is disabled", UiAction.inputFocusNotReadyReason(target))
+        target.put("enabled", true)
+        assertEquals("target is not input-focused", UiAction.inputFocusNotReadyReason(target))
+        target.put("enabled", false)
+        assertEquals("target is disabled", UiAction.inputFocusNotReadyReason(target))
     }
 }

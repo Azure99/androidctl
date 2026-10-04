@@ -373,6 +373,19 @@ def test_invalid_read_conditions_never_connect(monkeypatch, capsys, args):
 
 
 @pytest.mark.parametrize(
+    "args",
+    [
+        ["key", "66"],
+        ["key", "enter", "--window", "999999"],
+        ["key", "tab", "--in", "example.app"],
+    ],
+)
+def test_invalid_key_rejects_before_connection(monkeypatch, capsys, args):
+    run_main(monkeypatch, args)
+    assert "not sent" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
     ("args", "detail"),
     [
         (["click", "--role", "entry"], "--role button|textbox|"),

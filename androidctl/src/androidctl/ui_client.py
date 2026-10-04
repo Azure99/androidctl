@@ -40,6 +40,8 @@ def requested_action(command: str, args: dict[str, Any]) -> dict[str, Any]:
         "target": target,
         "action": command,
     }
+    if command == "key":
+        requested["key"] = args["key"]
     return requested
 
 
@@ -190,6 +192,12 @@ def selection_lines(
             expected_action
             and selected.get("action")
             and expected_action != selected["action"]
+        ):
+            changed = True
+        if (
+            requested.get("key")
+            and selected.get("key")
+            and requested["key"] != selected["key"]
         ):
             changed = True
     if not changed:

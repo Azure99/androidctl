@@ -13,12 +13,7 @@ from androidctl.ui_client import UiClient
 from ui_test_support import node, raw_read_data, tree, xml_metadata
 
 
-@pytest.mark.parametrize(
-    "mode",
-    [
-        "screenshot",
-    ],
-)
+@pytest.mark.parametrize("mode", ["screenshot", "action-image", "action"])
 def test_image_request_combinations_deliver_without_extra_dispatch(
     monkeypatch, tmp_path, mode
 ):
@@ -64,12 +59,7 @@ def test_image_request_combinations_deliver_without_extra_dispatch(
         assert not destination.exists()
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "screenshot",
-    ],
-)
+@pytest.mark.parametrize("command", ["screenshot", "home"])
 def test_published_image_survives_history_failure(
     monkeypatch, tmp_path, capsys, command
 ):

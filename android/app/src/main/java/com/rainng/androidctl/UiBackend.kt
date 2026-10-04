@@ -35,7 +35,7 @@ internal class UiBackend(
     private val visuals = VisualInput(this)
     val postAction = UiPostAction(this)
     private val actions = UiActions(this)
-    private val system = SystemActions(context)
+    private val system = SystemActions(context, this)
 
     @Volatile private var closeError: String? = null
     val cleanupFailure: String? get() = closeError
@@ -99,6 +99,14 @@ internal class UiBackend(
                     capture(run)
                     outcome("screenshot")
                 }
+                "key" ->
+                    if (run.args.has("ref")) {
+                        val code = system.keyCode(run)
+                        actions.key(run) { system.key(run, code) }
+                    } else {
+                        system.perform(run)
+                    }
+                in RpcMethods.SYSTEM_ACTIONS -> system.perform(run)
                 else -> actions.act(run)
             }
         finish(run, result)

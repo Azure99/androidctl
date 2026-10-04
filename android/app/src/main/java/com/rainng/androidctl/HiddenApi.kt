@@ -2,9 +2,11 @@ package com.rainng.androidctl
 
 import android.annotation.SuppressLint
 import android.app.UiAutomation
+import android.content.Intent
 import android.os.Bundle
 import android.os.IBinder
 import android.os.Looper
+import android.view.InputEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import java.lang.reflect.Constructor
@@ -89,6 +91,25 @@ internal object HiddenApi {
         )
     }
 
+    val displayId: Method by lazy { InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType) }
+    val activityService: Method by lazy { Class.forName("android.app.ActivityTaskManager").getMethod("getService") }
+    val startActivity: Method by lazy {
+        Class.forName("android.app.IActivityTaskManager").getMethod(
+            "startActivityAsUser",
+            Class.forName("android.app.IApplicationThread"),
+            String::class.java,
+            String::class.java,
+            Intent::class.java,
+            String::class.java,
+            IBinder::class.java,
+            String::class.java,
+            Int::class.javaPrimitiveType,
+            Int::class.javaPrimitiveType,
+            Class.forName("android.app.ProfilerInfo"),
+            Bundle::class.java,
+            Int::class.javaPrimitiveType,
+        )
+    }
     val currentUser: Method by lazy { Class.forName("android.app.ActivityManager").getMethod("getCurrentUser") }
     val serviceBinder: Method by lazy { Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java) }
     val windowInterface: Method by lazy { Class.forName("android.view.IWindowManager\$Stub").getMethod("asInterface", IBinder::class.java) }

@@ -310,6 +310,7 @@ def test_cli_delivery_preflight_rejects_without_rpc(tmp_path, monkeypatch, capsy
     for command in (
         ["snapshot", "--out", str(destination)],
         ["snapshot", "--out", str(tmp_path / "missing/body.xml")],
+        ["home", "--image-out", str(destination)],
         ["snapshot", "--print"],
     ):
         monkeypatch.setattr(sys, "argv", ["androidctl", "--json", *command])

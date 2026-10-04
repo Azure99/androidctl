@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 from androidctl import app as cli
 from androidctl import ui_client
 from androidctl.cli_options import CliOptions
-from androidctl.protocol import Fault, Result
+from androidctl.protocol import Fault, Result, completed
 from androidctl.ui_commands import DEFAULT_SETTLE_MS, DEFAULT_TIMEOUT_MS
 from ui_test_support import raw_read_data, tree, xml_metadata
 
@@ -100,12 +100,12 @@ def test_print_and_json_reject_before_rpc(monkeypatch, tmp_path, capsys):
         pytest.fail("Conflicting stdout formats reached RPC")
 
     monkeypatch.setattr(ui_client.UiClient, "call", call)
-    destination = tmp_path / "body.xml"
+    destination = tmp_path / "out.png"
     args = [
         "androidctl",
         "--json",
-        "snapshot",
-        "--out",
+        "home",
+        "--image-out",
         str(destination),
         "--print",
     ]
@@ -115,7 +115,7 @@ def test_print_and_json_reject_before_rpc(monkeypatch, tmp_path, capsys):
     assert stopped.value.code == 2
     output = capsys.readouterr().out
     value = json.loads(output)
-    assert value["command"] == "snapshot"
+    assert value["command"] == "home"
     assert value["result"] == "not sent"
     assert value["error"]["code"] == "arguments"
     assert value["reason"] == "--print and --json cannot be used together"
@@ -253,6 +253,8 @@ def test_output_path_rejects_ads_before_request(tmp_path, args):
         (["snapshot"], DEFAULT_TIMEOUT_MS),
         (["click", "e1"], DEFAULT_TIMEOUT_MS),
         (["click", "e1", "--screenshot"], DEFAULT_TIMEOUT_MS),
+        (["home", "--screenshot"], DEFAULT_TIMEOUT_MS),
+        (["key", "enter"], DEFAULT_TIMEOUT_MS),
     ],
 )
 def test_ui_budget_reaches_client(captured_ui_calls, tmp_path, args, timeout):
@@ -299,3 +301,37 @@ def test_named_action_uses_existing_target_and_observation_options(
         assert payload["ref"] == "e1"
     else:
         assert payload["selector"] == {"name": "Panel"}
+
+
+@pytest.mark.parametrize("key", ["enter", "tab", "del", "escape"])
+@pytest.mark.parametrize("ref", [None, "e17"])
+def test_key_preserves_requested_key_ref_and_ui_budget(monkeypatch, key, ref):
+    calls = []
+
+    async def call(self, command, args):
+        calls.append((command, args))
+        return completed(command, {"dispatchStarted": True})
+
+    monkeypatch.setattr(ui_client.UiClient, "call", call)
+    monkeypatch.setattr(ui_client.UiClient, "action", call)
+    args = ["--json", "-s", "task", "key", key]
+    if ref is not None:
+        args += [ref, "--window", "17"]
+    result = CliRunner().invoke(cli.app, [*args, "--timeout", "900ms", "--settle", "0"])
+    assert result.exit_code == 0, result.output
+    wire = json.loads(result.output)
+    assert wire["command"] == "key"
+    assert wire["result"] == "done"
+    assert wire["data"]["requested"] == {
+        "action": "key",
+        "key": key,
+        "target": {"ref": ref} if ref else None,
+    }
+    command, payload = calls.pop()
+    assert command == "key"
+    assert payload["key"] == key
+    assert payload.get("ref") == ref
+    assert payload["scope"] == ({"window": 17} if ref else {})
+    assert payload["timeoutMs"] == 900
+    assert payload["settleMs"] == 0
+    assert not calls

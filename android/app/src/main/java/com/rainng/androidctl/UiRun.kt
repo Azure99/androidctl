@@ -36,8 +36,9 @@ internal class UiRun(
     @Synchronized fun select(
         action: String,
         target: JSONObject? = null,
+        key: String? = null,
     ) {
-        selected = selection(action, target)
+        selected = selection(action, target, key)
     }
 
     private fun withActionFacts(value: JSONObject): JSONObject {
@@ -120,7 +121,11 @@ internal class UiRun(
         fun selection(
             action: String,
             target: JSONObject? = null,
-        ): JSONObject = json("target" to target?.let(::targetFacts), "action" to action)
+            key: String? = null,
+        ): JSONObject =
+            json("target" to target?.let(::targetFacts), "action" to action).apply {
+                if (key != null) put("key", key)
+            }
 
         fun targetFacts(node: JSONObject): JSONObject =
             json(

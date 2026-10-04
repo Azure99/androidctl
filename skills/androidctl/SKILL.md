@@ -109,12 +109,13 @@ Replace symbolic refs with observed targets and check their business identity.
 Inspect requested/resolved/selected targets. See [ref and action rules](reference.md#observations-and-targets).
 
 Standalone `ime REF` requests the exposed IME action on the already-focused
-original field; it does not focus the field.
+original field; it does not focus the field. `key ... REF` also requires that
+field already focused; a key without REF is global.
 
 `expand`, `collapse` and `dismiss` request those exposed actions. There is no
-automatic coordinate fallback.
-
-Use `apps` to discover launchable applications.
+automatic coordinate fallback. For navigation,
+use `apps`, `open`, `back`, `home`, `recents`, `notifications` and `wake`.
+Verify the destination; Recents can toggle and wake does not unlock credentials.
 
 ## Results
 

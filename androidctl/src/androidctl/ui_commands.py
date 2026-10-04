@@ -300,6 +300,87 @@ def register(app: typer.Typer) -> None:
     add_action("ime", "Request the focused target's exposed IME action once.")
 
     @app.command(
+        "key",
+        cls=CliCommand,
+        help=(
+            "Send enter, tab, del or escape once; a REF must already be focused "
+            "in the input-focus window. App results are not verified."
+        ),
+    )
+    def key(
+        ctx: typer.Context,
+        name: Annotated[str, typer.Argument(metavar="KEY")],
+        ref: Ref = None,
+        package: Package = None,
+        window: Window = None,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        settle_ms: Settle = DEFAULT_SETTLE_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
+        print_body: Print = False,
+    ) -> None:
+        if name not in ("enter", "tab", "del", "escape"):
+            raise Fault("arguments", "Use key enter|tab|del|escape [REF]")
+        args: dict[str, Any] = {"key": name, "scope": scope(package, window)}
+        if ref is None and args["scope"]:
+            raise Fault(
+                "arguments", "A scoped key requires a REF; omit scope for global input"
+            )
+        if ref is not None:
+            args["ref"] = ref
+        run_action(
+            ctx, "key", args, timeout, settle_ms, screenshot, image_out, print_body
+        )
+
+    def add_global(command: str, help_text: str) -> None:
+        @app.command(command, cls=CliCommand, help=help_text)
+        def global_action(
+            ctx: typer.Context,
+            timeout: Timeout = DEFAULT_TIMEOUT_MS,
+            settle_ms: Settle = DEFAULT_SETTLE_MS,
+            screenshot: Screenshot = False,
+            image_out: ImageOut = None,
+            print_body: Print = False,
+        ) -> None:
+            run_action(
+                ctx, command, {}, timeout, settle_ms, screenshot, image_out, print_body
+            )
+
+    for command in ("back", "home", "recents"):
+        add_global(command, f"Request {command} once; app results are not verified.")
+    add_global(
+        "notifications", "Request notification expansion; panel state is not verified."
+    )
+    add_global("wake", "Wake the screen; credential locks still require the user.")
+
+    @app.command("open", cls=CliCommand, help="Launch a package or an explicit URL.")
+    def open_app(
+        ctx: typer.Context,
+        package: Annotated[str | None, typer.Argument()] = None,
+        url: Annotated[
+            str | None,
+            typer.Option("--url", help="Open this URL instead of a package argument."),
+        ] = None,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        settle_ms: Settle = DEFAULT_SETTLE_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
+        print_body: Print = False,
+    ) -> None:
+        if (package is None) == (url is None):
+            raise Fault("arguments", "Provide one package or --url URL")
+        run_action(
+            ctx,
+            "open",
+            {"package": package} if package is not None else {"url": url},
+            timeout,
+            settle_ms,
+            screenshot,
+            image_out,
+            print_body,
+        )
+
+    @app.command(
         "screenshot", cls=CliCommand, help="Capture PNG and its task snapshot."
     )
     def screenshot(

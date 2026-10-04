@@ -188,6 +188,37 @@ class UiOutcomeTest {
         }
     }
 
+    @Test fun actionFactsKeepSelectionSeparateFromDispatchAcrossPendingAndExpiry() {
+        val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
+        val original = node("e7", "Search")
+        UiSemantics.project(listOf(original))
+        val pending = UiRun("key", lease, json("ref" to "e7", "key" to "enter"), UiBudget(5000) { 0 })
+        pending.resolve("original", original)
+        pending.select("key", original, "enter")
+        pending.begin(outcome("key", Outcome.UNKNOWN, "Platform key input pending"))
+        val response = pending.response(expired = true)
+        assertEquals("UNKNOWN", response.getString("result"))
+        assertEquals("enter", response.getJSONObject("data").getJSONObject("selected").getString("key"))
+        assertTrue(response.getJSONObject("data").getBoolean("dispatchStarted"))
+        assertFalse(response.getJSONObject("data").has("sent"))
+        assertTrue(response.getJSONObject("data").has("snapshotError"))
+    }
+
+    @Test fun globalAndCoordinateActionsKeepNullNodeTargetsAndReadOnlyResultsOmitActionFacts() {
+        val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
+        for (command in listOf("home")) {
+            val run = UiRun(command, lease, JSONObject(), UiBudget(5000) { 0 })
+            run.select(command)
+            run.begin(null)
+            val data = run.response().getJSONObject("data")
+            assertFalse(data.has("requested"))
+            assertTrue(data.getJSONObject("selected").isNull("target"))
+            assertFalse(data.has("sent"))
+            assertTrue(data.getBoolean("dispatchStarted"))
+            assertFalse(data.has("resolved"))
+        }
+    }
+
     @Test fun settlementNeedsConsecutiveCompleteSamplesAndKeepsFinalChangeSeparate() {
         val before = tree("A")
         val stable = SettledSamples(before)

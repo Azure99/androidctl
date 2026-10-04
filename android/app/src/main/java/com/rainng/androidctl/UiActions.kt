@@ -39,6 +39,31 @@ internal class UiActions(
         }
     }
 
+    fun key(
+        run: UiRun,
+        send: () -> JSONObject,
+    ): JSONObject {
+        val source = ui.snapshots.target(run.args.getString("ref"))
+        val method = resolutionMethod(run)
+        val report =
+            { target: JSONObject ->
+                run.resolve(method, target)
+                run.select("key", target, run.args.getString("key"))
+            }
+        return withOriginalTarget(run, source, report) { original, node ->
+            val current = run.measure("preWaitMs") { awaitInputFocus(run, node, original) }
+            val reported = copy(current).put("ref", original.getString("ref"))
+            report(reported)
+            val before = ui.snapshots.cached()
+            val result = send()
+            run.remember(result)
+            val observed = ui.postAction.settle(run, before)
+            val answer = observed.appliedTo(result)
+            run.remember(answer)
+            answer
+        }
+    }
+
     private fun withOriginalTarget(
         run: UiRun,
         source: UiTarget,
@@ -175,6 +200,7 @@ internal class UiActions(
         run: UiRun,
         node: AccessibilityNodeInfo,
         original: JSONObject,
+        requireInputFocus: Boolean = false,
     ): JSONObject {
         ui.current(run)
         inputReady(ui.deviceFacts())
@@ -182,6 +208,9 @@ internal class UiActions(
         try {
             val windows = NodeFacts.defaultWindows(sampled)
             activeWindow(run, JSONArray(windows.map(NodeFacts::window)), original)
+            if (requireInputFocus && windows.singleOrNull { it.isFocused }?.id != original.getInt("windowId")) {
+                throw Rejected("inputFocus", "Original target is outside the current input-focus window; run snapshot")
+            }
             val window = windows.single { it.id == original.getInt("windowId") }
             val fresh = FreshNodes(run.budget).use { it.read(node, window) }
             val identity =
@@ -208,6 +237,21 @@ internal class UiActions(
             if (action.alreadySatisfied(fresh)) return ActionAdmission(fresh)
             val condition = action.notReadyReason(fresh) ?: return ActionAdmission(fresh)
             reason = "Original target is not ready for ${action.wire}: $condition"
+            run.budget.pause()
+        }
+        throw Rejected("notReady", reason)
+    }
+
+    internal fun awaitInputFocus(
+        run: UiRun,
+        node: AccessibilityNodeInfo,
+        original: JSONObject,
+    ): JSONObject {
+        var reason = "Original target is not ready within the request budget"
+        while (run.budget.remaining() > 0) {
+            val fresh = readOriginal(run, node, original, requireInputFocus = true)
+            val condition = UiAction.inputFocusNotReadyReason(fresh) ?: return fresh
+            reason = "Original target is not ready for input focus: $condition"
             run.budget.pause()
         }
         throw Rejected("notReady", reason)
