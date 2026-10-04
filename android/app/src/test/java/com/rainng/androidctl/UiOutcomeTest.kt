@@ -206,7 +206,7 @@ class UiOutcomeTest {
 
     @Test fun globalAndCoordinateActionsKeepNullNodeTargetsAndReadOnlyResultsOmitActionFacts() {
         val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
-        for (command in listOf("home")) {
+        for (command in listOf("home", "tap", "swipe")) {
             val run = UiRun(command, lease, JSONObject(), UiBudget(5000) { 0 })
             run.select(command)
             run.begin(null)

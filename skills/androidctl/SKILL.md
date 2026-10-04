@@ -137,6 +137,14 @@ business success. `--timeout` sets the request budget; `--settle` limits ordinar
 observation waiting. A returned sample may precede later App effects.
 See [budgets and duration formats](reference.md#results-and-budgets).
 
+After a `done` semantic `click`, check the intended result and any pending App
+work before sending more input. Do not repeat the same click without new evidence
+that another attempt is appropriate; an unchanged semantic observation or gaps
+in a partial observation are insufficient. If current evidence confirms that the
+intended result did not occur, view a current screenshot: the corresponding touch
+target may be activated with `tap` under [Use Images](#use-images). Verify its
+business outcome.
+
 ### UNKNOWN
 
 1. Preserve UNKNOWN; after the original CLI ends, inspect effects read-only. Continue on reliable success.
@@ -160,6 +168,16 @@ When semantics lack a needed fact, run `screenshot` and view its actual `imagePa
 PNG with the host image tool before choosing an image-dependent action.
 `--image-out PATH` implies screenshot; action screenshots share the action budget.
 A known action with a failed image needs the missing screenshot, not another dispatch.
+
+Coordinates require API 34+ and a current screenshot with verified mapping.
+`--image ID` guards the session's current image; it does not select an older one.
+Read the ID from JSON `data.image.id`.
+Follow the [image ID, expiry and coordinate rules](reference.md#images-and-delivery),
+using original pixels or the preview's actual scale. A coordinate long press uses
+equal swipe endpoints and explicit duration; semantic long press uses `long-click`.
+An attempted touch failure remains UNKNOWN even if cancellation succeeds. On
+API 30–33, ask the user when semantics cannot complete the task; do not bypass
+this with shell touch input.
 
 ## Run Jobs And Transfer Files
 

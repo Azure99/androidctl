@@ -263,10 +263,14 @@ class WireContractTest {
         selector.resolve("selector", target)
         selector.select("click", target)
         selector.begin(null)
+        val tap = contractRun("tap", json("point" to JSONArray(listOf(10, 20))))
+        tap.select("tap")
+        tap.begin(null)
         return JSONArray(
             listOf(
                 sample("plain-click", click, outcome("click")),
                 sample("selector-click", selector, outcome("click")),
+                sample("coordinate-pending-at-expiry", tap, expired = true),
             ),
         )
     }

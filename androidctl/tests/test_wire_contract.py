@@ -39,7 +39,20 @@ FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
 ACTION_EXPECTED = {
     "plain-click": (1, "done", 0, ["click: done"]),
     "selector-click": (1, "done", 0, ["click: done; ref=e7"]),
+    "coordinate-pending-at-expiry": (
+        1,
+        "UNKNOWN",
+        3,
+        [
+            "tap: UNKNOWN; Request budget exhausted; snapshot unavailable; "
+            "dispatchStarted=true; "
+            'snapshotError="Request budget exhausted before snapshot delivery"; '
+            "Do not repeat automatically; "
+            "first check the effect with read-only observations."
+        ],
+    ),
 }
+
 
 FILE_FAILURE_EXPECTED = {
     "before-open": (

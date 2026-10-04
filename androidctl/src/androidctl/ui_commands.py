@@ -5,7 +5,13 @@ from typing import Annotated, Any
 
 import typer
 
-from .cli_options import CliCommand, parse_duration, timeout_duration, wait_duration
+from .cli_options import (
+    CliCommand,
+    parse_duration,
+    swipe_duration,
+    timeout_duration,
+    wait_duration,
+)
 from .protocol import Fault
 from .ui_client import View, execute
 
@@ -411,4 +417,77 @@ def register(app: typer.Typer) -> None:
             "screenshot",
             {"timeoutMs": timeout},
             View(image_out=image_out, print_body=print_body),
+        )
+
+    @app.command(
+        "tap",
+        cls=CliCommand,
+        help="Tap using the session's latest qualified screenshot.",
+    )
+    def tap(
+        ctx: typer.Context,
+        x: int,
+        y: int,
+        image: Annotated[
+            str | None,
+            typer.Option(
+                "--image", help="Require this ID to match the session's latest image."
+            ),
+        ] = None,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        settle_ms: Settle = DEFAULT_SETTLE_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
+        print_body: Print = False,
+    ) -> None:
+        args: dict[str, Any] = {"point": [x, y]}
+        if image is not None:
+            args["image"] = image
+        run_action(
+            ctx, "tap", args, timeout, settle_ms, screenshot, image_out, print_body
+        )
+
+    @app.command(
+        "swipe",
+        cls=CliCommand,
+        help="Swipe using the session's latest qualified screenshot.",
+    )
+    def swipe(
+        ctx: typer.Context,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        image: Annotated[
+            str | None,
+            typer.Option(
+                "--image", help="Require this ID to match the session's latest image."
+            ),
+        ] = None,
+        duration: Annotated[
+            int,
+            typer.Option(
+                "--duration",
+                parser=parse_duration,
+                callback=swipe_duration,
+                metavar="DURATION",
+                show_default="400ms",
+                help="Swipe duration: 50ms–5s.",
+            ),
+        ] = 400,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        settle_ms: Settle = DEFAULT_SETTLE_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
+        print_body: Print = False,
+    ) -> None:
+        args: dict[str, Any] = {
+            "from": [x1, y1],
+            "to": [x2, y2],
+            "durationMs": duration,
+        }
+        if image is not None:
+            args["image"] = image
+        run_action(
+            ctx, "swipe", args, timeout, settle_ms, screenshot, image_out, print_body
         )

@@ -23,7 +23,7 @@ recovery. Each command also has `--help`.
 
 - Python 3.12 or newer on Windows, macOS or Linux.
 - Android 11 (API 30) or newer, arm64-v8a or x86_64 userspace, Android user 0 and
-  default display.
+  default display. Coordinates require API 34 or newer.
 - Shizuku running through ADB or wireless debugging as shell UID 2000, with
   AndroidCtl authorized. Root mode is unsupported.
 - A reachable network route to the AndroidCtl app, and matching host/app versions.

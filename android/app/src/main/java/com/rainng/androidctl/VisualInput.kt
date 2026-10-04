@@ -1,11 +1,15 @@
 package com.rainng.androidctl
 
+import android.app.UiAutomation
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONArray
 import org.json.JSONObject
+import java.lang.reflect.Method
 
 // Preserve input facts across platform, Binder, and image encoding failures.
 internal class VisualInput(
@@ -87,6 +91,192 @@ internal class VisualInput(
         }
     }
 
+    @Suppress("CyclomaticComplexMethod") // Each image admission failure has a distinct actionable diagnosis.
+    fun perform(run: UiRun): JSONObject {
+        run.select(run.command)
+        val before = backend.snapshots.tree
+        backend.current(run)
+        if (Build.VERSION.SDK_INT < MIN_COORDINATE_API) {
+            throw Rejected("coordinateApi", "Coordinate input requires Android API 34+; use semantic actions on this device")
+        }
+        val original = image ?: throw Rejected("staleImage", "Take a new screenshot first")
+        if ((run.args.has("image") && original.getString("id") != run.args.getString("image")) ||
+            SystemClock.elapsedRealtime() - original.getLong("at") > IMAGE_TTL_MS
+        ) {
+            throw Rejected("staleImage", "Image is no longer current; take a new screenshot")
+        }
+        val shape =
+            try {
+                geometry(run)
+            } catch (error: Exception) {
+                invalidate()
+                throw error
+            }
+        if (shape.toString() != original.getJSONObject("shape").toString()) {
+            invalidate()
+            throw Rejected("staleImage", "Display, window, lock or magnification changed")
+        }
+        val simpleLockSwipe =
+            run.command == "swipe" &&
+                shape.getBoolean("keyguardShowing") &&
+                !shape.getBoolean("keyguardSecure") &&
+                !shape.getBoolean("deviceLocked")
+        inputReady(if (simpleLockSwipe) copy(shape).put("keyguardShowing", false) else shape)
+        val duration = if (run.command == "swipe") run.args.getInt("durationMs") else TAP_MS
+        if (duration !in MIN_SWIPE_MS..MAX_SWIPE_MS || duration > run.budget.remaining()) {
+            throw Rejected("duration", "Gesture duration must fit the remaining budget and $MIN_SWIPE_MS..$MAX_SWIPE_MS ms")
+        }
+        val from = run.args.getJSONArray(if (run.command == "tap") "point" else "from")
+        val to = if (run.command == "swipe") run.args.getJSONArray("to") else from
+        for (point in listOf(from, to)) {
+            if (point.length() != 2 ||
+                point.getInt(0) !in 0 until original.getInt("width") ||
+                point.getInt(1) !in 0 until original.getInt("height")
+            ) {
+                throw Rejected("point", "Point is outside the screenshot")
+            }
+        }
+        var result = inject(run, from, to, duration)
+        run.remember(result)
+        if (run.dispatchStarted) {
+            val observed = backend.postAction.settle(run, before)
+            result = observed.appliedTo(result)
+            run.remember(result)
+        }
+        return result
+    }
+
+    // One gesture owns its last point and failure cleanup.
+    @Suppress("LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "NestedBlockDepth")
+    private fun inject(
+        run: UiRun,
+        from: JSONArray,
+        to: JSONArray,
+        duration: Int,
+    ): JSONObject {
+        val ui = backend.automation(run)
+        // Keep synchronous receipt without UiAutomation's DOWN/UP animation wait.
+        val injection = HiddenApi.injectInput
+        val down = SystemClock.uptimeMillis()
+        val offsets = if (run.command == "swipe") (0 until duration step FRAME_MS).toList() + duration else listOf(0, duration)
+        val segments = JSONArray()
+        var result = Outcome.DONE
+        var x = from.getInt(0).toFloat()
+        var y = from.getInt(1).toFloat()
+        try {
+            for ((index, offset) in offsets.withIndex()) {
+                val kind =
+                    when (index) {
+                        0 -> MotionEvent.ACTION_DOWN
+                        offsets.lastIndex -> MotionEvent.ACTION_UP
+                        else -> MotionEvent.ACTION_MOVE
+                    }
+                val wait = down + offset - SystemClock.uptimeMillis()
+                if (wait > 0) Thread.sleep(wait)
+                val fraction = offset.toFloat() / duration
+                x = from.getInt(0) + (to.getInt(0) - from.getInt(0)) * fraction
+                y = from.getInt(1) + (to.getInt(1) - from.getInt(1)) * fraction
+                val event = touchEvent(down, kind, x, y)
+                if (!segment(ui, injection, run, event, segments)) {
+                    result = Outcome.undelivered(run.dispatchStarted)
+                    break
+                }
+            }
+        } catch (error: Exception) {
+            segments.put(json("error" to problem(error)))
+            result = Outcome.undelivered(run.dispatchStarted)
+        }
+        val answer =
+            outcome(
+                run.command,
+                result,
+                "Platform input dispatch returned; App outcome is not verified",
+                json(
+                    "segments" to segments,
+                ),
+            )
+        if (result == Outcome.UNKNOWN) {
+            run.remember(answer)
+            answer.getJSONObject("data").put("cancel", cancel(ui, down, x, y))
+        }
+        return answer
+    }
+
+    private fun cancel(
+        ui: UiAutomation,
+        down: Long,
+        x: Float,
+        y: Float,
+    ): JSONObject {
+        val event = touchEvent(down, MotionEvent.ACTION_CANCEL, x, y)
+        return try {
+            HiddenApi.displayId.invoke(event, 0)
+            // CANCEL uses async injection: no input-completion wait and no DOWN/UP animation synchronization.
+            json("accepted" to ui.injectInputEvent(event, false))
+        } catch (error: Exception) {
+            json("error" to problem(error))
+        } finally {
+            event.recycle()
+        }
+    }
+
+    private fun touchEvent(
+        down: Long,
+        action: Int,
+        pointX: Float,
+        pointY: Float,
+    ): MotionEvent {
+        // Touch handlers can route by tool type independently of the input source.
+        val properties =
+            MotionEvent.PointerProperties().apply {
+                id = 0
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+        val coordinates =
+            MotionEvent.PointerCoords().apply {
+                x = pointX
+                y = pointY
+                pressure = 1f
+                size = 1f
+            }
+        return MotionEvent.obtain(
+            down,
+            SystemClock.uptimeMillis(),
+            action,
+            1,
+            arrayOf(properties),
+            arrayOf(coordinates),
+            0,
+            0,
+            1f,
+            1f,
+            0,
+            0,
+            InputDevice.SOURCE_TOUCHSCREEN,
+            0,
+        )
+    }
+
+    private fun segment(
+        ui: UiAutomation,
+        injection: Method,
+        run: UiRun,
+        event: MotionEvent,
+        segments: JSONArray,
+    ): Boolean =
+        try {
+            HiddenApi.displayId.invoke(event, 0)
+            if (!run.dispatchStarted) backend.dispatch(run) else backend.current(run)
+            val returned = injection.invoke(ui, event, true, false) as Boolean
+            segments.put(json("action" to event.action, "returned" to returned))
+            returned
+        } catch (error: Exception) {
+            segments.put(json("action" to event.action, "error" to problem(error)))
+            false
+        } finally {
+            event.recycle()
+        }
+
     @Suppress("DEPRECATION")
     private fun geometry(run: UiRun): JSONObject {
         if (Build.VERSION.SDK_INT < MIN_COORDINATE_API) {
@@ -159,6 +349,10 @@ internal class VisualInput(
     companion object {
         const val MIN_COORDINATE_API = 34
         private const val IMAGE_TTL_MS = 120000L
+        private const val TAP_MS = 50
+        private const val MIN_SWIPE_MS = 50
+        private const val MAX_SWIPE_MS = 5000
+        private const val FRAME_MS = 16
         private const val PNG_QUALITY = 100
     }
 }

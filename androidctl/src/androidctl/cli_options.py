@@ -72,6 +72,12 @@ def wait_duration(value: int | None) -> int | None:
     return value
 
 
+def swipe_duration(value: int) -> int:
+    if not 50 <= value <= 5000:
+        raise typer.BadParameter("Duration must be between 50ms and 5s")
+    return value
+
+
 def run_duration(value: int | None) -> int | None:
     if value is not None and not 1 <= value <= MAX_RUN_MS:
         raise typer.BadParameter("Duration must be between 1ms and 10m")

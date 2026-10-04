@@ -99,6 +99,7 @@ internal class UiBackend(
                     capture(run)
                     outcome("screenshot")
                 }
+                "tap", "swipe" -> visuals.perform(run)
                 "key" ->
                     if (run.args.has("ref")) {
                         val code = system.keyCode(run)

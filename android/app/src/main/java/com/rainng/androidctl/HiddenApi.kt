@@ -92,6 +92,14 @@ internal object HiddenApi {
     }
 
     val displayId: Method by lazy { InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType) }
+    val injectInput: Method by lazy {
+        UiAutomation::class.java.getMethod(
+            "injectInputEvent",
+            InputEvent::class.java,
+            Boolean::class.javaPrimitiveType,
+            Boolean::class.javaPrimitiveType,
+        )
+    }
     val activityService: Method by lazy { Class.forName("android.app.ActivityTaskManager").getMethod("getService") }
     val startActivity: Method by lazy {
         Class.forName("android.app.IActivityTaskManager").getMethod(

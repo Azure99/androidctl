@@ -30,6 +30,8 @@ def run_main(monkeypatch, args):
             for value in ["5", "00", "0", "60001ms", "1h", "1.5s", "-1s", "1d"]
         ),
         ["click", "e1", "--settle", "60001ms"],
+        ["swipe", "1", "2", "3", "4", "--duration", "49ms"],
+        ["swipe", "1", "2", "3", "4", "--duration", "5001ms"],
         ["shell", "--run", "0", "--", "true"],
         ["shell", "--run", "600001ms", "--", "true"],
         ["job", "get", "j1", "--wait", "60001ms"],
@@ -72,6 +74,7 @@ def test_idle_duration_converts_once(monkeypatch, value, seconds):
         (["snapshot"], ["5s"], ["--timeout"]),
         (["screenshot"], ["15s"], ["--timeout"]),
         (["click"], ["5s", "1500ms"], ["--settle"]),
+        (["swipe"], ["400ms"], ["--duration"]),
         (["session", "open"], ["10m"], ["--idle"]),
         (["push"], ["10m", "10s"], ["--run", "--wait"]),
         (["shell"], ["10s", "10m"], ["--run", "--wait"]),

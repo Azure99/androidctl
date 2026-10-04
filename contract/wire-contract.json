@@ -393,6 +393,29 @@
         "command": "click"
       },
       "name": "selector-click"
+    },
+    {
+      "request": {
+        "args": {"point": [
+          10,
+          20
+        ]},
+        "command": "tap"
+      },
+      "response": {
+        "result": "UNKNOWN",
+        "reason": "Request budget exhausted; snapshot unavailable",
+        "data": {
+          "dispatchStarted": true,
+          "snapshotError": "Request budget exhausted before snapshot delivery",
+          "selected": {
+            "action": "tap",
+            "target": null
+          }
+        },
+        "command": "tap"
+      },
+      "name": "coordinate-pending-at-expiry"
     }
   ],
   "entityForms": [

@@ -25,7 +25,8 @@ array order does not determine coverage; arrays within each sample retain their
 semantic order. `entityForms` instead matches unique `input` values and compares
 each collection of forms as a set. Captures retain explicit encoding/content
 expectations and checks on their actual chunks and decoded content.
-`actionResults` contains plain-click and selector-click from the production
+`actionResults` contains plain-click, selector-click and coordinate-pending-at-expiry
+from the production
 `UiRun` result owner with supplied receipt facts. These samples do not simulate
 platform dispatch or platform sampling.
 

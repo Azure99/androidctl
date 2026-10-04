@@ -37,6 +37,9 @@ def captured_ui_calls(monkeypatch):
         (["snapshot", "--timeout", "1m"], "timeoutMs", 60000),
         (["click", "e1", "--settle", "0"], "settleMs", 0),
         (["click", "e1", "--settle", "60s"], "settleMs", 60000),
+        (["swipe", "1", "2", "3", "4"], "durationMs", 400),
+        (["swipe", "1", "2", "3", "4", "--duration", "50ms"], "durationMs", 50),
+        (["swipe", "1", "2", "3", "4", "--duration", "5s"], "durationMs", 5000),
     ],
 )
 def test_duration_units_reach_ui_wire(captured_ui_calls, args, field, expected):
@@ -255,6 +258,8 @@ def test_output_path_rejects_ads_before_request(tmp_path, args):
         (["click", "e1", "--screenshot"], DEFAULT_TIMEOUT_MS),
         (["home", "--screenshot"], DEFAULT_TIMEOUT_MS),
         (["key", "enter"], DEFAULT_TIMEOUT_MS),
+        (["tap", "1", "2", "--screenshot"], DEFAULT_TIMEOUT_MS),
+        (["swipe", "1", "2", "3", "4"], DEFAULT_TIMEOUT_MS),
     ],
 )
 def test_ui_budget_reaches_client(captured_ui_calls, tmp_path, args, timeout):

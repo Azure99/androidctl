@@ -18,7 +18,7 @@ accepts a local `--json` option.
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
 | Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
-| Images and coordinates | `screenshot` | [Images](#images-and-delivery) |
+| Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
 
 ## Connection And Sessions
@@ -127,7 +127,8 @@ the released caller must explicitly reopen before new work.
 calls can wait within their original budget. Queries and file work may queue;
 queuing does not waive the worker's session permission. `status` separates the
 active owner (`session.name` and `session.pairingName`) from the caller state
-(`session.callerState`, with values `active`, `released` or `none`).
+(`session.callerState`, with values `active`, `released` or `none`). Image qualification
+describes the last capture; fresh input guards are checked only at input time.
 
 Successful `status` reports worker, actual session holder, resources and Gateway
 state without duplicate checks. A failed observation includes local pairing,
@@ -282,6 +283,7 @@ Nested action and job facts keep their original meanings.
 | `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. Global actions use target=null; key REF names its focus-admission target. |
 | `data.dispatchStarted`, `attempts` | Whether the command entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
 | `data.platform` | For semantic input receipts, `accepted` is the synchronous platform call's return value, `callback` is the platform action-completion callback value (null when unavailable), and `acceptedError` is an exception while obtaining acceptance. A positive receipt does not prove App business completion. |
+| `data.segments[]`, `cancel` | Coordinate input has no `data.platform`. Each event reports `returned` or `error` in `segments[]`; after UNKNOWN, the CANCEL attempt reports `accepted` or `error` in `cancel`. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
 | `data.helperAlive`, `cleanup`, `cleanupError`, `signalErrors` | Shell helper and cleanup facts, independent of execution outcome. A helper can have ended with cleanup still unknown. [Jobs](#jobs-and-files) |
 | `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
@@ -543,6 +545,30 @@ Read actual saved content before relying on it; expand the same file when the
 host's display is truncated. If a decision depends on a new PNG, wait for the image
 tool's result to reach the model before choosing the action. Independent operations
 may be batched. Automatic files can contain private screen values.
+
+Coordinates require API 34+ and the session's latest screenshot with verified
+coordinate mapping (`data.image.mappingKnown=true`). `--image ID` requires that
+ID to match the current image; it does not select an older image. A mismatch or
+image older than 120 seconds is rejected as `staleImage`. Read `data.image.id`
+from JSON output when using the guard. Text output reports the path and dimensions.
+
+Input checks the current default display, window, lock and magnification state,
+and normally requires an unlocked screen. An explicit `swipe` may pass a non-secure
+swipe lock when keyguard is showing, keyguard is not secure and the device is not
+credential-locked; `tap` cannot bypass that lock. Input, observed changes or uncertain
+mapping require a new screenshot. A saved PNG is not a fresh input guard. Use
+original pixels or convert the preview's actual scale. After disabling
+magnification, finish active work before closing/reopening the session and taking
+a fresh screenshot when needed.
+
+Semantic click requests an App action, not a finger touch. XML `covered` is an
+overlap hint. Separately, dispatch outside the active task window is rejected
+with error code `covered` unless the action repeats that window's explicit
+`--window` scope. An empty WebView may need an image. Swipes keep scheduled points
+while the session/budget permits; slow platform injection can alter timing.
+Attempted touch failure tries one CANCEL and remains UNKNOWN, because cancellation
+does not erase earlier effects. Equal endpoints and `--duration` provide long press.
+Swipe duration accepts `50ms`–`5s` and defaults to `400ms`.
 
 ## Jobs And Files
 
