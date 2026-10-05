@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Build
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -39,6 +40,13 @@ internal class UiBackend(
 
     @Volatile private var closeError: String? = null
     val cleanupFailure: String? get() = closeError
+
+    fun submitEnter(
+        run: UiRun,
+        data: JSONObject,
+        pending: JSONObject,
+        started: () -> Unit,
+    ): JSONObject = system.key(run, KeyEvent.KEYCODE_ENTER, data, pending, started).put("command", "submit")
 
     fun deviceFacts(): JSONObject = deviceFacts(context)
 

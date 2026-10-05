@@ -21,34 +21,60 @@ internal class Verification(
 internal object UiVerification {
     private fun state(
         action: UiAction,
+        args: JSONObject,
         node: JSONObject,
     ): VerificationState =
         when {
+            action == UiAction.FILL -> textState(node, args.getString("value"))
             node.text("checked") !in listOf("false", "true", "mixed") -> VerificationState.UNOBSERVABLE
             node.getString("checked") == if (action == UiAction.CHECK) "true" else "false" -> VerificationState.MATCHES
             else -> VerificationState.DIFFERS
         }
 
+    private fun textState(
+        node: JSONObject,
+        value: String,
+    ): VerificationState =
+        when {
+            node.getBoolean("password") -> VerificationState.UNOBSERVABLE
+            node.unavailable("text") -> VerificationState.UNOBSERVABLE
+            (if (node.optBoolean("showingHintText")) "" else node.text("text")) == value -> VerificationState.MATCHES
+            else -> VerificationState.DIFFERS
+        }
+
+    fun knownPassword(node: JSONObject): Boolean = node.getBoolean("password")
+
     fun evaluate(
         action: UiAction,
+        args: JSONObject,
         node: JSONObject,
     ): Verification {
-        val verified = state(action, node)
+        val verified = state(action, args, node)
         val facts = JSONObject()
         if (verified == VerificationState.UNOBSERVABLE) {
             facts.put(
                 "verificationError",
-                "Checked-state value is not false, true, or mixed",
+                when {
+                    action != UiAction.FILL -> "Checked-state value is not false, true, or mixed"
+                    node.optBoolean("password") -> "Password-field value cannot be verified"
+                    else -> "Text metadata is unavailable for exact value verification"
+                },
             )
         }
         if (verified != VerificationState.UNOBSERVABLE) {
             facts.put(
                 "actualValue",
-                node.getString("checked"),
+                if (action == UiAction.FILL) {
+                    if (node.optBoolean("showingHintText")) "" else node.text("text")
+                } else {
+                    node.getString("checked")
+                },
             )
         }
-        facts.put("checkedModel", node.opt("checkedModel"))
-        if (!node.unavailable("stateDescription")) facts.put("stateDescription", node.opt("stateDescription"))
+        if (action != UiAction.FILL) {
+            facts.put("checkedModel", node.opt("checkedModel"))
+            if (!node.unavailable("stateDescription")) facts.put("stateDescription", node.opt("stateDescription"))
+        }
         return Verification(verified, facts)
     }
 

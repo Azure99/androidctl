@@ -64,6 +64,11 @@ internal class UiSnapshot : Closeable {
 
     fun targetOrNull(ref: String): UiTarget? = targets[ref]
 
+    fun atSource(original: JSONObject): UiTarget? =
+        targets.values.firstOrNull {
+            it.facts.opt("sourceId") == original.opt("sourceId") && it.facts.opt("windowId") == original.opt("windowId")
+        }
+
     fun target(ref: String): UiTarget {
         targetOrNull(ref)?.let { return it }
         val node = tree?.getJSONArray("nodes")?.objects()?.firstOrNull { it.getString("ref") == ref }

@@ -26,7 +26,7 @@ internal enum class UiAction(
     ;
 
     val changesChecked: Boolean get() = this == CHECK || this == UNCHECK
-    val verifiesValue: Boolean get() = changesChecked
+    val verifiesValue: Boolean get() = this == FILL || changesChecked
     val platformName: String get() = if (changesChecked) CLICK.wire else wire
 
     fun ready(node: JSONObject): Boolean = notReadyReason(node) == null
@@ -35,20 +35,25 @@ internal enum class UiAction(
         if (!node.getBoolean("visible")) return "target is not visible"
         if (!node.getBoolean("enabled")) return "target is disabled"
         if (!available(node)) return "target does not expose the $platformName action"
+        if (this == FILL && !node.optBoolean("editable")) return "target is not editable"
         if (this == IME && !UiSelector.focused(node)) return "target is not input-focused"
         if (changesChecked && !node.optBoolean("checkable")) return "target is not checkable"
         return null
     }
 
-    fun alreadySatisfied(node: JSONObject): Boolean {
+    fun alreadySatisfied(
+        args: JSONObject,
+        node: JSONObject,
+    ): Boolean {
         if (!node.getBoolean("visible")) return false
         if (this == FOCUS) return UiSelector.focused(node)
         val valueType =
             when (this) {
+                FILL -> node.getBoolean("editable")
                 CHECK, UNCHECK -> node.getBoolean("checkable")
                 else -> false
             }
-        return valueType && UiVerification.evaluate(this, node).state == VerificationState.MATCHES
+        return valueType && UiVerification.evaluate(this, args, node).state == VerificationState.MATCHES
     }
 
     private fun available(node: JSONObject): Boolean {

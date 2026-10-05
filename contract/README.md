@@ -19,16 +19,18 @@ the distinction between booleans and numbers, and replays responses through `Res
 `UiClient.blob`, and the XML renderer. The image payload and metadata are synthetic
 inputs for raw transfer testing; they do not establish PNG or screenshot correctness.
 
-The `captures`, `actionResults` and `fileFailures` sections match samples by
-unique `name`, with exactly the same names required on both sides. Their outer
+The `captures`, `compoundResults`, `actionResults` and `fileFailures` sections
+match samples by unique `name`, with exactly the same names required on both
+sides. Their outer
 array order does not determine coverage; arrays within each sample retain their
 semantic order. `entityForms` instead matches unique `input` values and compares
 each collection of forms as a set. Captures retain explicit encoding/content
 expectations and checks on their actual chunks and decoded content.
+Python renders compound focus/fill and optional submit
+steps with their known and unknown outcomes. These samples do not simulate platform
+dispatch or platform sampling.
 `actionResults` contains plain-click, selector-click and coordinate-pending-at-expiry
-from the production
-`UiRun` result owner with supplied receipt facts. These samples do not simulate
-platform dispatch or platform sampling.
+from the production `UiRun` result owner with supplied receipt facts.
 
 The fixture also records `OutputStore` metadata and bounded chunks for both shell
 streams, consumed by Python's `JobClient.output`, plus `fileFailures` results

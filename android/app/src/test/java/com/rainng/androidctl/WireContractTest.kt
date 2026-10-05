@@ -81,6 +81,7 @@ class WireContractTest {
             "raw" to fixture.getJSONObject("raw"),
             "projected" to projected,
             "captures" to captures(projected),
+            "compoundResults" to compoundResults(),
             "actionResults" to actionResults(),
             "output" to outputChunks(),
             "shellCleanupFailure" to shellCleanupFailure(),
@@ -114,7 +115,7 @@ class WireContractTest {
             structure(produced.getJSONObject("projected")),
         )
         compareCaptures(fixture.getJSONArray("captures"), produced.getJSONArray("captures"))
-        for (section in listOf("actionResults")) {
+        for (section in listOf("compoundResults", "actionResults")) {
             compareNamedSamples(section, fixture.getJSONArray(section), produced.getJSONArray(section))
         }
         for (section in listOf("output", "shellCleanupFailure")) {
@@ -237,6 +238,71 @@ class WireContractTest {
         args: JSONObject,
         budget: UiBudget = UiBudget(5000) { 0 },
     ): UiRun = UiRun(command, Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS), args, budget)
+
+    private fun compoundResults(): JSONArray {
+        val target = node("e7", "Search").put("editable", true).put("focused", true).put("isMultiLine", false)
+        target.put("actions", JSONArray(listOf("fill", "ime")))
+        UiSemantics.project(listOf(target))
+
+        fun sample(
+            name: String,
+            submitField: JSONObject? = null,
+            blockedSubmit: Boolean = false,
+        ): JSONObject {
+            val args = json("ref" to "e7", "value" to "hello")
+            val submitRequested = submitField != null || blockedSubmit
+            if (submitRequested) args.put("submit", true)
+            val progress = FillProgress(target, submitRequested)
+            val run = contractRun("fill", args)
+            run.resolve("original", target)
+            for ((step, action) in listOf(FillStep.FOCUS to UiAction.FOCUS, FillStep.FILL to UiAction.FILL)) {
+                if (!blockedSubmit) {
+                    run.begin(progress.pending(step, "${step.command} result pending"))
+                    progress.started(step)
+                }
+                val stepResult = outcome(step.command, data = UiActions.stepData(action, target))
+                val result =
+                    if (step == FillStep.FILL) {
+                        UiVerification.verifiedResult(stepResult, Verification(VerificationState.MATCHES))
+                    } else {
+                        stepResult
+                    }
+                progress.record(step, result)
+            }
+            if (blockedSubmit) {
+                progress.fail(FillStep.SUBMIT, Rejected("staleRef", "Original field is stale"))
+            } else if (submitField != null) {
+                run.begin(progress.pending(FillStep.SUBMIT, "Submit result pending"))
+                progress.started(FillStep.SUBMIT)
+                progress.record(FillStep.SUBMIT, outcome("submit", data = json("selected" to UiActions.submitSelection(submitField))))
+            }
+            run.remember(progress.result(run.dispatchStarted))
+            val result = run.response()
+            val expected = if (blockedSubmit) Outcome.NOT_SENT else Outcome.DONE
+            assertEquals(expected, result.getString("result"))
+            val data = result.getJSONObject("data")
+            assertEquals(structure(progress.step(FillStep.FOCUS)), structure(data.getJSONObject("focus")))
+            assertEquals(structure(progress.step(FillStep.FILL)), structure(data.getJSONObject("fill")))
+            assertEquals(submitRequested, data.has("submit"))
+            if (submitRequested) assertEquals(structure(progress.step(FillStep.SUBMIT)), structure(data.getJSONObject("submit")))
+            return json(
+                "name" to name,
+                "expect" to expected,
+                "request" to json("command" to run.command, "args" to copy(run.args)),
+                "response" to result,
+            )
+        }
+
+        val enterField = copy(target).put("actions", JSONArray(listOf("fill")))
+        return JSONArray(
+            listOf(
+                sample("ordinary-write"),
+                sample("no-op-fill-submit-not-sent", blockedSubmit = true),
+                sample("ime-done", submitField = target),
+                sample("enter-done", submitField = enterField),
+            ),
+        )
+    }
 
     private fun actionResults(): JSONArray {
         val target = node("e7", "Search").put("clickable", true).put("className", "android.widget.Button")

@@ -125,6 +125,9 @@ internal class SystemActions(
     fun key(
         run: UiRun,
         code: Int,
+        data: JSONObject = JSONObject(),
+        pending: JSONObject? = null,
+        started: (() -> Unit)? = null,
     ): JSONObject {
         val automation = ui.automation(run)
         val display = HiddenApi.displayId
@@ -146,7 +149,8 @@ internal class SystemActions(
             ).also { display.invoke(it, 0) }
         val pressed = event(KeyEvent.ACTION_DOWN)
         val released = event(KeyEvent.ACTION_UP)
-        ui.dispatch(run, outcome(run.command, Outcome.UNKNOWN, "Platform key input pending"))
+        ui.dispatch(run, pending ?: outcome(run.command, Outcome.UNKNOWN, "Platform key input pending", copy(data)))
+        started?.invoke()
         var up = false
         val accepted =
             try {
@@ -155,9 +159,9 @@ internal class SystemActions(
                 up = automation.injectInputEvent(released, true)
             }
         if (!accepted || !up) {
-            return outcome(run.command, Outcome.UNKNOWN, "Platform did not confirm key input")
+            return outcome(run.command, Outcome.UNKNOWN, "Platform did not confirm key input", data)
         }
-        return outcome(run.command, reason = "Platform key input completed; App outcome is not verified")
+        return outcome(run.command, reason = "Platform key input completed; App outcome is not verified", data = data)
     }
 
     @Suppress("DEPRECATION")

@@ -46,11 +46,12 @@ internal class UiRun(
         val data = value.getJSONObject("data")
         data.put("dispatchStarted", dispatchStarted)
         resolved?.let { data.put("resolved", copy(it)) }
+        if (command == "fill") return value
         val choice = selected
         if (choice != null) {
             data.put("selected", copy(choice))
             val target = choice.optJSONObject("target")
-            if (target != null && !data.has("verificationTarget") && choice.getString("action") in listOf("check", "uncheck")) {
+            if (target != null && !data.has("verificationTarget") && choice.getString("action") in listOf("fill", "check", "uncheck")) {
                 data.put("verificationTarget", json("ref" to target.getString("ref")))
             }
         }

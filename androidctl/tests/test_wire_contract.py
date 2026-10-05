@@ -32,9 +32,51 @@ def index_samples(section, samples, key="name"):
 
 
 CAPTURES = index_samples("captures", WIRE_CONTRACT["captures"])
+COMPOUND_RESULTS = index_samples("compoundResults", WIRE_CONTRACT["compoundResults"])
 ACTION_RESULTS = index_samples("actionResults", WIRE_CONTRACT["actionResults"])
 ENTITY_FORMS = index_samples("entityForms", WIRE_CONTRACT["entityForms"], "input")
 FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
+
+COMPOUND_EXPECTED = {
+    "ordinary-write": (
+        "done",
+        0,
+        ['fill: done; focus=done; fill=done, verification="matches"'],
+    ),
+    "no-op-fill-submit-not-sent": (
+        "not sent",
+        2,
+        [
+            "fill: not sent; code=staleRef; dispatchStarted=false; "
+            "focus=done, sent=false; "
+            'fill=done, sent=false, verification="matches"; submit=not sent, '
+            'reason="Original field is stale", sent=false'
+        ],
+    ),
+    "ime-done": (
+        "done",
+        0,
+        ['fill: done; focus=done; fill=done, verification="matches"; submit=done'],
+    ),
+    "enter-done": (
+        "done",
+        0,
+        [
+            'fill: done; focus=done; fill=done, verification="matches"; '
+            "submit=done, action=key, key=enter",
+            'Requested: {"target":{"ref":"e7"},"action":"fill","submit":true}',
+            'Resolved: {"method":"original","target":{"ref":"e7","role":"textbox",'
+            '"name":"","bounds":[0,0,100,100],"windowId":1}}',
+            'focus Selected: {"action":"focus","target":{"ref":"e7","role":"textbox",'
+            '"name":"","bounds":[0,0,100,100],"windowId":1}}',
+            'fill Selected: {"action":"fill","target":{"ref":"e7","role":"textbox",'
+            '"name":"","bounds":[0,0,100,100],"windowId":1}}',
+            'fill Verification target: {"ref":"e7"}',
+            'submit Selected: {"action":"key","key":"enter","target":{"ref":"e7",'
+            '"role":"textbox","name":"","bounds":[0,0,100,100],"windowId":1}}',
+        ],
+    ),
+}
 
 ACTION_EXPECTED = {
     "plain-click": (1, "done", 0, ["click: done"]),
@@ -216,6 +258,28 @@ def test_device_shell_cleanup_overrides_the_public_exit_without_losing_execution
     assert result.data["cleanup"] == "unknown"
 
 
+@pytest.mark.parametrize("name", COMPOUND_EXPECTED)
+def test_host_renders_device_compound_results_without_losing_steps(name, capsys):
+    case = COMPOUND_RESULTS[name]
+    expected_result, expected_exit, expected_lines = COMPOUND_EXPECTED[name]
+    result = Result.model_validate(case["response"])
+    assert_json(
+        case["response"],
+        result.model_dump(mode="json", by_alias=True, exclude_unset=True),
+    )
+    request = case["request"]
+    result.data["requested"] = ui_client.requested_action(
+        request["command"], request["args"]
+    )
+    result.data["attempts"] = 1
+    original = result.wire()
+    assert result.result == expected_result
+    assert result.exit_code() == expected_exit
+    ui_client.result_line(result, "fill", Output())
+    assert capsys.readouterr().out.splitlines() == expected_lines
+    assert_json(original, result.wire())
+
+
 @pytest.mark.parametrize("name", ACTION_EXPECTED)
 def test_host_consumes_device_action_facts_including_pending_responses(name, capsys):
     case = ACTION_RESULTS[name]
@@ -274,10 +338,11 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
     ("samples", "names"),
     [
         (CAPTURES, {"projected-tree", "raw-image", "large-tree", "minimal-tree"}),
+        (COMPOUND_RESULTS, COMPOUND_EXPECTED.keys()),
         (ACTION_RESULTS, ACTION_EXPECTED.keys()),
         (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
     ],
-    ids=["captures", "actionResults", "fileFailures"],
+    ids=["captures", "compoundResults", "actionResults", "fileFailures"],
 )
 def test_named_sample_coverage_is_exact(samples, names):
     assert samples.keys() == names

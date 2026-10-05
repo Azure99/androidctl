@@ -33,6 +33,8 @@ internal class UiPostAction(
         run: UiRun,
         before: JSONObject?,
         verify: (() -> Verification)? = null,
+        requirePostSample: Boolean = false,
+        keepObserving: (() -> Boolean)? = null,
     ): PostActionObservation {
         val start = SystemClock.elapsedRealtime()
         val settleMs = run.args.getLong("settleMs").coerceAtLeast(0)
@@ -41,15 +43,19 @@ internal class UiPostAction(
         var verified = Verification()
         var previousWork = 0L
         var stoppedEarly = false
+        var initialSampleRequired = requirePostSample
         if (run.absentWindow != null) ui.snapshots.tree?.let(samples::accept)
         while (run.budget.remaining() > 0 && run.absentWindow == null) {
             val started = SystemClock.elapsedRealtime()
-            if (started >= until) break
-            if (!run.budget.canSample(previousWork, until)) {
+            // A required write verification still needs a sample when settleMs is zero.
+            val sampleUntil = if (initialSampleRequired) run.budget.deadline else until
+            if (started >= sampleUntil) break
+            if (!run.budget.canSample(previousWork, sampleUntil)) {
                 stoppedEarly = true
                 break
             }
-            verified = postSample(run, before, until, samples, verify)
+            verified = postSample(run, before, sampleUntil, samples, verify)
+            initialSampleRequired = false
             if (verified.terminal) {
                 // Keep the terminal verification; the new sample only supplies the delivered tree.
                 observeAfterRootLoss(run, before, minOf(run.budget.deadline, start + settleMs), samples)
@@ -62,7 +68,7 @@ internal class UiPostAction(
                     (verify != null && SystemClock.elapsedRealtime() >= start + settleMs)
             val complete = verify == null || verified.state == VerificationState.MATCHES
             if (run.absentWindow != null) break
-            if (finished && complete) break
+            if (finished && complete && keepObserving?.invoke() != true) break
             run.budget.pause(until)
         }
         val finalObservation =

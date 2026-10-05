@@ -132,10 +132,13 @@ class UiOutcomeTest {
 
     @Test fun responseKeepsKnownFactsAndDistinguishesUnsentWaitFromInput() {
         val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
-        for ((command, expected) in listOf("click" to "not sent")) {
+        for ((command, expected) in listOf("click" to "not sent", "fill" to "not sent")) {
             val run = UiRun(command, lease, JSONObject(), UiBudget(5000) { 0 })
             val response = run.response()
             assertEquals(expected, response.getString("result"))
+            if (command == "fill") {
+                for (step in listOf("focus", "fill", "submit")) assertFalse(response.getJSONObject("data").has(step))
+            }
             assertEquals("requestEnded", assertThrows(Rejected::class.java) { run.begin(null) }.code)
         }
         val pending = UiRun("click", lease, JSONObject(), UiBudget(5000) { 0 })
@@ -268,6 +271,53 @@ class UiOutcomeTest {
             assertFalse(data.has("sent"))
             assertTrue(data.getBoolean("dispatchStarted"))
             assertFalse(data.has("resolved"))
+        }
+    }
+
+    @Test fun compoundReplyKeepsBoundedTargetFactsAndDispatchThroughWireSerialization() {
+        val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
+        for (name in listOf("Search", "名".repeat(21_845), "\"\\\u0001\n".repeat(16_000))) {
+            val target = node("e7").put("editable", true).put("hint", name)
+            UiSemantics.project(listOf(target))
+            val args = json("selector" to json("name" to "n".repeat(40 * 1024)), "value" to "hello", "submit" to true)
+            assertTrue(args.toString().toByteArray(Charsets.UTF_8).size < Limits.JSON_UTF8_BYTES)
+            val run = UiRun("fill", lease, args, UiBudget(5000) { 0 })
+            run.resolve("selector", target)
+            run.begin(null)
+            val progress = FillProgress(target, submitRequested = true)
+            val stepsWithActions = listOf(FillStep.FOCUS to UiAction.FOCUS, FillStep.FILL to UiAction.FILL, FillStep.SUBMIT to UiAction.IME)
+            for ((step, action) in stepsWithActions) {
+                progress.started(step)
+                val data = UiActions.stepData(action, target)
+                if (step == FillStep.FILL) data.put("verification", "matches")
+                progress.record(step, outcome(step.command, data = data))
+            }
+            run.remember(progress.result(run.dispatchStarted))
+            val bytes = json("result" to run.response()).toString().toByteArray(Charsets.UTF_8)
+            assertTrue(bytes.size < Limits.JSON_UTF8_BYTES)
+            val response = JSONObject(bytes.toString(Charsets.UTF_8)).getJSONObject("result")
+            assertEquals(Outcome.DONE, response.getString("result"))
+            val data = response.getJSONObject("data")
+            assertTrue(data.getBoolean("dispatchStarted"))
+            assertFalse(data.has("requested"))
+            assertFalse(data.has("sent"))
+            val steps = listOf("focus", "fill", "submit").map { data.getJSONObject(it).getJSONObject("data") }
+            for (step in steps) assertTrue(step.getBoolean("sent"))
+            val fillData = data.getJSONObject("fill").getJSONObject("data")
+            assertEquals("matches", fillData.getString("verification"))
+            assertEquals("e7", fillData.getJSONObject("verificationTarget").getString("ref"))
+            val targets =
+                listOf(data.getJSONObject("resolved").getJSONObject("target")) +
+                    steps.map { it.getJSONObject("selected").getJSONObject("target") }
+            val expectedName = if (name.length > 256) name.take(256) + "... (${name.length - 256} chars omitted)" else name
+            for (facts in targets) {
+                assertEquals(setOf("ref", "role", "name", "windowId", "bounds"), facts.keys().asSequence().toSet())
+                assertEquals("e7", facts.getString("ref"))
+                assertEquals("textbox", facts.getString("role"))
+                assertEquals(expectedName, facts.getString("name"))
+                assertEquals(1, facts.getInt("windowId"))
+                assertEquals("[0,0,100,100]", facts.getJSONArray("bounds").toString())
+            }
         }
     }
 

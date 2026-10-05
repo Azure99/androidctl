@@ -1,5 +1,6 @@
 package com.rainng.androidctl
 
+import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,11 +11,19 @@ internal data class ActionAdmission(
 )
 
 // UI actions share original-target guards and one request budget.
-@Suppress("DEPRECATION")
+@Suppress("DEPRECATION", "LargeClass") // Keep input admission, value verification and compound steps together.
 internal class UiActions(
     private val ui: UiBackend,
 ) {
-    fun act(run: UiRun): JSONObject = actOnTarget(run)
+    fun act(run: UiRun): JSONObject =
+        try {
+            actOnTarget(run)
+        } catch (error: Exception) {
+            if (run.command != "fill" || run.dispatchStarted) throw error
+            val progress = FillProgress(null, run.args.optBoolean("submit"))
+            progress.fail(FillStep.FOCUS, error)
+            progress.result(run.dispatchStarted)
+        }
 
     private fun actOnTarget(run: UiRun): JSONObject {
         val action = action(run)
@@ -26,7 +35,7 @@ internal class UiActions(
         val report =
             { target: JSONObject ->
                 run.resolve(method, target)
-                run.select(action.wire, target)
+                if (action != UiAction.FILL) run.select(action.wire, target)
             }
         return withOriginalTarget(run, source, report) { original, node ->
             val admitted = run.measure("preWaitMs") { awaitAction(run, node, original, action) }
@@ -37,7 +46,9 @@ internal class UiActions(
             when {
                 action == UiAction.UNCHECK && UiSemantics.role(current) == Role.RADIO ->
                     radioUncheck(run, current)
-                action.alreadySatisfied(current) ->
+                action == UiAction.FILL ->
+                    FillSequence(run, node, original, current).perform()
+                action.alreadySatisfied(run.args, current) ->
                     unchanged(run, current, action, if (focused) "Target is already focused" else "Value already matches")
                 action.changesChecked && !action.ready(current) ->
                     rowCheck(run, node, original, action, requireNotNull(admitted.rowSelection))
@@ -140,7 +151,7 @@ internal class UiActions(
             run.command,
             reason = reason,
             data =
-                (if (action.verifiesValue) UiVerification.evaluate(action, current).json() else JSONObject())
+                (if (action.verifiesValue) UiVerification.evaluate(action, run.args, current).json() else JSONObject())
                     .put("settle", "unchanged"),
         )
 
@@ -152,7 +163,7 @@ internal class UiActions(
     ): JSONObject {
         val verification =
             if (action.verifiesValue) {
-                { verifyCheckedValue(original, action) }
+                { verifyCheckedValue(run, original, action) }
             } else {
                 null
             }
@@ -213,7 +224,7 @@ internal class UiActions(
             run.remember(
                 if (accepted) copy(result).put("result", Outcome.UNKNOWN).put("reason", "Checked-state verification pending") else result,
             )
-            val observed = ui.postAction.settle(run, before, if (accepted) ({ verifyCheckedValue(control, action) }) else null)
+            val observed = ui.postAction.settle(run, before, if (accepted) ({ verifyCheckedValue(run, control, action) }) else null)
             val answer = observed.appliedTo(result)
             run.remember(answer)
             return answer
@@ -232,7 +243,7 @@ internal class UiActions(
         val result =
             when {
                 action == UiAction.UNCHECK && UiSemantics.role(current) == Role.RADIO -> radioUncheck(run, current)
-                action.alreadySatisfied(current) -> unchanged(run, current, action, "Row control already matches")
+                action.alreadySatisfied(run.args, current) -> unchanged(run, current, action, "Row control already matches")
                 else -> null
             }
         if (result == null) {
@@ -243,7 +254,224 @@ internal class UiActions(
         return result?.apply { for (field in data.keys()) getJSONObject("data").put(field, data.get(field)) }
     }
 
+    private inner class FillSequence(
+        private val run: UiRun,
+        private val node: AccessibilityNodeInfo,
+        private val original: JSONObject,
+        private val initial: JSONObject,
+    ) {
+        private val before = ui.snapshots.cached()
+        private val progress = FillProgress(original, run.args.optBoolean("submit"))
+        private var fillObservation: PostActionObservation? = null
+
+        fun perform(): JSONObject {
+            performSteps()
+            return finish()
+        }
+
+        private fun performSteps() {
+            var step = FillStep.FOCUS
+            try {
+                if (skipMatchingValue()) return
+                focus()
+                if (progress.step(FillStep.FOCUS).getString("result") != Outcome.DONE) return
+                step = FillStep.FILL
+                val filledInput = fill()
+                if (progress.step(FillStep.FILL).getString("result") != Outcome.DONE || !progress.hasSubmit) return
+                step = FillStep.SUBMIT
+                submit(filledInput)
+            } catch (error: Exception) {
+                progress.fail(step, error)
+            }
+        }
+
+        private fun skipMatchingValue(): Boolean {
+            if (progress.hasSubmit) return false
+            val verified = UiVerification.evaluate(UiAction.FILL, run.args, initial)
+            if (verified.state != VerificationState.MATCHES) return false
+            val target = copy(initial).put("ref", original.getString("ref"))
+            progress.record(
+                FillStep.FOCUS,
+                outcome(
+                    "focus",
+                    reason = "Focus is unnecessary because the value already matches",
+                    data = stepData(UiAction.FOCUS, target),
+                ),
+            )
+            progress.record(
+                FillStep.FILL,
+                UiVerification.verifiedResult(
+                    outcome("fill", reason = "Value already matches", data = stepData(UiAction.FILL, target)),
+                    verified,
+                ),
+            )
+            return true
+        }
+
+        private fun result(): JSONObject = progress.result(run.dispatchStarted)
+
+        private fun finish(): JSONObject {
+            var answer = result()
+            run.remember(answer)
+            val submitSent =
+                progress.hasSubmit && progress.step(FillStep.SUBMIT).getJSONObject("data").getBoolean("sent")
+            val observed =
+                when {
+                    !run.dispatchStarted -> null
+                    fillObservation != null && !submitSent -> fillObservation
+                    else -> ui.postAction.settle(run, before)
+                }
+            if (observed != null) {
+                answer = observed.appliedTo(answer)
+                run.remember(answer)
+            } else {
+                answer.getJSONObject("data").put("settle", "unchanged")
+            }
+            return answer
+        }
+
+        private fun focus() {
+            run.remember(result())
+            val ready = if (UiSelector.focused(initial)) initial else awaitAction(run, node, original, UiAction.FOCUS).fresh
+            val data = stepData(UiAction.FOCUS, copy(ready).put("ref", original.getString("ref")))
+            if (UiSelector.focused(ready)) {
+                progress.record(FillStep.FOCUS, outcome("focus", reason = "Target is already focused", data = data))
+                return
+            }
+            progress.record(FillStep.FOCUS, outcome("focus", Outcome.NOT_SENT, "Focus has not been dispatched", data))
+            val pending = progress.pending(FillStep.FOCUS, "Focus result pending")
+            val focused = invoke(run, node, UiAction.FOCUS, pending, data, started = { progress.started(FillStep.FOCUS) })
+            progress.record(FillStep.FOCUS, focused)
+            if (focused.getString("result") != Outcome.DONE) return
+            focused.put("result", Outcome.UNKNOWN).put("reason", "Input focus verification pending")
+            progress.record(FillStep.FOCUS, focused)
+            run.remember(result())
+            awaitInputFocus(run, node, original)
+            progress.record(
+                FillStep.FOCUS,
+                focused.put("result", Outcome.DONE).put("reason", "Input focus confirmed for the original target"),
+            )
+        }
+
+        private fun fill(): JSONObject {
+            progress.record(
+                FillStep.FILL,
+                outcome("fill", Outcome.NOT_SENT, "Fill has not been dispatched", stepData(UiAction.FILL, original)),
+            )
+            run.remember(result())
+            val fresh = awaitFocusedFill(run, node, original)
+            val verified = UiVerification.evaluate(UiAction.FILL, run.args, fresh)
+            val password = UiVerification.knownPassword(fresh)
+            val data = stepData(UiAction.FILL, copy(fresh).put("ref", original.getString("ref")))
+            if (verified.state == VerificationState.MATCHES) {
+                progress.record(
+                    FillStep.FILL,
+                    UiVerification.verifiedResult(outcome("fill", reason = "Value already matches", data = data), verified),
+                )
+                return fresh
+            }
+            progress.record(FillStep.FILL, outcome("fill", Outcome.NOT_SENT, "Fill has not been dispatched", data))
+            val pending = progress.pending(FillStep.FILL, "Fill result pending")
+            val filled = invoke(run, node, UiAction.FILL, pending, data, started = { progress.started(FillStep.FILL) })
+            progress.record(FillStep.FILL, filled)
+            if (filled.getString("result") != Outcome.DONE) return fresh
+            if (password) {
+                filled.getJSONObject("data").put("verification", "unobservable")
+                progress.record(FillStep.FILL, filled)
+                return fresh
+            }
+            filled.put("result", Outcome.UNKNOWN).put("reason", "Value verification pending")
+            progress.record(FillStep.FILL, filled)
+            run.remember(result())
+            fillObservation =
+                ui.postAction.settle(
+                    run,
+                    before,
+                    requirePostSample = true,
+                    keepObserving = { observedFillValue().state == VerificationState.DIFFERS },
+                )
+            val observed = observedFillValue()
+            val answer = UiVerification.verifiedResult(filled, observed)
+            when (observed.state) {
+                VerificationState.MATCHES -> answer.put("reason", "Requested value matches the observed original field")
+                VerificationState.DIFFERS -> answer.put("reason", "Observed value differs from the requested value")
+                VerificationState.UNOBSERVABLE -> Unit
+            }
+            progress.record(FillStep.FILL, answer)
+            run.remember(result())
+            return fresh
+        }
+
+        private fun observedFillValue(): Verification {
+            val tree = ui.snapshots.tree
+            if (run.absentWindow != null || tree == null || tree.getLong("sequence") <= before.getLong("sequence")) {
+                return Verification(facts = json("verificationError" to "No post-write observation is available for the original field"))
+            }
+            val retained =
+                filledTarget()?.facts
+                    ?: return Verification(
+                        facts = json("verificationError" to "Filled target identity is not retained in the current observation"),
+                    )
+            if (!retained.getBoolean("visible")) {
+                return Verification(
+                    facts = json("verificationError" to "The original filled field is no longer visible in the current observation"),
+                )
+            }
+            return UiVerification.evaluate(UiAction.FILL, run.args, retained)
+        }
+
+        private fun submit(filledInput: JSONObject) {
+            run.remember(result())
+            val filled = progress.step(FillStep.FILL)
+            val submitOriginal =
+                if (filled.getJSONObject("data").getBoolean("sent") && !UiVerification.knownPassword(filledInput)) {
+                    filledTarget()?.facts
+                        ?: throw Rejected("selectionChanged", "Filled target is no longer identifiable; submit was not sent")
+                } else {
+                    original
+                }
+            val focused = awaitInputFocus(run, node, submitOriginal)
+            if (!UiVerification.knownPassword(filledInput)) {
+                val verified = UiVerification.evaluate(UiAction.FILL, run.args, focused)
+                if (verified.state != VerificationState.MATCHES) {
+                    val data = verified.json().put("verificationTarget", json("ref" to submitOriginal.getString("ref")))
+                    progress.record(
+                        FillStep.SUBMIT,
+                        outcome(
+                            "submit",
+                            Outcome.NOT_SENT,
+                            "Current original field could not be confirmed as an exact match; submit was not sent",
+                            data,
+                        ),
+                    )
+                    run.remember(result())
+                    return
+                }
+            }
+            val selection = submitSelection(copy(focused).put("ref", submitOriginal.getString("ref")))
+            val data = json("selected" to selection)
+            progress.record(FillStep.SUBMIT, outcome("submit", Outcome.NOT_SENT, "Submit has not been dispatched", data))
+            run.remember(result())
+            val pending = progress.pending(FillStep.SUBMIT, "Submit result pending")
+            val submitted =
+                if (selection.getString("action") == "ime") {
+                    invoke(run, node, UiAction.IME, pending, data, started = { progress.started(FillStep.SUBMIT) }).put("command", "submit")
+                } else {
+                    ui.submitEnter(run, data, pending) { progress.started(FillStep.SUBMIT) }
+                }
+            progress.record(FillStep.SUBMIT, submitted)
+        }
+
+        private fun filledTarget(): UiTarget? {
+            val expected = UiSemantics.identity(original) ?: return null
+            val retained = ui.snapshots.atSource(original) ?: return null
+            val current = UiSemantics.identity(retained.facts) ?: return null
+            return retained.takeIf { expected.copy(name = current.name) == current }
+        }
+    }
+
     private fun verifyCheckedValue(
+        run: UiRun,
         original: JSONObject,
         action: UiAction,
     ): Verification {
@@ -253,19 +481,30 @@ internal class UiActions(
                     facts = json("verificationError" to "Original ref is not retained in the current observation"),
                     terminal = true,
                 )
-        return UiVerification.evaluate(action, retained.facts)
+        return UiVerification.evaluate(action, run.args, retained.facts)
     }
 
+    @Suppress("LongParameterList")
     internal fun invoke(
         run: UiRun,
         node: AccessibilityNodeInfo,
         action: UiAction,
         pending: JSONObject,
         data: JSONObject = JSONObject(),
+        started: (() -> Unit)? = null,
     ): JSONObject {
+        val args =
+            if (action == UiAction.FILL) {
+                Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, run.args.getString("value"))
+                }
+            } else {
+                null
+            }
         val callback =
-            ui.platform(run).action(node, action.platformId, null, run.budget) {
+            ui.platform(run).action(node, action.platformId, args, run.budget) {
                 ui.dispatch(run, pending)
+                started?.invoke()
             }
         return outcome(action.wire, callback.classify(), data = copy(data).put("platform", callback.json()))
     }
@@ -345,7 +584,7 @@ internal class UiActions(
         var reason = "Original target is not ready within the request budget"
         while (run.budget.remaining() > 0) {
             val fresh = readOriginal(run, node, original)
-            if (action.alreadySatisfied(fresh)) return ActionAdmission(fresh)
+            if (action.alreadySatisfied(run.args, fresh)) return ActionAdmission(fresh)
             val condition = action.notReadyReason(fresh) ?: return ActionAdmission(fresh)
             if (action.changesChecked) {
                 captureSuggestedRow(run, original, action)?.let { selection ->
@@ -368,6 +607,23 @@ internal class UiActions(
             val fresh = readOriginal(run, node, original, requireInputFocus = true)
             val condition = UiAction.inputFocusNotReadyReason(fresh) ?: return fresh
             reason = "Original target is not ready for input focus: $condition"
+            run.budget.pause()
+        }
+        throw Rejected("notReady", reason)
+    }
+
+    internal fun awaitFocusedFill(
+        run: UiRun,
+        node: AccessibilityNodeInfo,
+        original: JSONObject,
+    ): JSONObject {
+        var reason = "Original target is not ready within the request budget"
+        while (run.budget.remaining() > 0) {
+            val fresh = readOriginal(run, node, original, requireInputFocus = true)
+            val focusCondition = UiAction.inputFocusNotReadyReason(fresh)
+            if (focusCondition == null && UiAction.FILL.alreadySatisfied(run.args, fresh)) return fresh
+            val condition = focusCondition ?: UiAction.FILL.notReadyReason(fresh) ?: return fresh
+            reason = "Original target is not ready for fill: $condition"
             run.budget.pause()
         }
         throw Rejected("notReady", reason)
@@ -405,4 +661,28 @@ internal class UiActions(
     }
 
     private fun action(run: UiRun): UiAction = UiAction.parse(run.command)
+
+    companion object {
+        fun submitSelection(target: JSONObject): JSONObject {
+            if (!target.getBoolean("editable") || !UiSelector.focused(target)) {
+                throw Rejected("submitUnsupported", "Submit requires the same editable, focused field")
+            }
+            val actions = target.getJSONArray("actions")
+            if ((0 until actions.length()).any { actions.getString(it) == UiAction.IME.wire }) {
+                return UiRun.selection("ime", target)
+            }
+            if (target.opt("isMultiLine") != false) {
+                throw Rejected("submitUnsupported", "Enter requires a known single-line original field; submit was not sent")
+            }
+            return UiRun.selection("key", target, "enter")
+        }
+
+        fun stepData(
+            action: UiAction,
+            target: JSONObject,
+        ): JSONObject =
+            json("selected" to UiRun.selection(action.wire, target)).apply {
+                if (action.verifiesValue) put("verificationTarget", json("ref" to target.getString("ref")))
+            }
+    }
 }

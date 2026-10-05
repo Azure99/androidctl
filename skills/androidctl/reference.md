@@ -16,7 +16,7 @@ accepts a local `--json` option.
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
-| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `check`, `uncheck`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
+| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `fill`, `check`, `uncheck`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
@@ -257,7 +257,7 @@ Text headings use the same fixed command path as JSON `command`.
 Ordinary UI text results occupy one line with available action and verification
 facts, full `snapshotPath` / `imagePath`, image dimensions and delivery errors or
 warnings. String values use JSON quoting; embedded newlines stay escaped on that
-line. Done results omit `dispatchStarted=true`;
+line. Done results omit `dispatchStarted=true` and each fill step's `sent=true`;
 explicit false and dispatch facts on non-done results remain visible. Missing
 dispatch facts on non-done results show unknown.
 A different existing ref or selected action expands Requested, Resolved, Selected
@@ -271,19 +271,22 @@ raw shell output retain their own lines.
 ### JSON Field Guide
 
 Fields depend on the command and outcome; absence does not mean false.
-Top-level `command` is the fixed public command path, including on failure and
-pre-dispatch rejection. Targets, keys and flags do not become part of that field.
-Argument errors preserve an identified command path; without one they use `arguments`.
-Nested action and job facts keep their original meanings.
+Top-level `command` is the fixed public command path, such as `fill`, `key` or
+`job get`, including on failure and pre-dispatch rejection. Targets, keys and flags
+do not become part of that field. Argument errors preserve an identified command
+path; without one they use `arguments`. Nested action and job facts keep their
+original meanings.
 
 | Location | Interpretation |
 | --- | --- |
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
 | `data.snapshotPath`, `imagePath` | Absolute paths to the saved observation and PNG. [Delivery](#images-and-delivery) also reports `snapshotError`, `imageError`, `historyError` and `deliveryError` when applicable. |
+| `data.focus`, `fill`, `submit` | Fill reports separate focus/fill results and submit when requested. Failures before step results are recorded can omit them; text then shows `step results=unknown`. Fill and submit steps can contain `data.verification`, `actualValue`, `verificationError` and `verificationTarget`. Submit fields describe its pre-submit exact-value gate and do not overwrite fill facts. [Targets](#observations-and-targets) |
 | `data.requested`, `resolved` | Original target/action and the resolved target. `resolved.method` is original for a published ref or selector for selector discovery; resolution does not prove admission or dispatch. |
-| `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. Global actions use target=null; key REF names its focus-admission target. |
-| `data.dispatchStarted`, `attempts` | Whether the command entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
-| `data.verificationTarget`, `verification` | The object checked by a value operation, and matches/differs/unobservable. Naming an object does not prove successful verification. |
+| `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. Global actions use target=null; key REF names its focus-admission target. Each fill step keeps its known selected and sent facts in its data. |
+| `data.focus.data.sent`, `fill.data.sent`, `submit.data.sent` | Whether that fill step entered dispatch. A later step that was not sent does not negate earlier dispatch. |
+| `data.dispatchStarted`, `attempts` | Whether any step entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
+| `data.verificationTarget`, `verification` | The object checked by a value operation, and matches/differs/unobservable. Combined steps keep their own fields; naming an object does not prove successful verification. |
 | `data.platform` | For semantic input receipts, `accepted` is the synchronous platform call's return value, `callback` is the platform action-completion callback value (null when unavailable), and `acceptedError` is an exception while obtaining acceptance. A positive receipt does not prove App business completion. |
 | `data.segments[]`, `cancel` | Coordinate input has no `data.platform`. Each event reports `returned` or `error` in `segments[]`; after UNKNOWN, the CANCEL attempt reports `accepted` or `error` in `cancel`. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
@@ -305,7 +308,7 @@ execution limits and `--wait` for shell/transfer or `job get` waiting.
 | --- | --- |
 | Ordinary UI | `5s`; explicit `--timeout` accepts `1ms`–`60s`. |
 | Standalone screenshot | `15s`; explicit timeout takes precedence. |
-| Action settling | `--settle` accepts `0`–`60s`, default cap `1500ms`; check/uncheck verification keeps the request budget. |
+| Action settling | `--settle` accepts `0`–`60s`, default cap `1500ms`; check/uncheck verification keeps the request budget. [Fill rules](#observations-and-targets) |
 | Ordinary shell execution / initial wait | 10000 ms each. |
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
 | Transfer execution / initial wait | 600000 ms / 10000 ms. |
@@ -352,8 +355,8 @@ selects Result JSON on stdout; it does not change the saved body.
 | XML | Projected screen/window/control tags; `<?androidctl ...?>` holds invocation, source, snapshotFacts and optional image metadata. |
 | `snapshot/find --raw` | The entire current device-processed tree, including on REF/find; match counts stay in the result. Works with text or JSON stdout. |
 
-Invocation metadata keeps non-default query/all/boxes and the existing renderRef;
-visible screen values still appear.
+Invocation metadata keeps non-default query/all/boxes and the existing renderRef,
+but omits fill argument text; visible screen values still appear.
 `source` preserves capture and age, with cache and before-action flags subject to
 the defaults below. `snapshotFacts` retains connection, sequence, sampling times,
 scope and unavailable fields, with non-body gaps summarized below. The complete
@@ -472,10 +475,19 @@ consecutive complete, identical, non-loading samples. At that stop, `settle` is
 `samplingStopped` means sampling stopped before the observation deadline because
 another sample was not expected to fit; the delivered fact is not a later recheck.
 
-Check/uncheck require the original ref and full identity before dispatch.
-Check/uncheck also retain the verified control's ref and identity.
+Fill/check/uncheck require the original ref and full identity before dispatch.
+Check/uncheck also retain the verified control's ref and identity. After an ordinary
+fill is dispatched, verification permits a name change on the same unique source while
+window, role, full row identity and identity completeness must still match, and
+the original field must remain visible in the post-write sample; if hidden,
+ordinary fill is UNKNOWN/unobservable.
+This write-time exception does not revive expired refs for later requests.
 Losing the required identity ends UNKNOWN/unobservable even if another target
-shows the wanted value. Check/uncheck verification can use the remaining request budget.
+shows the wanted value. Temporary collection failure can use the remaining
+ordinary observation window for fill; check/uncheck verification can use the
+remaining request budget. Fill can verify a retained successful post-write sample
+even when a later collection fails: matches/done or differs/failed can coexist
+with the later top-level `snapshotError`.
 
 Dispatched check/uncheck verification reads the verification target's retained ref in each
 sample until that identity is lost. Its `actualValue`, `checkedModel` and
@@ -488,7 +500,8 @@ UNKNOWN and `verificationTarget` stay fixed; the delivered tree can show a later
 window.
 
 Already matching readable values require no input, even on disabled controls.
-Preserve the App's checked model/state description;
+Password masks prove neither equality nor a no-op; affirmative writes can be done
+with unobservable verification. Preserve the App's checked model/state description;
 platform binary values do not imply a business tri-state. If the control has no
 direct click action, check/uncheck can click its qualified collection row once and
 verify the row's unique checkable. A row label can be the requested target; resolved
@@ -499,11 +512,64 @@ without changing the value; failed/UNKNOWN cannot undo that effect, and no secon
 click or replacement target is attempted. An unchecked radio already
 meets uncheck; change a selected radio by selecting another option.
 
+`fill` reports separate focus/fill results and submit when requested. Failures
+before step results are recorded can omit them; text then shows `step results=unknown`.
+An exact readable match without submit completes both steps without input.
+Otherwise fill obtains focus when needed, then checks the original identity and
+current value again before writing. Focus does not authorize rebinding to a
+replacement. If focus was dispatched, later rejection cannot trigger a whole-command
+repair/retry. An already-focused no-op is still not dispatched.
+
+After an accepted ordinary non-password write, fill completes the finite ordinary
+observation, then determines final verification from the last successful post-write
+sample.
+With a complete pre-action observation, ordinary observation can end early after
+two consecutive complete samples share a signature that differs from the baseline
+and the last sample is non-loading. Ordinary fill defers that early stop while
+the original field has a readable differing value, within the same settle cap
+and sampling budget. A larger `--settle` can allow a later exact value; stable
+differences can take longer to report.
+A differing final value is failed/exit 1 even if the App reaches the requested
+value later. The required first post-write sample can exceed the settle cap
+within the remaining request budget. `--settle 0` only attempts that first sample
+when the remaining request budget permits; that sample may still differ.
+Without a usable sample, fill is UNKNOWN/exit 3. No-op and password writes have no
+required first-sample rule.
+
+With `--submit`, an ordinary value must match or a password write must have a
+positive receipt before submit preparation. After an ordinary dispatched fill
+matches, submit checks its confirmed post-fill identity; already-matching and
+password fields keep the original full-identity requirement. A business
+reassignment expressed only by the field name can pass the write-time identity
+check. After fresh original-identity and focus admission, a non-password field
+must still be an exact match. A differs/unobservable value leaves submit not sent,
+with its verification facts and no `error`, so it does not trigger host repair.
+Any earlier dispatch, including focus alone, makes the overall result failed/exit 1;
+with no step dispatched it is not sent/exit 2.
+Submit prefers the original editable, focused field's advertised IME action.
+Only complete actions explicitly lacking IME and `isMultiLine=false` allow one
+Enter down/up. Multiline or unknown line mode does not allow Enter, and an IME
+attempt never falls through to Enter. No other field or button is selected.
 Standalone `ime REF` requires the original field already focused and
 requests its exposed IME action without an automatic focus step. A multiline IME
-action may insert a newline. Verify business effects independently of the
-platform receipt.
+action may insert a newline; one Enter can cause two App submissions or none. Verify
+business effects independently of the platform receipt.
 
+Read each step's selected/sent and the fill and submit verification/actualValue. A later
+not-sent step does not negate earlier dispatch. If submit was not sent, choose
+recovery from the current value and reason rather than defaulting to refill or a
+longer timeout. The command's dispatchStarted remains the authority for any input.
+On normal completion, if a fill observation exists and submit was not sent,
+the command preserves that tree, settle and observedChange. If submit's exact
+value gate ran, its value comes from the later fresh read and need not appear in
+that tree; fill keeps its earlier value. Other dispatched paths perform ordinary
+observation, including after an actually dispatched submit; fill retains its
+earlier facts. With no dispatch, the command keeps the existing tree.
+Once fill has dispatched input and its overall result is recorded, a later
+post-processing error preserves that result and its step facts. `actualValue` is the accessible text used
+for exact comparison, with hint text treated as empty. It can include App formatting
+or labels and does not expose the App's private model or saved value. Fill does not
+strip labels, normalize formatting or automatically refill.
 `key enter|tab|del|escape [REF]` requires a supplied ref already focused in the
 input-focus window. Without a ref it is global and rejects scope. Platform input
 and animation waits can exceed the budget, and effects can arrive after UNKNOWN;

@@ -34,6 +34,66 @@ def test_display_names_keep_unicode_without_terminal_or_bidi_controls():
     )
 
 
+def test_fill_without_device_step_results_keeps_compound_unknown_output(capsys):
+    result = Result(
+        command="fill",
+        result="UNKNOWN",
+        reason="Reply unavailable",
+        data={
+            "requested": ui_client.requested_action(
+                "fill", {"ref": "e7", "value": "New value", "submit": True}
+            )
+        },
+    )
+    original = result.wire()
+    ui_client.result_line(result, "fill", Output(), observed=False)
+    assert capsys.readouterr().out == (
+        "fill: UNKNOWN; Reply unavailable; dispatchStarted=unknown; "
+        "step results=unknown; Observation: unavailable; run snapshot.; "
+        "Do not repeat automatically; first check the effect "
+        "with read-only observations.\n"
+    )
+    assert result.wire() == original
+
+
+def test_fill_preselection_failure_renders_known_unsent_steps(capsys):
+    data = {
+        "requested": ui_client.requested_action(
+            "fill", {"ref": "e7", "value": "New value", "submit": True}
+        ),
+        "dispatchStarted": False,
+        **{
+            step: {
+                "command": step,
+                "result": "not sent",
+                "reason": reason,
+                "data": {"sent": False},
+            }
+            for step, reason in (
+                ("focus", "Ref belongs to a different window"),
+                ("fill", "Fill has not been dispatched"),
+                ("submit", "Submit has not been dispatched"),
+            )
+        },
+    }
+    result = Result(
+        command="fill",
+        result="not sent",
+        error={"code": "scopeMismatch", "message": "Ref belongs to a different window"},
+        data=data,
+    )
+    original = result.wire()
+    ui_client.result_line(result, "fill", Output(), observed=False)
+    assert capsys.readouterr().out == (
+        "fill: not sent; code=scopeMismatch; dispatchStarted=false; "
+        'focus=not sent, reason="Ref belongs to a different window", sent=false; '
+        'fill=not sent, reason="Fill has not been dispatched", sent=false; '
+        'submit=not sent, reason="Submit has not been dispatched", sent=false; '
+        "Observation: unavailable; run snapshot.\n"
+    )
+    assert result.wire() == original
+
+
 def test_device_listing_preserves_complete_ids_and_record_facts(capsys):
     ids = [
         "01234567-1111-4111-8111-111111111111",
@@ -485,6 +545,65 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         assert "ui=0 shell=0 file=0\n" in output
         assert "helper pids=42\njobs=j1\nandroidApi=36\n" in output
         assert 'coordinates={"apiSupported": true, "image": "not checked"}\n' in output
+
+
+@pytest.mark.parametrize("verification", ["differs", "unobservable"])
+def test_compound_value_facts_keep_each_stage_and_escape_controls(capsys, verification):
+    value = Result(
+        command="fill",
+        result="failed",
+        data={
+            "requested": {"target": {"ref": "e7"}, "action": "fill", "submit": True},
+            "attempts": 1,
+            "dispatchStarted": True,
+            "samplingStopped": "Estimated next sample exceeds the observation deadline",
+            "focus": {
+                "result": "done",
+                "reason": "Input focus confirmed for the original target",
+                "data": {"sent": True},
+            },
+            "fill": {
+                "result": "done",
+                "data": {
+                    "sent": True,
+                    "verification": "matches",
+                    "actualValue": "Line A\nnext",
+                    "verificationTarget": {"ref": "e7"},
+                },
+            },
+            "submit": {
+                "result": "not sent",
+                "data": {
+                    "sent": False,
+                    "verification": verification,
+                    "verificationTarget": {"ref": "e7"},
+                    **(
+                        {"actualValue": "Line B\tnext"}
+                        if verification == "differs"
+                        else {"verificationError": "Text unavailable\nfor verification"}
+                    ),
+                },
+            },
+        },
+    )
+    original = value.wire()
+    ui_client.result_line(value, "fill", Output())
+    text = capsys.readouterr().out
+    assert (
+        'fill=done, sent=true, verification="matches", actualValue="Line A\\nnext"; '
+        f'submit=not sent, sent=false, verification="{verification}",' in text
+    )
+    assert len(text.splitlines()) == 1
+    if verification == "differs":
+        assert 'actualValue="Line B\\tnext"' in text
+    else:
+        assert 'verificationError="Text unavailable\\nfor verification"' in text
+    assert value.data["requested"]["submit"] is True
+    assert "focus=done, sent=true" in text
+    assert text.count("Estimated next sample exceeds the observation deadline") == 1
+    assert "sent=unknown" not in text
+    assert value.data["fill"]["data"]["actualValue"] == "Line A\nnext"
+    assert value.wire() == original
 
 
 @pytest.mark.parametrize(

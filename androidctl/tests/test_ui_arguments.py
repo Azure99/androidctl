@@ -256,6 +256,7 @@ def test_output_path_rejects_ads_before_request(tmp_path, args):
         (["snapshot"], DEFAULT_TIMEOUT_MS),
         (["click", "e1"], DEFAULT_TIMEOUT_MS),
         (["click", "e1", "--screenshot"], DEFAULT_TIMEOUT_MS),
+        (["fill", "e1", "value"], DEFAULT_TIMEOUT_MS),
         (["home", "--screenshot"], DEFAULT_TIMEOUT_MS),
         (["key", "enter"], DEFAULT_TIMEOUT_MS),
         (["tap", "1", "2", "--screenshot"], DEFAULT_TIMEOUT_MS),

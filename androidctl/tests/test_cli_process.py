@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 from textwrap import dedent
 
 import pytest
@@ -26,7 +27,7 @@ def test_piped_help_preserves_copyable_options_and_action_values(
     environment = dict(os.environ, COLUMNS="40")
     for name in ("NO_COLOR", "FORCE_COLOR", "TYPER_USE_RICH"):
         environment.pop(name, None)
-    for args in ([], ["snapshot"], ["shell"], ["job", "output"]):
+    for args in ([], ["fill"], ["snapshot"], ["shell"], ["job", "output"]):
         value = subprocess.run(
             [sys.executable, "-m", "androidctl", *args, "--help"],
             cwd=tmp_path,
@@ -128,6 +129,45 @@ def test_real_concurrent_cli_uses_one_daemon_and_reports_version_before_connect(
     assert result["result"] == "done"
     assert result["reason"] == "already stopped"
     assert not descriptor.exists()
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows installed entry and directory handle"
+)
+def test_real_entry_errors_and_daemon_use_trusted_cwd(tmp_path, isolated_state):
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    (caller / "websockets.py").write_text(
+        "raise RuntimeError('untrusted caller import')"
+    )
+    environment = dict(os.environ)
+    entry = Path(sys.executable).parent / "Scripts/androidctl.exe"
+
+    def invoke(*args):
+        return subprocess.run(
+            [entry, *args], cwd=caller, env=environment, capture_output=True, timeout=25
+        )
+
+    for args in (("unknown-command",), ("fill", "e1"), ("fill", "e1", "-5")):
+        result = invoke(*args)
+        assert result.returncode == 2
+        command = "arguments" if args[0] == "unknown-command" else "fill"
+        assert result.stdout.startswith(f"{command}: not sent;".encode())
+        assert len(result.stdout.splitlines()) == 1
+        assert b"Traceback" not in result.stderr
+    assert invoke("--help").returncode == 0
+    try:
+        result = invoke("--json", "fill", "e1", "--", "-5")
+        assert result.returncode == 2, result.stderr
+        assert json.loads(result.stdout)["command"] == "fill"
+        assert json.loads(result.stdout)["error"]["code"] == "deviceRequired"
+        moved = tmp_path / "moved"
+        caller.rename(moved)
+        caller = moved
+        assert invoke("daemon", "status").returncode == 0
+    finally:
+        result = invoke("daemon", "stop")
+        assert result.returncode == 0, result.stdout
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows shared record handles")

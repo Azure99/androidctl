@@ -108,6 +108,22 @@ toward ambiguity. `ref-unavailable` is not actionable.
 Replace symbolic refs with observed targets and check their business identity.
 Inspect requested/resolved/selected targets. See [ref and action rules](reference.md#observations-and-targets).
 
+`fill` reports focus, fill and optional submit separately. A readable exact match
+without submit needs no input. Otherwise it focuses the original field when
+needed. After an accepted ordinary write, it completes a finite observation and
+checks the last successful post-write sample of the original visible field.
+While the original field remains readable and differs, fill keeps observing as
+time permits within `--settle`. A larger `--settle` may allow a later exact match.
+`--settle 0` only attempts the first post-write sample within the remaining budget.
+Losing that field stops later steps. Password masks cannot establish equality;
+an accepted password write can have unobservable verification.
+
+Submit requires the current original field to remain an exact match after fresh
+focus admission; accepted password writes are the exception.
+Submit prefers the field's exposed IME action. Only a known single-line field
+without an IME action uses one Enter; it never tries Enter after an IME attempt.
+An App may treat Enter as two submissions, and multiline IME may insert a newline.
+Verify the business effect. Preserve earlier sent steps when a later step fails.
 Standalone `ime REF` requests the exposed IME action on the already-focused
 original field; it does not focus the field. `key ... REF` also requires that
 field already focused; a key without REF is global.
@@ -128,20 +144,22 @@ Verify the destination; Recents can toggle and wake does not unlock credentials.
 | Result | Next action |
 | --- | --- |
 | `done` | Verify the business outcome. |
-| `failed` | Read the reason and actual value. |
+| `failed` | Read the reason, actual value and partial steps. |
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
 | `still running` | For a shell/transfer job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
 
 `selected` describes the chosen action. `dispatchStarted` says whether the command
-entered dispatch. Missing facts do not mean false.
-
+entered dispatch; each fill step keeps its own `selected` and `sent` facts.
+Missing facts do not mean false.
+Read focus/fill/submit independently, including verification and `actualValue`.
 Use `--json` for the [complete result fields](reference.md#json-field-guide).
 
 `changed`, `unchanged`, `loading` and `unsettled` describe observations, not
 business success. `--timeout` sets the request budget; `--settle` limits ordinary
-observation waiting. Check/uncheck can continue verifying beyond `--settle`, within
-the remaining request budget. A returned sample may precede later App effects.
+observation waiting. Ordinary fill verifies after observation settling.
+Check/uncheck can continue verifying beyond `--settle`, within the remaining
+request budget. A returned sample may precede later App effects.
 See [budgets and duration formats](reference.md#results-and-budgets).
 
 After a `done` semantic `click`, check the intended result and any pending App

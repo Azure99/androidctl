@@ -28,6 +28,7 @@ from .protocol import (
 from .user_files import create, require_new_file
 
 READ_ONLY_COMMANDS = {"snapshot", "find", "screenshot", "apps"}
+FILL_STEPS = (("focus", "focus"), ("fill", "fill"), ("submit", "ime"))
 
 
 def requested_action(command: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -42,6 +43,8 @@ def requested_action(command: str, args: dict[str, Any]) -> dict[str, Any]:
     }
     if command == "key":
         requested["key"] = args["key"]
+    if command == "fill" and args.get("submit"):
+        requested["submit"] = True
     return requested
 
 
@@ -85,8 +88,18 @@ def result_line(
     *,
     observed: bool = True,
 ) -> None:
+    compound = command == "fill"
+    steps = (
+        [
+            (step, result.data[step], action)
+            for step, action in FILL_STEPS
+            if isinstance(result.data.get(step), dict)
+        ]
+        if compound
+        else []
+    )
     parts = [f"{display_name(result.command, quoted=False)}: {result.result}"]
-    if result.reason:
+    if result.reason and not isinstance(result.data.get("fill"), dict):
         parts.append(display_name(result.reason, quoted=False))
     if result.error is not None:
         parts.append(f"code={result.error.code}")
@@ -116,6 +129,8 @@ def result_line(
             parts.append(
                 display_name(str(result.data["samplingStopped"]), quoted=False)
             )
+        if compound and "fill" not in result.data:
+            parts.append("step results=unknown")
         resolved = result.data.get("resolved", {})
         if resolved.get("method") == "selector" and (
             target := resolved.get("target", {})
@@ -137,6 +152,8 @@ def result_line(
         else:
             parts.append(change["state"])
     parts.extend(value_facts(result.data))
+    for step, item, default_action in steps:
+        parts.append(step_facts(step, item, default_action, result.result))
     completeness = result.data.get("snapshotCompleteness", {})
     gaps = ["partial"] if completeness.get("partial") else []
     for field, name in (
@@ -166,7 +183,7 @@ def result_line(
             "with read-only observations."
         )
     output.echo("; ".join(parts))
-    for line in selection_lines(result.data):
+    for line in selection_lines(result.data, compound=compound, steps=steps):
         output.echo(line)
 
 
@@ -188,14 +205,42 @@ def value_facts(data: dict[str, Any]) -> list[str]:
     ]
 
 
+def step_facts(
+    step: str, item: dict[str, Any], default_action: str, result: str
+) -> str:
+    facts = [f"{step}={item['result']}"]
+    if item.get("reason") and item["result"] != "done":
+        facts.append("reason=" + compact(item["reason"]))
+    data = item.get("data", {})
+    keep_sent = result != "done" or item["result"] != "done"
+    if data.get("sent") is False or (data.get("sent") is True and keep_sent):
+        facts.append("sent=" + str(data["sent"]).lower())
+    elif keep_sent and not isinstance(data.get("sent"), bool):
+        facts.append("sent=unknown")
+    facts.extend(value_facts(data))
+    selected = data.get("selected", {})
+    if selected.get("action") and selected["action"] != default_action:
+        facts.append("action=" + selected["action"])
+        if selected.get("key"):
+            facts.append("key=" + selected["key"])
+    return ", ".join(facts)
+
+
 def selection_lines(
     data: dict[str, Any],
+    *,
+    compound: bool,
+    steps: list[tuple[str, dict[str, Any], str]],
 ) -> list[str]:
     requested = data.get("requested", {})
     resolved = data.get("resolved", {})
     requested_ref = (requested.get("target") or {}).get("ref")
     resolved_ref = (resolved.get("target") or {}).get("ref")
-    choices = [("", data, requested.get("action"))]
+    choices = (
+        [(step, item.get("data", {}), action) for step, item, action in steps]
+        if compound
+        else [("", data, requested.get("action"))]
+    )
     changed = bool(requested_ref and resolved_ref and requested_ref != resolved_ref)
     for _, facts, expected_action in choices:
         selected = facts.get("selected", {})
@@ -210,7 +255,8 @@ def selection_lines(
         ):
             changed = True
         if (
-            requested.get("key")
+            not compound
+            and requested.get("key")
             and selected.get("key")
             and requested["key"] != selected["key"]
         ):

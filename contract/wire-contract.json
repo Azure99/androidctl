@@ -303,6 +303,400 @@
     }],
     "partial": true
   },
+  "compoundResults": [
+    {
+      "expect": "done",
+      "request": {
+        "args": {
+          "ref": "e7",
+          "value": "hello"
+        },
+        "command": "fill"
+      },
+      "response": {
+        "result": "done",
+        "reason": "focus=done; fill=done",
+        "data": {
+          "dispatchStarted": true,
+          "focus": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "sent": true,
+              "selected": {
+                "action": "focus",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              }
+            },
+            "command": "focus"
+          },
+          "fill": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "verificationTarget": {"ref": "e7"},
+              "sent": true,
+              "selected": {
+                "action": "fill",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              },
+              "verification": "matches"
+            },
+            "command": "fill"
+          },
+          "resolved": {
+            "method": "original",
+            "target": {
+              "ref": "e7",
+              "role": "textbox",
+              "name": "",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "command": "fill"
+      },
+      "name": "ordinary-write"
+    },
+    {
+      "expect": "not sent",
+      "request": {
+        "args": {
+          "ref": "e7",
+          "submit": true,
+          "value": "hello"
+        },
+        "command": "fill"
+      },
+      "response": {
+        "result": "not sent",
+        "reason": "focus=done; fill=done; submit=not sent",
+        "data": {
+          "dispatchStarted": false,
+          "submit": {
+            "result": "not sent",
+            "reason": "Original field is stale",
+            "data": {"sent": false},
+            "error": {
+              "code": "staleRef",
+              "message": "Original field is stale"
+            },
+            "command": "submit"
+          },
+          "focus": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "sent": false,
+              "selected": {
+                "action": "focus",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              }
+            },
+            "command": "focus"
+          },
+          "fill": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "verificationTarget": {"ref": "e7"},
+              "sent": false,
+              "selected": {
+                "action": "fill",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              },
+              "verification": "matches"
+            },
+            "command": "fill"
+          },
+          "resolved": {
+            "method": "original",
+            "target": {
+              "ref": "e7",
+              "role": "textbox",
+              "name": "",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "error": {
+          "code": "staleRef",
+          "message": "Original field is stale"
+        },
+        "command": "fill"
+      },
+      "name": "no-op-fill-submit-not-sent"
+    },
+    {
+      "expect": "done",
+      "request": {
+        "args": {
+          "ref": "e7",
+          "submit": true,
+          "value": "hello"
+        },
+        "command": "fill"
+      },
+      "response": {
+        "result": "done",
+        "reason": "focus=done; fill=done; submit=done",
+        "data": {
+          "dispatchStarted": true,
+          "submit": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "sent": true,
+              "selected": {
+                "action": "ime",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              }
+            },
+            "command": "submit"
+          },
+          "focus": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "sent": true,
+              "selected": {
+                "action": "focus",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              }
+            },
+            "command": "focus"
+          },
+          "fill": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "verificationTarget": {"ref": "e7"},
+              "sent": true,
+              "selected": {
+                "action": "fill",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              },
+              "verification": "matches"
+            },
+            "command": "fill"
+          },
+          "resolved": {
+            "method": "original",
+            "target": {
+              "ref": "e7",
+              "role": "textbox",
+              "name": "",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "command": "fill"
+      },
+      "name": "ime-done"
+    },
+    {
+      "expect": "done",
+      "request": {
+        "args": {
+          "ref": "e7",
+          "submit": true,
+          "value": "hello"
+        },
+        "command": "fill"
+      },
+      "response": {
+        "result": "done",
+        "reason": "focus=done; fill=done; submit=done",
+        "data": {
+          "dispatchStarted": true,
+          "submit": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "sent": true,
+              "selected": {
+                "action": "key",
+                "key": "enter",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              }
+            },
+            "command": "submit"
+          },
+          "focus": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "sent": true,
+              "selected": {
+                "action": "focus",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              }
+            },
+            "command": "focus"
+          },
+          "fill": {
+            "result": "done",
+            "reason": null,
+            "data": {
+              "verificationTarget": {"ref": "e7"},
+              "sent": true,
+              "selected": {
+                "action": "fill",
+                "target": {
+                  "ref": "e7",
+                  "role": "textbox",
+                  "name": "",
+                  "bounds": [
+                    0,
+                    0,
+                    100,
+                    100
+                  ],
+                  "windowId": 1
+                }
+              },
+              "verification": "matches"
+            },
+            "command": "fill"
+          },
+          "resolved": {
+            "method": "original",
+            "target": {
+              "ref": "e7",
+              "role": "textbox",
+              "name": "",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "command": "fill"
+      },
+      "name": "enter-done"
+    }
+  ],
   "actionResults": [
     {
       "request": {

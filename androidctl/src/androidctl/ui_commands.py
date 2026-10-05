@@ -424,6 +424,51 @@ def register(app: typer.Typer) -> None:
         )
 
     @app.command(
+        "fill",
+        cls=CliCommand,
+        help="Set text once; verify exposed text or report a password write receipt.",
+    )
+    def fill(
+        ctx: typer.Context,
+        values: Annotated[list[str], typer.Argument(metavar="[REF] TEXT")],
+        role: Role = None,
+        name: Name = None,
+        text: Text = None,
+        identifier: Identifier = None,
+        package: Package = None,
+        window: Window = None,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        settle_ms: Settle = DEFAULT_SETTLE_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
+        print_body: Print = False,
+        submit: Annotated[
+            bool,
+            typer.Option(
+                "--submit",
+                help="After text verification or a positive password write receipt, "
+                "submit the same focused target once.",
+            ),
+        ] = False,
+    ) -> None:
+        fields = selector(role, name, text, identifier)
+        if len(values) != (1 if fields else 2):
+            raise Fault(
+                "arguments", "Use fill REF TEXT or fill TEXT with selector flags"
+            )
+        args = target(None if fields else values[0], fields, scope(package, window))
+        run_action(
+            ctx,
+            "fill",
+            {**args, "value": values[-1], "submit": submit},
+            timeout,
+            settle_ms,
+            screenshot,
+            image_out,
+            print_body,
+        )
+
+    @app.command(
         "tap",
         cls=CliCommand,
         help="Tap using the session's latest qualified screenshot.",

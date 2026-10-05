@@ -4,21 +4,56 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class UiVerificationTest {
+    @Test fun submitPrefersImeAndOnlyUsesEnterForAKnownSingleLineField() {
+        val target = node("e7").put("editable", true).put("focused", true).put("isMultiLine", true)
+        UiSemantics.project(listOf(target))
+        target.put("actions", JSONArray(listOf("ime")))
+        assertEquals("ime", UiActions.submitSelection(target).getString("action"))
+        target.put("actions", JSONArray())
+        assertThrows(Rejected::class.java) { UiActions.submitSelection(target) }
+        target.remove("isMultiLine")
+        assertThrows(Rejected::class.java) { UiActions.submitSelection(target) }
+        target.put("isMultiLine", false)
+        val enter = UiActions.submitSelection(target)
+        assertEquals("key", enter.getString("action"))
+        assertEquals("enter", enter.getString("key"))
+        assertEquals("e7", enter.getJSONObject("target").getString("ref"))
+        target.put("focused", false)
+        assertThrows(Rejected::class.java) { UiActions.submitSelection(target) }
+    }
+
+    @Test fun valueFactsDistinguishFormattingHintsAndPrivateValues() {
+        val args = json("value" to "1234")
+        val node = json("password" to false, "showingHintText" to false, "text" to "1,234", "unavailable" to JSONArray())
+        assertEquals("differs", UiVerification.evaluate(UiAction.FILL, args, node).json().getString("verification"))
+        node.put("text", "1234")
+        assertEquals("matches", UiVerification.evaluate(UiAction.FILL, args, node).json().getString("verification"))
+        node.put("showingHintText", true)
+        assertEquals("matches", UiVerification.evaluate(UiAction.FILL, json("value" to ""), node).json().getString("verification"))
+        node.put("password", true)
+        val private = UiVerification.evaluate(UiAction.FILL, args, node).json()
+        assertEquals("unobservable", private.getString("verification"))
+        assertFalse(private.has("actualValue"))
+        node.put("password", false).getJSONArray("unavailable").put(json("field" to "text", "reason" to "truncated"))
+        assertEquals("unobservable", UiVerification.evaluate(UiAction.FILL, args, node).json().getString("verification"))
+    }
+
     @Test fun mixedAndUnknownCheckedFactsRemainDistinct() {
         val node = json("checked" to "mixed", "checkedModel" to "triState", "unavailable" to JSONArray())
-        assertEquals("differs", UiVerification.evaluate(UiAction.CHECK, node).json().getString("verification"))
-        assertEquals("differs", UiVerification.evaluate(UiAction.UNCHECK, node).json().getString("verification"))
-        assertEquals("mixed", UiVerification.evaluate(UiAction.CHECK, node).json().getString("actualValue"))
+        assertEquals("differs", UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json().getString("verification"))
+        assertEquals("differs", UiVerification.evaluate(UiAction.UNCHECK, JSONObject(), node).json().getString("verification"))
+        assertEquals("mixed", UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json().getString("actualValue"))
         node.put("checked", "true")
-        assertEquals("matches", UiVerification.evaluate(UiAction.CHECK, node).json().getString("verification"))
-        assertEquals("true", UiVerification.evaluate(UiAction.CHECK, node).json().getString("actualValue"))
+        assertEquals("matches", UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json().getString("verification"))
+        assertEquals("true", UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json().getString("actualValue"))
         node.put("checked", "false")
-        assertEquals("matches", UiVerification.evaluate(UiAction.UNCHECK, node).json().getString("verification"))
+        assertEquals("matches", UiVerification.evaluate(UiAction.UNCHECK, JSONObject(), node).json().getString("verification"))
         node.put("checked", "97")
-        val facts = UiVerification.evaluate(UiAction.CHECK, node).json()
+        val facts = UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json()
         assertEquals("unobservable", facts.getString("verification"))
         assertFalse(facts.has("actualValue"))
     }
@@ -112,11 +147,11 @@ class UiVerificationTest {
 
     @Test fun checkedMetadataKeepsPlatformModelAndNullableDescription() {
         val node = json("checked" to "true", "checkedModel" to "binary", "stateDescription" to null, "unavailable" to JSONArray())
-        val known = UiVerification.evaluate(UiAction.CHECK, node).json()
+        val known = UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json()
         assertEquals("binary", known.get("checkedModel"))
         assertEquals(JSONObject.NULL, known.get("stateDescription"))
         node.getJSONArray("unavailable").put(json("field" to "stateDescription"))
-        val unavailable = UiVerification.evaluate(UiAction.CHECK, node).json()
+        val unavailable = UiVerification.evaluate(UiAction.CHECK, JSONObject(), node).json()
         assertFalse(unavailable.has("stateDescription"))
         assertEquals("matches", unavailable.getString("verification"))
     }

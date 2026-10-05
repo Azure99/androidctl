@@ -641,6 +641,67 @@ def test_malformed_observation_preserves_known_action_and_explicit_exit(
     assert result.exit_code() == 3
 
 
+@pytest.mark.parametrize("selector", [False, True])
+def test_fill_pi_omits_value_but_preserves_observed_body(
+    tmp_path, monkeypatch, capsys, selector
+):
+    monkeypatch.chdir(tmp_path)
+    value = "-5 secret value"
+    tree = {
+        "scope": {"window": 1},
+        "windows": [{"id": 1}],
+        "keyboard": "hidden",
+        "nodes": [
+            {
+                "ref": "e1",
+                "refAvailable": True,
+                "parent": None,
+                "visible": True,
+                "editable": True,
+                "text": value,
+                "view": {
+                    "role": "textbox",
+                    "name": "输入?>",
+                    "nameConsumed": False,
+                    "detail": "",
+                    "nameComplete": True,
+                    "detailComplete": True,
+                },
+                "row": {"complete": True},
+            }
+        ],
+    }
+    calls = []
+
+    async def call(self, command, args):
+        calls.append((command, args.copy()))
+        return completed(command, {"capture": "test"})
+
+    async def blob(self, capture, kind):
+        return json.dumps(tree).encode(), {}
+
+    monkeypatch.setattr(ui_client.UiClient, "call", call)
+    monkeypatch.setattr(ui_client.UiClient, "blob", blob)
+    monkeypatch.setattr(ui_client.UiClient, "action", call)
+    args = (
+        ["fill", "--name", "输入?>", "--submit", "--", value]
+        if selector
+        else ["fill", "e1", "--", value]
+    )
+    result = CliRunner().invoke(cli.app, args)
+    assert result.exit_code == 0, result.output
+    assert calls[0][1]["value"] == value
+    path = next((tmp_path / ".androidctl").rglob("*.xml"))
+    saved = path.read_text(encoding="utf-8")
+    pi = saved.split("?>", 1)[0]
+    assert value not in pi
+    assert '"value"' not in pi
+    if selector:
+        assert xml_metadata(saved)["args"]["selector"]["name"] == "输入?>"
+    assert "<screen" not in result.output
+    assert ET.fromstring(saved).find("textbox").get("value") == value
+
+
 @pytest.mark.parametrize("command", ["snapshot", "screenshot"])
 @pytest.mark.parametrize(
     ("original", "expected"),
