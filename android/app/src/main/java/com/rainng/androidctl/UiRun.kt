@@ -49,6 +49,10 @@ internal class UiRun(
         val choice = selected
         if (choice != null) {
             data.put("selected", copy(choice))
+            val target = choice.optJSONObject("target")
+            if (target != null && !data.has("verificationTarget") && choice.getString("action") in listOf("check", "uncheck")) {
+                data.put("verificationTarget", json("ref" to target.getString("ref")))
+            }
         }
         return value
     }

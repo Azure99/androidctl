@@ -39,14 +39,29 @@ class UiActionTest {
         assertEquals("target is disabled", UiAction.CHECK.notReadyReason(target))
         target.put("enabled", true)
         assertEquals("target does not expose the click action", UiAction.CHECK.notReadyReason(target))
+        target.put("actions", JSONArray(listOf("click")))
+        assertEquals("target is not checkable", UiAction.CHECK.notReadyReason(target))
+        target.put("checkable", true)
+        assertNull(UiAction.CHECK.notReadyReason(target))
+        assertTrue(UiAction.CHECK.ready(target))
+        target.put("actions", JSONArray()).put("className", "android.widget.RadioButton")
+        assertNull(UiAction.UNCHECK.notReadyReason(target))
     }
 
     @Test fun matchingReadableValuesCanSkipDisabledInputButCannotUsePasswordMasks() {
         val target = node("e1", "value").put("editable", true).put("enabled", false)
+        target.put("checkable", true).put("checked", "true")
+        assertTrue(UiAction.CHECK.alreadySatisfied(target))
+        assertFalse(UiAction.UNCHECK.alreadySatisfied(target))
+        target.put("checked", "false")
+        assertTrue(UiAction.UNCHECK.alreadySatisfied(target))
+        target.put("checkable", false)
+        assertFalse(UiAction.UNCHECK.alreadySatisfied(target))
         target.put("focused", true)
         assertTrue(UiAction.FOCUS.alreadySatisfied(target))
         target.put("visible", false)
         assertFalse(UiAction.FOCUS.alreadySatisfied(target))
+        assertFalse(UiAction.CHECK.alreadySatisfied(target))
     }
 
     @Test fun inputFocusAdmissionRequiresVisibleEnabledAndFocusedWithoutAnEditableOrActionRequirement() {

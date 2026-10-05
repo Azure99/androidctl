@@ -16,7 +16,7 @@ accepts a local `--json` option.
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
-| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
+| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `check`, `uncheck`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
@@ -226,7 +226,7 @@ continuing, rather than deleting locks or assuming automatic takeover.
 | `done` | 0 | The command's stated condition completed, possibly only platform dispatch. |
 | `failed` | 1 | A known failure, unmet condition or known cancellation; partial effects can remain. |
 | `not sent` | 2 | Requested input was not dispatched; transfer admission also requires no execution/publication effects. |
-| `UNKNOWN` | 3 | Dispatch or execution receipt is uncertain. |
+| `UNKNOWN` | 3 | Dispatch, execution receipt or required verification is uncertain. |
 | `still running` | 4 | A shell/transfer job has no final result yet, or `daemon stop` has not confirmed shutdown. Query or cancel the original job ID, or recheck the daemon with `daemon status`, respectively. |
 
 Cleanup failure, uncertainty or signal failure overrides exit to 3 while retaining
@@ -254,14 +254,15 @@ waiting out the budget supplies no missing proof. Reliable business success
 permits continuing without this capture check.
 
 Text headings use the same fixed command path as JSON `command`.
-Ordinary UI text results occupy one line with available action facts, full
-`snapshotPath` / `imagePath`, image dimensions and delivery errors or warnings.
-String values use JSON quoting; embedded newlines stay escaped on that line.
-Done results omit `dispatchStarted=true`; explicit false and dispatch facts on
-non-done results remain visible. Missing dispatch facts on non-done results
-show unknown.
-A different existing ref or selected action expands Requested, Resolved and Selected
-lines; refreshed names/bounds and ordinary selector resolution keep one line.
+Ordinary UI text results occupy one line with available action and verification
+facts, full `snapshotPath` / `imagePath`, image dimensions and delivery errors or
+warnings. String values use JSON quoting; embedded newlines stay escaped on that
+line. Done results omit `dispatchStarted=true`;
+explicit false and dispatch facts on non-done results remain visible. Missing
+dispatch facts on non-done results show unknown.
+A different existing ref or selected action expands Requested, Resolved, Selected
+and Verification target lines;
+refreshed names/bounds and ordinary selector resolution keep one line.
 Observed change uses `changed` / `semantic observation unchanged`, or
 `change=unknown` with its available reason; JSON retains comparison metadata.
 Missing facts are not inferred. `--print` then echoes the saved body. App lists and
@@ -282,6 +283,7 @@ Nested action and job facts keep their original meanings.
 | `data.requested`, `resolved` | Original target/action and the resolved target. `resolved.method` is original for a published ref or selector for selector discovery; resolution does not prove admission or dispatch. |
 | `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. Global actions use target=null; key REF names its focus-admission target. |
 | `data.dispatchStarted`, `attempts` | Whether the command entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
+| `data.verificationTarget`, `verification` | The object checked by a value operation, and matches/differs/unobservable. Naming an object does not prove successful verification. |
 | `data.platform` | For semantic input receipts, `accepted` is the synchronous platform call's return value, `callback` is the platform action-completion callback value (null when unavailable), and `acceptedError` is an exception while obtaining acceptance. A positive receipt does not prove App business completion. |
 | `data.segments[]`, `cancel` | Coordinate input has no `data.platform`. Each event reports `returned` or `error` in `segments[]`; after UNKNOWN, the CANCEL attempt reports `accepted` or `error` in `cancel`. |
 | `data.job`, `stopRequested` | Original job ID; `stopRequested` records a transfer cancellation request, which does not prove completion. [Jobs](#jobs-and-files) |
@@ -303,14 +305,14 @@ execution limits and `--wait` for shell/transfer or `job get` waiting.
 | --- | --- |
 | Ordinary UI | `5s`; explicit `--timeout` accepts `1ms`–`60s`. |
 | Standalone screenshot | `15s`; explicit timeout takes precedence. |
-| Action settling | `--settle` accepts `0`–`60s`, default cap `1500ms`, within the original request budget. |
+| Action settling | `--settle` accepts `0`–`60s`, default cap `1500ms`; check/uncheck verification keeps the request budget. |
 | Ordinary shell execution / initial wait | 10000 ms each. |
 | `shell --background` execution / initial wait | 600000 ms / 0 ms. |
 | Transfer execution / initial wait | 600000 ms / 10000 ms. |
 | Shell or transfer execution | `--run` accepts `1ms`–`10m`. |
 | Shell/transfer and `job get` CLI wait | `--wait` accepts `0`–`60s`; expiry does not cancel execution. `job get` defaults to `0`. |
 
-Connection, queueing, dispatch, callback, observation and attachment
+Connection, queueing, dispatch, callback, verification, observation and attachment
 delivery consume one remaining request budget, without restarting it at each step.
 An action's screenshot does not receive an extra 15 seconds. Requests return when
 complete. This budget is not a hard wall-clock CLI limit: local validation,
@@ -363,8 +365,9 @@ with `observationWarning` for partial sampling or completeness gaps.
 Reported unavailable fields remain in raw JSON. An empty `actions=""` means no
 exposed actions.
 
-Raw `checked` uses `"false"`, `"true"` or `"mixed"`. Unknown raw checked integers
-remain decimal strings.
+Raw `checked` uses `"false"`, `"true"` or `"mixed"`; check/uncheck verification
+reports the same strings in `actualValue` when readable. Unknown raw checked
+integers remain decimal strings.
 Raw `checkedModel` identifies the node's binary or tri-state platform reading;
 XML omits the checkable node's reported `triState` default below.
 Window `type` uses application, inputMethod, system, accessibilityOverlay,
@@ -432,7 +435,7 @@ connection's current default-display inventory, `absentWindow` identifies it and
 observation falls back to the default active scope. If that capture fails, the
 absence fact and error remain, and the old tree and attachments are unavailable.
 This does not prove the window
-closed or was destroyed. It neither repeats input nor redirects IME.
+closed or was destroyed. It neither repeats input nor redirects verification/IME.
 
 Refs resolve in the latest snapshot while node identity remains.
 `ref-unavailable` nodes have no usable ref. Filters (`--role`, `--name`, `--text`, `--id`) combine on one original
@@ -468,6 +471,33 @@ consecutive complete, identical, non-loading samples. At that stop, `settle` is
 `unsettled` and `observedChange` is `unknown`.
 `samplingStopped` means sampling stopped before the observation deadline because
 another sample was not expected to fit; the delivered fact is not a later recheck.
+
+Check/uncheck require the original ref and full identity before dispatch.
+Check/uncheck also retain the verified control's ref and identity.
+Losing the required identity ends UNKNOWN/unobservable even if another target
+shows the wanted value. Check/uncheck verification can use the remaining request budget.
+
+Dispatched check/uncheck verification reads the verification target's retained ref in each
+sample until that identity is lost. Its `actualValue`, `checkedModel` and
+`stateDescription`, when reported, belong to the sample used for verification.
+A matching no-op still uses the admission fresh read. Later collection failure
+can make verification unobservable and remove an earlier actualValue.
+If identity loss leaves a `rootUnavailable` tree in the default scope and ordinary
+settle and request time remain, one final observation is attempted. The original
+UNKNOWN and `verificationTarget` stay fixed; the delivered tree can show a later
+window.
+
+Already matching readable values require no input, even on disabled controls.
+Preserve the App's checked model/state description;
+platform binary values do not imply a business tri-state. If the control has no
+direct click action, check/uncheck can click its qualified collection row once and
+verify the row's unique checkable. A row label can be the requested target; resolved
+keeps that target, selected identifies the row click, and verificationTarget names
+the control. The row and control need usable refs and the row membership must be
+complete. A matching fresh control sends no input. The click may open details
+without changing the value; failed/UNKNOWN cannot undo that effect, and no second
+click or replacement target is attempted. An unchecked radio already
+meets uncheck; change a selected radio by selecting another option.
 
 Standalone `ime REF` requires the original field already focused and
 requests its exposed IME action without an automatic focus step. A multiline IME

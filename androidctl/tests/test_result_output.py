@@ -525,6 +525,22 @@ def test_ui_text_omits_only_redundant_known_dispatch(capsys, state, data, expect
     assert result.wire() == original
 
 
+def test_action_roles_expand_only_existing_ref_or_action_differences(capsys):
+    data = {
+        "requested": {"target": {"ref": "e7"}, "action": "check"},
+        "resolved": {
+            "method": "original",
+            "target": {"ref": "e7", "name": "Updated", "bounds": [1, 2, 3, 4]},
+        },
+        "selected": {"target": {"ref": "e7"}, "action": "check"},
+        "verificationTarget": {"ref": "e7"},
+        "dispatchStarted": True,
+        "attempts": 1,
+    }
+    ui_client.result_line(completed("check", data), "check", Output())
+    assert capsys.readouterr().out == "check: done\n"
+
+
 @pytest.mark.parametrize("state", ["changed", "unchanged", "unknown"])
 def test_ui_change_text_uses_the_observed_state_without_copying_metadata(capsys, state):
     result = completed(

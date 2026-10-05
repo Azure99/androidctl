@@ -21,6 +21,8 @@ internal object RpcMethods {
         UI_READ_ONLY + SYSTEM_ACTIONS +
             setOf(
                 "click",
+                "check",
+                "uncheck",
                 "focus",
                 "tap",
                 "swipe",

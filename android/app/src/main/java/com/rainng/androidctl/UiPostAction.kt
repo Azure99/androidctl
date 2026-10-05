@@ -5,9 +5,10 @@ import org.json.JSONObject
 
 internal class PostActionObservation(
     val facts: JSONObject,
+    val verification: Verification?,
 ) {
     fun appliedTo(result: JSONObject): JSONObject {
-        val answer = result
+        val answer = verification?.let { UiVerification.verifiedResult(result, it) } ?: result
         val data = answer.getJSONObject("data")
         for (field in facts.keys()) data.put(field, facts.get(field))
         return answer
@@ -31,11 +32,13 @@ internal class UiPostAction(
     fun settle(
         run: UiRun,
         before: JSONObject?,
+        verify: (() -> Verification)? = null,
     ): PostActionObservation {
         val start = SystemClock.elapsedRealtime()
         val settleMs = run.args.getLong("settleMs").coerceAtLeast(0)
-        val until = minOf(run.budget.deadline, start + settleMs)
+        val until = if (verify != null) run.budget.deadline else minOf(run.budget.deadline, start + settleMs)
         val samples = SettledSamples(before)
+        var verified = Verification()
         var previousWork = 0L
         var stoppedEarly = false
         if (run.absentWindow != null) ui.snapshots.tree?.let(samples::accept)
@@ -46,13 +49,20 @@ internal class UiPostAction(
                 stoppedEarly = true
                 break
             }
-            postSample(run, before, until, samples)
+            verified = postSample(run, before, until, samples, verify)
+            if (verified.terminal) {
+                // Keep the terminal verification; the new sample only supplies the delivered tree.
+                observeAfterRootLoss(run, before, minOf(run.budget.deadline, start + settleMs), samples)
+                break
+            }
             previousWork = SystemClock.elapsedRealtime() - started
             val finished =
                 samples.stableWithoutBaseline() ||
-                    samples.classification() == Settlement.CHANGED
+                    samples.classification() == Settlement.CHANGED ||
+                    (verify != null && SystemClock.elapsedRealtime() >= start + settleMs)
+            val complete = verify == null || verified.state == VerificationState.MATCHES
             if (run.absentWindow != null) break
-            if (finished) break
+            if (finished && complete) break
             run.budget.pause(until)
         }
         val finalObservation =
@@ -77,7 +87,25 @@ internal class UiPostAction(
                     },
                 )
         }
-        return PostActionObservation(data)
+        return PostActionObservation(data, verified.takeIf { verify != null })
+    }
+
+    private fun observeAfterRootLoss(
+        run: UiRun,
+        before: JSONObject?,
+        until: Long,
+        samples: SettledSamples,
+    ) {
+        val scope = run.args.optJSONObject("scope")
+        if (scope != null && scope.length() != 0) return
+        val rootUnavailable =
+            ui.snapshots.tree
+                ?.getJSONArray("missing")
+                ?.objects()
+                ?.any { it.text("reason") == "rootUnavailable" } == true
+        if (!rootUnavailable || SystemClock.elapsedRealtime() >= until) return
+        // Do not reuse the failed root-read duration to admit this one observation attempt.
+        postSample(run, before, until, samples, verify = null)
     }
 
     private fun postSample(
@@ -85,13 +113,19 @@ internal class UiPostAction(
         before: JSONObject?,
         until: Long,
         samples: SettledSamples,
-    ) {
+        verify: (() -> Verification)?,
+    ): Verification =
         try {
             samples.accept(ui.postCapture(run, before, until))
+            if (verify != null && run.absentWindow == null) {
+                verify()
+            } else {
+                Verification()
+            }
         } catch (error: Exception) {
             samples.missing(message(error))
+            Verification()
         }
-    }
 }
 
 internal class SettledSamples(

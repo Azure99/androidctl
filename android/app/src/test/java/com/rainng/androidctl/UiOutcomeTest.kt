@@ -192,6 +192,17 @@ class UiOutcomeTest {
         val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
         val original = node("e7", "Search")
         UiSemantics.project(listOf(original))
+        val unsent = UiRun("check", lease, json("ref" to "e7"), UiBudget(5000) { 0 })
+        unsent.resolve("original", original)
+        unsent.select("check", original)
+        val blocked = unsent.response(expired = true).getJSONObject("data")
+        assertFalse(blocked.has("requested"))
+        assertEquals("original", blocked.getJSONObject("resolved").getString("method"))
+        assertEquals("check", blocked.getJSONObject("selected").getString("action"))
+        assertEquals("e7", blocked.getJSONObject("verificationTarget").getString("ref"))
+        assertFalse(blocked.getBoolean("dispatchStarted"))
+        assertFalse(blocked.has("sent"))
+
         val pending = UiRun("key", lease, json("ref" to "e7", "key" to "enter"), UiBudget(5000) { 0 })
         pending.resolve("original", original)
         pending.select("key", original, "enter")
@@ -202,6 +213,47 @@ class UiOutcomeTest {
         assertTrue(response.getJSONObject("data").getBoolean("dispatchStarted"))
         assertFalse(response.getJSONObject("data").has("sent"))
         assertTrue(response.getJSONObject("data").has("snapshotError"))
+    }
+
+    @Test fun rowVerificationKeepsItsOwnControlBeforeSelectionAndAcrossDispatchExpiry() {
+        val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
+        val label = node("label", "Option")
+        val row = node("row", "Option")
+        UiSemantics.project(listOf(label, row))
+        for (sent in listOf(false, true)) {
+            val run = UiRun("check", lease, json("ref" to "label"), UiBudget(5000) { 0 })
+            run.resolve("original", label)
+            run.select("check", label)
+            val blocked =
+                outcome(
+                    "check",
+                    Outcome.NOT_SENT,
+                    "Suggested row has not been dispatched",
+                    json(
+                        "verificationTarget" to json("ref" to "control"),
+                    ),
+                )
+            run.remember(blocked)
+            assertEquals(
+                "control",
+                run
+                    .failure(Rejected("snapshotBudget", "Sampling ended"))
+                    .getJSONObject("data")
+                    .getJSONObject("verificationTarget")
+                    .getString("ref"),
+            )
+            run.select("click", row)
+            if (sent) run.begin(copy(blocked).put("result", Outcome.UNKNOWN).put("reason", "Suggested row click pending"))
+            val response = run.response(expired = true)
+            assertEquals(if (sent) Outcome.UNKNOWN else Outcome.NOT_SENT, response.getString("result"))
+            val data = response.getJSONObject("data")
+            assertEquals("label", data.getJSONObject("resolved").getJSONObject("target").getString("ref"))
+            assertEquals("row", data.getJSONObject("selected").getJSONObject("target").getString("ref"))
+            assertEquals("click", data.getJSONObject("selected").getString("action"))
+            assertEquals("control", data.getJSONObject("verificationTarget").getString("ref"))
+            assertFalse(data.has("sent"))
+            assertEquals(sent, data.getBoolean("dispatchStarted"))
+        }
     }
 
     @Test fun globalAndCoordinateActionsKeepNullNodeTargetsAndReadOnlyResultsOmitActionFacts() {

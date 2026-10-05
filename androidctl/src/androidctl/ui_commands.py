@@ -59,7 +59,9 @@ Settle = Annotated[
         callback=wait_duration,
         metavar="DURATION",
         show_default="1500ms",
-        help="Ordinary observation cap (0–60s) within --timeout.",
+        help="Ordinary observation cap (0–60s) within --timeout; check/uncheck "
+        "verification can continue beyond --settle within the remaining "
+        "request budget.",
     ),
 ]
 Screenshot = Annotated[
@@ -298,6 +300,8 @@ def register(app: typer.Typer) -> None:
     add_action(
         "click", "Request the target's default action once; this is not a touch."
     )
+    add_action("check", "Check a checkable target and verify its exposed state.")
+    add_action("uncheck", "Uncheck a checkable target and verify its exposed state.")
     add_action("focus", "Request focus on the target once.")
     add_action("long-click", "Request the target's long-click action once.")
     add_action("expand", "Request the target's exposed expand action once.")

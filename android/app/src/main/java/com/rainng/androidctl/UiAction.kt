@@ -26,6 +26,7 @@ internal enum class UiAction(
     ;
 
     val changesChecked: Boolean get() = this == CHECK || this == UNCHECK
+    val verifiesValue: Boolean get() = changesChecked
     val platformName: String get() = if (changesChecked) CLICK.wire else wire
 
     fun ready(node: JSONObject): Boolean = notReadyReason(node) == null
@@ -35,19 +36,27 @@ internal enum class UiAction(
         if (!node.getBoolean("enabled")) return "target is disabled"
         if (!available(node)) return "target does not expose the $platformName action"
         if (this == IME && !UiSelector.focused(node)) return "target is not input-focused"
+        if (changesChecked && !node.optBoolean("checkable")) return "target is not checkable"
         return null
     }
 
     fun alreadySatisfied(node: JSONObject): Boolean {
         if (!node.getBoolean("visible")) return false
         if (this == FOCUS) return UiSelector.focused(node)
-        return false
+        val valueType =
+            when (this) {
+                CHECK, UNCHECK -> node.getBoolean("checkable")
+                else -> false
+            }
+        return valueType && UiVerification.evaluate(this, node).state == VerificationState.MATCHES
     }
 
     private fun available(node: JSONObject): Boolean {
         if (this == FOCUS && UiSelector.focused(node)) return true
+        val radio = UiSemantics.role(node) == Role.RADIO
         val actions = node.getJSONArray("actions")
-        return (0 until actions.length()).any { actions.getString(it) == platformName }
+        return (this == UNCHECK && radio) ||
+            (0 until actions.length()).any { actions.getString(it) == platformName }
     }
 
     companion object {

@@ -6,6 +6,7 @@ import org.json.JSONObject
 
 internal data class ActionAdmission(
     val fresh: JSONObject,
+    val rowSelection: RowSelection? = null,
 )
 
 // UI actions share original-target guards and one request budget.
@@ -32,9 +33,15 @@ internal class UiActions(
             val current = admitted.fresh
             val reported = copy(current).put("ref", original.getString("ref"))
             report(reported)
+            val focused = action == UiAction.FOCUS && UiSelector.focused(current)
             when {
-                action.alreadySatisfied(current) -> unchanged(run, "Target is already focused")
-                else -> sendAction(run, node, action)
+                action == UiAction.UNCHECK && UiSemantics.role(current) == Role.RADIO ->
+                    radioUncheck(run, current)
+                action.alreadySatisfied(current) ->
+                    unchanged(run, current, action, if (focused) "Target is already focused" else "Value already matches")
+                action.changesChecked && !action.ready(current) ->
+                    rowCheck(run, node, original, action, requireNotNull(admitted.rowSelection))
+                else -> sendAction(run, node, original, action)
             }
         }
     }
@@ -115,22 +122,40 @@ internal class UiActions(
         }
     }
 
+    private fun radioUncheck(
+        run: UiRun,
+        current: JSONObject,
+    ): JSONObject {
+        UiAdvice.requireUncheckedRadio(current)
+        return unchanged(run, current, UiAction.UNCHECK, "Radio is already unchecked")
+    }
+
     private fun unchanged(
         run: UiRun,
+        current: JSONObject,
+        action: UiAction,
         reason: String,
     ): JSONObject =
         outcome(
             run.command,
             reason = reason,
             data =
-                json("settle" to "unchanged"),
+                (if (action.verifiesValue) UiVerification.evaluate(action, current).json() else JSONObject())
+                    .put("settle", "unchanged"),
         )
 
     private fun sendAction(
         run: UiRun,
         node: AccessibilityNodeInfo,
+        original: JSONObject,
         action: UiAction,
     ): JSONObject {
+        val verification =
+            if (action.verifiesValue) {
+                { verifyCheckedValue(original, action) }
+            } else {
+                null
+            }
         val before = ui.snapshots.cached()
         val pending =
             outcome(
@@ -139,11 +164,96 @@ internal class UiActions(
                 "Platform action result pending",
             )
         val result = invoke(run, node, action, pending).put("command", run.command)
-        run.remember(result)
-        val observed = ui.postAction.settle(run, before)
+        val state = result.getString("result")
+        run.remember(
+            if (state == Outcome.DONE && verification != null) {
+                copy(result).put("result", Outcome.UNKNOWN).put("reason", "Value verification pending")
+            } else {
+                result
+            },
+        )
+        val observed = ui.postAction.settle(run, before, if (state == Outcome.DONE) verification else null)
         val answer = observed.appliedTo(result)
         run.remember(answer)
         return answer
+    }
+
+    private fun rowCheck(
+        run: UiRun,
+        originalNode: AccessibilityNodeInfo,
+        original: JSONObject,
+        action: UiAction,
+        selection: RowSelection,
+    ): JSONObject {
+        val row = selection.row
+        val control = selection.verificationControl
+        val data = json("verificationTarget" to json("ref" to control.getString("ref")))
+        run.select("click", row)
+        run.remember(outcome(run.command, Outcome.NOT_SENT, "Suggested row has not been dispatched", data))
+        var controlNode: AccessibilityNodeInfo? = null
+        var rowNode: AccessibilityNodeInfo? = null
+        try {
+            val checkNode = AccessibilityNodeInfo.obtain(ui.snapshots.target(control.getString("ref")).handle)
+            controlNode = checkNode
+            checkedNoop(run, readOriginal(run, checkNode, control), action, data)?.let { return it }
+            val clickNode = AccessibilityNodeInfo.obtain(ui.snapshots.target(row.getString("ref")).handle)
+            rowNode = clickNode
+            val currentRow = awaitAction(run, clickNode, row, UiAction.CLICK).fresh
+            run.select("click", copy(currentRow).put("ref", row.getString("ref")))
+            val sameControl = original.getString("ref") == control.getString("ref")
+            val freshTarget =
+                if (original.getString("ref") == row.getString("ref")) currentRow else readOriginal(run, originalNode, original)
+            val freshControl = if (sameControl) freshTarget else readOriginal(run, checkNode, control)
+            run.resolve(resolutionMethod(run), copy(freshTarget).put("ref", original.getString("ref")))
+            checkedNoop(run, freshControl, action, data)?.let { return it }
+            val before = ui.snapshots.cached()
+            val pending = outcome(run.command, Outcome.UNKNOWN, "Suggested row click pending", copy(data))
+            val result = invoke(run, clickNode, UiAction.CLICK, pending, data).put("command", run.command)
+            val accepted = result.getString("result") == Outcome.DONE
+            run.remember(
+                if (accepted) copy(result).put("result", Outcome.UNKNOWN).put("reason", "Checked-state verification pending") else result,
+            )
+            val observed = ui.postAction.settle(run, before, if (accepted) ({ verifyCheckedValue(control, action) }) else null)
+            val answer = observed.appliedTo(result)
+            run.remember(answer)
+            return answer
+        } finally {
+            rowNode?.recycle()
+            controlNode?.recycle()
+        }
+    }
+
+    private fun checkedNoop(
+        run: UiRun,
+        current: JSONObject,
+        action: UiAction,
+        data: JSONObject,
+    ): JSONObject? {
+        val result =
+            when {
+                action == UiAction.UNCHECK && UiSemantics.role(current) == Role.RADIO -> radioUncheck(run, current)
+                action.alreadySatisfied(current) -> unchanged(run, current, action, "Row control already matches")
+                else -> null
+            }
+        if (result == null) {
+            UiAdvice.rowControlNotReadyReason(current)?.let { condition ->
+                throw Rejected("notReady", "The suggested row's control is no longer ready for checked-state input: $condition")
+            }
+        }
+        return result?.apply { for (field in data.keys()) getJSONObject("data").put(field, data.get(field)) }
+    }
+
+    private fun verifyCheckedValue(
+        original: JSONObject,
+        action: UiAction,
+    ): Verification {
+        val retained =
+            ui.snapshots.targetOrNull(original.getString("ref"))
+                ?: return Verification(
+                    facts = json("verificationError" to "Original ref is not retained in the current observation"),
+                    terminal = true,
+                )
+        return UiVerification.evaluate(action, retained.facts)
     }
 
     internal fun invoke(
@@ -151,12 +261,13 @@ internal class UiActions(
         node: AccessibilityNodeInfo,
         action: UiAction,
         pending: JSONObject,
+        data: JSONObject = JSONObject(),
     ): JSONObject {
         val callback =
             ui.platform(run).action(node, action.platformId, null, run.budget) {
                 ui.dispatch(run, pending)
             }
-        return outcome(action.wire, callback.classify(), data = json("platform" to callback.json()))
+        return outcome(action.wire, callback.classify(), data = copy(data).put("platform", callback.json()))
     }
 
     private fun selected(run: UiRun): UiTarget {
@@ -236,6 +347,11 @@ internal class UiActions(
             val fresh = readOriginal(run, node, original)
             if (action.alreadySatisfied(fresh)) return ActionAdmission(fresh)
             val condition = action.notReadyReason(fresh) ?: return ActionAdmission(fresh)
+            if (action.changesChecked) {
+                captureSuggestedRow(run, original, action)?.let { selection ->
+                    return ActionAdmission(readOriginal(run, node, original), selection)
+                }
+            }
             reason = "Original target is not ready for ${action.wire}: $condition"
             run.budget.pause()
         }
@@ -255,6 +371,16 @@ internal class UiActions(
             run.budget.pause()
         }
         throw Rejected("notReady", reason)
+    }
+
+    private fun captureSuggestedRow(
+        run: UiRun,
+        original: JSONObject,
+        action: UiAction,
+    ): RowSelection? {
+        val tree = ui.capture(run)
+        val retained = ui.snapshots.target(original.getString("ref"))
+        return UiAdvice.suggestedRow(tree, retained.facts, action)
     }
 
     private fun activeWindow(

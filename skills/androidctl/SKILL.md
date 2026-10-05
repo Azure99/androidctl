@@ -112,6 +112,12 @@ Standalone `ime REF` requests the exposed IME action on the already-focused
 original field; it does not focus the field. `key ... REF` also requires that
 field already focused; a key without REF is global.
 
+`check`/`uncheck` verify the exposed value and send no input when it already
+matches. They may click a suggested collection row when the control lacks a
+direct click; verify the resulting control value. Change a selected radio by
+choosing another option. Interpret `checked` with `checkedModel` and
+`stateDescription`, keeping missing facts unknown.
+
 `expand`, `collapse` and `dismiss` request those exposed actions. There is no
 automatic coordinate fallback. For navigation,
 use `apps`, `open`, `back`, `home`, `recents`, `notifications` and `wake`.
@@ -122,7 +128,7 @@ Verify the destination; Recents can toggle and wake does not unlock credentials.
 | Result | Next action |
 | --- | --- |
 | `done` | Verify the business outcome. |
-| `failed` | Read the reason and retained registration or confirmation facts. |
+| `failed` | Read the reason and actual value. |
 | `not sent` | Correct the reported problem before a new request. |
 | `UNKNOWN` | Preserve the result and diagnose before further changes. |
 | `still running` | For a shell/transfer job, query or cancel its original ID. For `daemon stop`, recheck with `daemon status`. |
@@ -134,7 +140,8 @@ Use `--json` for the [complete result fields](reference.md#json-field-guide).
 
 `changed`, `unchanged`, `loading` and `unsettled` describe observations, not
 business success. `--timeout` sets the request budget; `--settle` limits ordinary
-observation waiting. A returned sample may precede later App effects.
+observation waiting. Check/uncheck can continue verifying beyond `--settle`, within
+the remaining request budget. A returned sample may precede later App effects.
 See [budgets and duration formats](reference.md#results-and-budgets).
 
 After a `done` semantic `click`, check the intended result and any pending App

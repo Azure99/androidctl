@@ -136,6 +136,7 @@ def result_line(
                 parts.append("changeReason=" + compact(change["reason"]))
         else:
             parts.append(change["state"])
+    parts.extend(value_facts(result.data))
     completeness = result.data.get("snapshotCompleteness", {})
     gaps = ["partial"] if completeness.get("partial") else []
     for field, name in (
@@ -173,6 +174,20 @@ def compact(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def value_facts(data: dict[str, Any]) -> list[str]:
+    return [
+        f"{field}=" + compact(data[field])
+        for field in (
+            "verification",
+            "actualValue",
+            "checkedModel",
+            "stateDescription",
+            "verificationError",
+        )
+        if field in data
+    ]
+
+
 def selection_lines(
     data: dict[str, Any],
 ) -> list[str]:
@@ -207,7 +222,10 @@ def selection_lines(
         lines.append("Resolved: " + compact(resolved))
     for step, facts, _ in choices:
         prefix = step + " " if step else ""
-        for field, title in (("selected", "Selected"),):
+        for field, title in (
+            ("selected", "Selected"),
+            ("verificationTarget", "Verification target"),
+        ):
             if field in facts:
                 lines.append(prefix + title + ": " + compact(facts[field]))
     return lines
