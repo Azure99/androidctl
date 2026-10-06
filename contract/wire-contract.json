@@ -810,6 +810,58 @@
         "command": "tap"
       },
       "name": "coordinate-pending-at-expiry"
+    },
+    {
+      "request": {
+        "args": {
+          "ref": "e30",
+          "direction": "down"
+        },
+        "command": "scroll"
+      },
+      "response": {
+        "result": "not sent",
+        "reason": "Request budget exhausted",
+        "data": {
+          "dispatchStarted": false,
+          "selected": {
+            "action": "page-down",
+            "target": {
+              "ref": "e30",
+              "role": "scroll",
+              "name": "Results",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          },
+          "resolved": {
+            "method": "original",
+            "target": {
+              "ref": "e30",
+              "role": "scroll",
+              "name": "Results",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "error": {
+          "code": "timeout",
+          "message": "Request budget exhausted"
+        },
+        "command": "scroll"
+      },
+      "name": "scroll-page-not-sent"
     }
   ],
   "entityForms": [

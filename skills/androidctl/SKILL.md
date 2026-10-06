@@ -134,6 +134,9 @@ direct click; verify the resulting control value. Change a selected radio by
 choosing another option. Interpret `checked` with `checkedModel` and
 `stateDescription`, keeping missing facts unknown.
 
+Use `scroll REF [DIR]` or selector flags; DIR defaults to `forward`. Match the
+advertised directions, using `down` for `page-down`, for example.
+
 `expand`, `collapse` and `dismiss` request those exposed actions. There is no
 automatic coordinate fallback. For navigation,
 use `apps`, `open`, `back`, `home`, `recents`, `notifications` and `wake`.

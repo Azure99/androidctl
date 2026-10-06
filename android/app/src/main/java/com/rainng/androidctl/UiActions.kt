@@ -29,7 +29,7 @@ internal class UiActions(
         val action = action(run)
         val source =
             run.measure("preWaitMs") {
-                if (run.args.has("ref")) ui.snapshots.target(run.args.getString("ref")) else selected(run)
+                if (run.args.has("ref")) ui.snapshots.target(run.args.getString("ref")) else selected(run, action)
             }
         val method = resolutionMethod(run)
         val report =
@@ -52,7 +52,7 @@ internal class UiActions(
                     unchanged(run, current, action, if (focused) "Target is already focused" else "Value already matches")
                 action.changesChecked && !action.ready(current) ->
                     rowCheck(run, node, original, action, requireNotNull(admitted.rowSelection))
-                else -> sendAction(run, node, original, action)
+                else -> sendAction(run, node, original, current, action)
             }
         }
     }
@@ -159,6 +159,7 @@ internal class UiActions(
         run: UiRun,
         node: AccessibilityNodeInfo,
         original: JSONObject,
+        current: JSONObject,
         action: UiAction,
     ): JSONObject {
         val verification =
@@ -168,13 +169,17 @@ internal class UiActions(
                 null
             }
         val before = ui.snapshots.cached()
+        val route = if (action.isScroll) requireNotNull(UiScroll.route(current, action)) else null
+        if (route != null) {
+            run.select(UiSemantics.actionName(route), copy(current).put("ref", original.getString("ref")))
+        }
         val pending =
             outcome(
                 run.command,
                 Outcome.UNKNOWN,
                 "Platform action result pending",
             )
-        val result = invoke(run, node, action, pending).put("command", run.command)
+        val result = invoke(run, node, action, pending, platformId = route ?: action.platformId).put("command", run.command)
         val state = result.getString("result")
         run.remember(
             if (state == Outcome.DONE && verification != null) {
@@ -484,13 +489,14 @@ internal class UiActions(
         return UiVerification.evaluate(action, run.args, retained.facts)
     }
 
-    @Suppress("LongParameterList")
+    @Suppress("LongParameterList") // The requested action builds arguments; scroll may select a different advertised platform ID.
     internal fun invoke(
         run: UiRun,
         node: AccessibilityNodeInfo,
         action: UiAction,
         pending: JSONObject,
         data: JSONObject = JSONObject(),
+        platformId: Int = action.platformId,
         started: (() -> Unit)? = null,
     ): JSONObject {
         val args =
@@ -502,14 +508,17 @@ internal class UiActions(
                 null
             }
         val callback =
-            ui.platform(run).action(node, action.platformId, args, run.budget) {
+            ui.platform(run).action(node, platformId, args, run.budget) {
                 ui.dispatch(run, pending)
                 started?.invoke()
             }
         return outcome(action.wire, callback.classify(), data = copy(data).put("platform", callback.json()))
     }
 
-    private fun selected(run: UiRun): UiTarget {
+    private fun selected(
+        run: UiRun,
+        action: UiAction,
+    ): UiTarget {
         val fields = run.args.optJSONObject("selector") ?: throw Rejected("selector", "Provide a ref or at least one selector flag")
         if (fields.length() == 0) throw Rejected("selector", "At least one selector flag is required")
         val selector = UiSelector(fields)
@@ -535,7 +544,7 @@ internal class UiActions(
             if (!complete) {
                 reason = "Task observation is incomplete; uniqueness is unknown"
             } else if (target == null) {
-                reason = "No target matches the selector in the complete observation"
+                reason = "No target matches the selector in the complete observation" + UiAdvice.directionAdvice(action, null)
             } else {
                 inputReady(tree.getJSONObject("display"))
                 activeWindow(run, tree.getJSONArray("windows"), target)
@@ -591,7 +600,15 @@ internal class UiActions(
                     return ActionAdmission(readOriginal(run, node, original), selection)
                 }
             }
-            reason = "Original target is not ready for ${action.wire}: $condition"
+            reason = "Original target is not ready for ${action.wire}: $condition" + UiAdvice.directionAdvice(action, fresh)
+            if (action.isScroll) {
+                if (fresh.getBoolean("visible") &&
+                    fresh.getBoolean("enabled") &&
+                    UiScroll.route(fresh, action) == null
+                ) {
+                    throw Rejected("notReady", reason)
+                }
+            }
             run.budget.pause()
         }
         throw Rejected("notReady", reason)
@@ -660,7 +677,8 @@ internal class UiActions(
         }
     }
 
-    private fun action(run: UiRun): UiAction = UiAction.parse(run.command)
+    private fun action(run: UiRun): UiAction =
+        UiAction.parse(if (run.command == "scroll") "scroll-${run.args.getString("direction")}" else run.command)
 
     companion object {
         fun submitSelection(target: JSONObject): JSONObject {

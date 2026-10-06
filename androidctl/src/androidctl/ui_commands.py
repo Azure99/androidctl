@@ -391,39 +391,6 @@ def register(app: typer.Typer) -> None:
         )
 
     @app.command(
-        "screenshot", cls=CliCommand, help="Capture PNG and its task snapshot."
-    )
-    def screenshot(
-        ctx: typer.Context,
-        timeout: Annotated[
-            int,
-            typer.Option(
-                "--timeout",
-                parser=parse_duration,
-                callback=timeout_duration,
-                metavar="DURATION",
-                show_default="15s",
-                help="Total request budget: 1ms–60s.",
-            ),
-        ] = 15000,
-        image_out: Annotated[
-            Path | None,
-            typer.Option(
-                "--image-out",
-                readable=False,
-                help="Write PNG to a new file in an existing directory.",
-            ),
-        ] = None,
-        print_body: Print = False,
-    ) -> None:
-        execute(
-            ctx,
-            "screenshot",
-            {"timeoutMs": timeout},
-            View(image_out=image_out, print_body=print_body),
-        )
-
-    @app.command(
         "fill",
         cls=CliCommand,
         help="Set text once; verify exposed text or report a password write receipt.",
@@ -466,6 +433,88 @@ def register(app: typer.Typer) -> None:
             screenshot,
             image_out,
             print_body,
+        )
+
+    @app.command(
+        "scroll",
+        cls=CliCommand,
+        help="Scroll a REF or selector once: forward/backward/up/down/left/right.",
+    )
+    def scroll(
+        ctx: typer.Context,
+        values: Annotated[
+            list[str] | None, typer.Argument(metavar="[REF] [DIRECTION]")
+        ] = None,
+        role: Role = None,
+        name: Name = None,
+        text: Text = None,
+        identifier: Identifier = None,
+        package: Package = None,
+        window: Window = None,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        settle_ms: Settle = DEFAULT_SETTLE_MS,
+        screenshot: Screenshot = False,
+        image_out: ImageOut = None,
+        print_body: Print = False,
+    ) -> None:
+        fields = selector(role, name, text, identifier)
+        parts = list(values or [])
+        directions = {"forward", "backward", "up", "down", "left", "right"}
+        if not fields and parts and parts[0] in directions:
+            raise Fault(
+                "arguments", "Provide a scroll ref or selector before the direction"
+            )
+        ref = parts.pop(0) if not fields and parts else None
+        if len(parts) > 1:
+            raise Fault("arguments", "Use scroll REF [DIRECTION] or selector flags")
+        direction = parts[0] if parts else "forward"
+        if direction not in directions:
+            raise Fault(
+                "arguments", "Direction must be forward|backward|up|down|left|right"
+            )
+        args = target(ref, fields, scope(package, window))
+        run_action(
+            ctx,
+            "scroll",
+            {**args, "direction": direction},
+            timeout,
+            settle_ms,
+            screenshot,
+            image_out,
+            print_body,
+        )
+
+    @app.command(
+        "screenshot", cls=CliCommand, help="Capture PNG and its task snapshot."
+    )
+    def screenshot(
+        ctx: typer.Context,
+        timeout: Annotated[
+            int,
+            typer.Option(
+                "--timeout",
+                parser=parse_duration,
+                callback=timeout_duration,
+                metavar="DURATION",
+                show_default="15s",
+                help="Total request budget: 1ms–60s.",
+            ),
+        ] = 15000,
+        image_out: Annotated[
+            Path | None,
+            typer.Option(
+                "--image-out",
+                readable=False,
+                help="Write PNG to a new file in an existing directory.",
+            ),
+        ] = None,
+        print_body: Print = False,
+    ) -> None:
+        execute(
+            ctx,
+            "screenshot",
+            {"timeoutMs": timeout},
+            View(image_out=image_out, print_body=print_body),
         )
 
     @app.command(

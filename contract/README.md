@@ -29,8 +29,10 @@ expectations and checks on their actual chunks and decoded content.
 Python renders compound focus/fill and optional submit
 steps with their known and unknown outcomes. These samples do not simulate platform
 dispatch or platform sampling.
-`actionResults` contains plain-click, selector-click and coordinate-pending-at-expiry
-from the production `UiRun` result owner with supplied receipt facts.
+`actionResults` contains plain-click, selector-click, coordinate-pending-at-expiry
+and scroll-page-not-sent from the production `UiRun` result owner with supplied
+receipt facts.
+The scroll failure uses `UiRun.failure` after the real route and budget checks.
 
 The fixture also records `OutputStore` metadata and bounded chunks for both shell
 streams, consumed by Python's `JobClient.output`, plus `fileFailures` results

@@ -39,7 +39,7 @@ def requested_action(command: str, args: dict[str, Any]) -> dict[str, Any]:
         target = {"selector": dict(args["selector"])}
     requested: dict[str, Any] = {
         "target": target,
-        "action": command,
+        "action": f"scroll-{args['direction']}" if command == "scroll" else command,
     }
     if command == "key":
         requested["key"] = args["key"]

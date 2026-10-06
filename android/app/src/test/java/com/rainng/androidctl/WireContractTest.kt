@@ -337,7 +337,34 @@ class WireContractTest {
                 sample("plain-click", click, outcome("click")),
                 sample("selector-click", selector, outcome("click")),
                 sample("coordinate-pending-at-expiry", tap, expired = true),
+                scrollResult(),
             ),
+        )
+    }
+
+    private fun scrollResult(): JSONObject {
+        val target =
+            node("e30", "Results")
+                .put("className", "androidx.recyclerview.widget.RecyclerView")
+                .put("scrollable", true)
+                .put("actions", JSONArray(listOf("page-down")))
+        UiSemantics.project(listOf(target))
+        assertTrue(UiAction.SCROLL_DOWN.ready(target))
+        val route = requireNotNull(UiScroll.route(target, UiAction.SCROLL_DOWN))
+        var now = 0L
+        val run = contractRun("scroll", json("ref" to "e30", "direction" to "down"), UiBudget(5000) { now })
+        run.resolve("original", target)
+        run.select(UiSemantics.actionName(route), target)
+        now = 5000L
+        try {
+            run.budget.check()
+        } catch (error: Exception) {
+            run.remember(run.failure(error))
+        }
+        return json(
+            "name" to "scroll-page-not-sent",
+            "request" to json("command" to run.command, "args" to copy(run.args)),
+            "response" to run.response(),
         )
     }
 

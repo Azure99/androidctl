@@ -8,6 +8,21 @@ internal data class RowSelection(
 )
 
 internal object UiAdvice {
+    fun directionAdvice(
+        action: UiAction,
+        target: JSONObject?,
+    ): String {
+        if (!action.isScroll) return ""
+        if (target == null) return "; current scroll directions: unknown"
+        val actions = target.getJSONArray("actions")
+        val available =
+            (0 until actions.length())
+                .map(actions::getString)
+                .filter { it.startsWith("scroll-") || it.startsWith("page-") }
+                .map { it.removePrefix("scroll-") }
+        return "; current scroll directions: ${available.joinToString(", ").ifEmpty { "none" }}"
+    }
+
     fun suggestedRow(
         tree: JSONObject,
         target: JSONObject,

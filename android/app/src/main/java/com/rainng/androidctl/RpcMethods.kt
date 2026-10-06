@@ -25,6 +25,7 @@ internal object RpcMethods {
                 "check",
                 "uncheck",
                 "focus",
+                "scroll",
                 "tap",
                 "swipe",
                 "long-click",

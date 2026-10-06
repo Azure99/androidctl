@@ -28,13 +28,25 @@ internal enum class UiAction(
     val changesChecked: Boolean get() = this == CHECK || this == UNCHECK
     val verifiesValue: Boolean get() = this == FILL || changesChecked
     val platformName: String get() = if (changesChecked) CLICK.wire else wire
+    val isScroll: Boolean
+        get() =
+            when (this) {
+                SCROLL_FORWARD, SCROLL_BACKWARD, SCROLL_UP, SCROLL_DOWN, SCROLL_LEFT, SCROLL_RIGHT -> true
+                else -> false
+            }
 
     fun ready(node: JSONObject): Boolean = notReadyReason(node) == null
 
     fun notReadyReason(node: JSONObject): String? {
         if (!node.getBoolean("visible")) return "target is not visible"
         if (!node.getBoolean("enabled")) return "target is disabled"
-        if (!available(node)) return "target does not expose the $platformName action"
+        if (!available(node)) {
+            return if (isScroll) {
+                "target has no advertised route for $wire"
+            } else {
+                "target does not expose the $platformName action"
+            }
+        }
         if (this == FILL && !node.optBoolean("editable")) return "target is not editable"
         if (this == IME && !UiSelector.focused(node)) return "target is not input-focused"
         if (changesChecked && !node.optBoolean("checkable")) return "target is not checkable"
@@ -58,6 +70,7 @@ internal enum class UiAction(
 
     private fun available(node: JSONObject): Boolean {
         if (this == FOCUS && UiSelector.focused(node)) return true
+        if (isScroll) return UiScroll.route(node, this) != null
         val radio = UiSemantics.role(node) == Role.RADIO
         val actions = node.getJSONArray("actions")
         return (this == UNCHECK && radio) ||

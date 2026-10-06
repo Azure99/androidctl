@@ -58,6 +58,10 @@ class UiActionTest {
         assertTrue(UiAction.CHECK.ready(target))
         target.put("actions", JSONArray()).put("className", "android.widget.RadioButton")
         assertNull(UiAction.UNCHECK.notReadyReason(target))
+        assertEquals("target has no advertised route for scroll-down", UiAction.SCROLL_DOWN.notReadyReason(target))
+        assertFalse(UiAction.SCROLL_DOWN.ready(target))
+        target.put("actions", JSONArray(listOf("scroll-down")))
+        assertNull(UiAction.SCROLL_DOWN.notReadyReason(target))
     }
 
     @Test fun matchingReadableValuesCanSkipDisabledInputButCannotUsePasswordMasks() {

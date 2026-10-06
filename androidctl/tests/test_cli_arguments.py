@@ -361,6 +361,11 @@ def test_main_does_not_hide_program_value_error(monkeypatch):
         cli.main()
 
 
+def test_scroll_direction_without_target_rejects_before_connection(monkeypatch, capsys):
+    run_main(monkeypatch, ["scroll", "down"])
+    assert "Provide a scroll ref or selector" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize(
     "args",
     [

@@ -93,6 +93,20 @@ ACTION_EXPECTED = {
             "first check the effect with read-only observations."
         ],
     ),
+    "scroll-page-not-sent": (
+        1,
+        "not sent",
+        2,
+        [
+            "scroll: not sent; Request budget exhausted; code=timeout; "
+            "dispatchStarted=false",
+            'Requested: {"target":{"ref":"e30"},"action":"scroll-down"}',
+            'Resolved: {"method":"original","target":{"ref":"e30","role":"scroll",'
+            '"name":"Results","bounds":[0,0,100,100],"windowId":1}}',
+            'Selected: {"action":"page-down","target":{"ref":"e30","role":"scroll",'
+            '"name":"Results","bounds":[0,0,100,100],"windowId":1}}',
+        ],
+    ),
 }
 
 

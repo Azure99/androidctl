@@ -16,7 +16,7 @@ accepts a local `--json` option.
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
-| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `fill`, `check`, `uncheck`, `focus`, `ime`, `key` | [Targets](#observations-and-targets) |
+| Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `fill`, `check`, `uncheck`, `focus`, `scroll`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
@@ -457,10 +457,26 @@ observation returned after the action.
 `find` counts matching projected subtrees, not unique actionable targets.
 Read the original observation when row or ancestor context is needed.
 
-Actions wait for their target, then dispatch once and normally return an observation.
+Actions wait for their target, with the current scroll-direction exception below,
+then dispatch once and normally return an observation.
 A `notReady` reason explains the blocking condition checked for the target, or
 distinguishes no selector match from incomplete uniqueness. Before any completed
 check, it remains neutral.
+
+`scroll` accepts `forward`, `backward`, `up`, `down`, `left` or `right`; omitted
+direction defaults to `forward`.
+
+Scroll selects the advertised requested action first, then the corresponding
+`page-up`, `page-down`, `page-left` or `page-right` action. If no physical direction
+or PAGE action is advertised, supported scrolling containers may map physical
+directions to advertised backward/forward. Forward/backward keep their provider
+meaning. The chosen action is reported in `selected.action`;
+compare it with `requested.action` to see a substitution. Dispatch does not try
+another route afterward.
+The observation's `scroll` attribute retains the actual `page-*` names.
+After the original identity and window are confirmed fresh, a visible, enabled
+scroll target with none of the routes above for the requested direction immediately returns
+`notReady`; it does not wait for that direction to appear later in the request.
 
 `expand`, `collapse` and `dismiss` request the corresponding exposed platform
 action. Their names appear in `actions` and make the node a target, including when
