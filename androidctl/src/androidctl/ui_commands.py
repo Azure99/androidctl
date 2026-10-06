@@ -30,6 +30,24 @@ ROLES = (
     "image",
     "text",
 )
+LOCATE_ACTIONS = (
+    "click",
+    "fill",
+    "check",
+    "uncheck",
+    "focus",
+    "long-click",
+    "expand",
+    "collapse",
+    "dismiss",
+    "ime",
+    "scroll-forward",
+    "scroll-backward",
+    "scroll-up",
+    "scroll-down",
+    "scroll-left",
+    "scroll-right",
+)
 Role = Annotated[
     str | None, typer.Option("--role", help="Exact role: " + ", ".join(ROLES))
 ]
@@ -264,6 +282,40 @@ def register(app: typer.Typer) -> None:
                 out=out,
                 print_body=print_body,
             ),
+        )
+
+    @app.command(
+        "locate",
+        cls=CliCommand,
+        help="Wait for a unique, visible, enabled target supporting the action.",
+    )
+    def locate(
+        ctx: typer.Context,
+        role: Role = None,
+        name: Name = None,
+        text: Text = None,
+        identifier: Identifier = None,
+        package: Package = None,
+        window: Window = None,
+        action: Annotated[
+            str,
+            typer.Option(
+                "--action", help="Required action:\n\n\b\n" + "\n".join(LOCATE_ACTIONS)
+            ),
+        ] = "click",
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        print_body: Print = False,
+    ) -> None:
+        if action not in LOCATE_ACTIONS:
+            raise Fault("arguments", "Use --action " + "|".join(LOCATE_ACTIONS))
+        args = target(
+            None, selector(role, name, text, identifier), scope(package, window)
+        )
+        execute(
+            ctx,
+            "locate",
+            {**args, "action": action, "timeoutMs": timeout},
+            View(print_body=print_body),
         )
 
     def add_action(command: str, help_text: str) -> None:

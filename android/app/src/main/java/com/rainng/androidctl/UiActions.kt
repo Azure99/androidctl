@@ -15,6 +15,19 @@ internal data class ActionAdmission(
 internal class UiActions(
     private val ui: UiBackend,
 ) {
+    fun locate(run: UiRun): JSONObject {
+        val action = UiAction.parse(run.args.getString("action"))
+        val target = run.measure("preWaitMs") { selected(run, action) }
+        return outcome(
+            "locate",
+            reason = "${target.facts.getString("ref")} ready for ${action.wire}",
+            data =
+                json(
+                    "ref" to target.facts.getString("ref"),
+                ),
+        )
+    }
+
     fun act(run: UiRun): JSONObject =
         try {
             actOnTarget(run)
@@ -546,9 +559,19 @@ internal class UiActions(
             } else if (target == null) {
                 reason = "No target matches the selector in the complete observation" + UiAdvice.directionAdvice(action, null)
             } else {
-                inputReady(tree.getJSONObject("display"))
-                activeWindow(run, tree.getJSONArray("windows"), target)
-                return ui.snapshots.target(target.getString("ref"))
+                val condition =
+                    if (run.command == "locate") {
+                        UiAdvice.checkAdvice(tree, target, action)
+                        action.notReadyReason(target)
+                    } else {
+                        null
+                    }
+                if (condition == null) {
+                    inputReady(tree.getJSONObject("display"))
+                    activeWindow(run, tree.getJSONArray("windows"), target)
+                    return ui.snapshots.target(target.getString("ref"))
+                }
+                reason = "Unique target is not ready for ${action.wire}: $condition" + UiAdvice.directionAdvice(action, target)
             }
             run.budget.pause()
         }

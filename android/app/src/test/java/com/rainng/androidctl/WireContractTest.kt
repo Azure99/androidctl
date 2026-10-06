@@ -159,7 +159,9 @@ class WireContractTest {
             )
         for ((node, expected) in samples) assertEquals(expected, UiSemantics.role(node))
         val roles = Role.entries.map { it.wire }.sorted()
-        return json("roles" to JSONArray(roles))
+        val actions = UiAction.entries.map { it.wire }.sorted()
+        UiAction.entries.forEach { assertTrue(it.platformId > 0) }
+        return json("roles" to JSONArray(roles), "actions" to JSONArray(actions))
     }
 
     private fun projectionFacts(tree: JSONObject) {

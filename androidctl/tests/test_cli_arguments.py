@@ -12,7 +12,7 @@ from androidctl import local_call
 from androidctl.protocol import (
     completed,
 )
-from androidctl.ui_commands import ROLES
+from androidctl.ui_commands import LOCATE_ACTIONS, ROLES
 
 
 def run_main(monkeypatch, args):
@@ -373,6 +373,7 @@ def test_scroll_direction_without_target_rejects_before_connection(monkeypatch, 
         ["snapshot", "--cached", "--image-out", "cached.png"],
         ["snapshot", "e15", "--screenshot"],
         ["snapshot", "e15", "--image-out", "cached.png"],
+        ["locate", "--text", "Ready", "--action", "press"],
     ],
 )
 def test_invalid_read_conditions_never_connect(monkeypatch, capsys, args):
@@ -396,6 +397,7 @@ def test_invalid_key_rejects_before_connection(monkeypatch, capsys, args):
 @pytest.mark.parametrize(
     ("args", "detail"),
     [
+        (["locate", "--name", "Save", "--action", "press"], "--action click|"),
         (["click", "--role", "entry"], "--role button|textbox|"),
         (["click", "--unrecognized"], "No such option"),
     ],
@@ -410,7 +412,9 @@ def test_invalid_selector_arguments_show_choices_without_connection(
     assert detail in output
 
 
-@pytest.mark.parametrize(("command", "values"), [("click", ROLES)])
+@pytest.mark.parametrize(
+    ("command", "values"), [("locate", LOCATE_ACTIONS), ("click", ROLES)]
+)
 def test_help_keeps_complete_selector_choices(command, values):
     result = CliRunner().invoke(cli.app, [command, "--help"])
     assert result.exit_code == 0, result.output

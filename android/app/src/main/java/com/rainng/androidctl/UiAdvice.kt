@@ -23,6 +23,33 @@ internal object UiAdvice {
         return "; current scroll directions: ${available.joinToString(", ").ifEmpty { "none" }}"
     }
 
+    fun checkAdvice(
+        tree: JSONObject,
+        target: JSONObject,
+        action: UiAction,
+    ) {
+        if (action == UiAction.UNCHECK && UiSemantics.roleComplete(target) && UiSemantics.role(target) == Role.RADIO) {
+            requireUncheckedRadio(target)
+        }
+        if (!action.changesChecked || action.ready(target)) return
+        val suggestion = rowSuggestion(tree, target, action) ?: return
+        val row = suggestion.row
+        val check = suggestion.verificationControl
+        if (check.getString("checked") == if (action == UiAction.CHECK) "true" else "false") {
+            throw Rejected(
+                "valueAlreadyMatches",
+                "The row's checkable already matches; do not click the row" +
+                    if (check.optBoolean("refAvailable")) ". Use control ${check.getString("ref")} directly" else "",
+            )
+        }
+        throw Rejected(
+            "explicitRowClick",
+            "The checkable has no click action; check/uncheck can use row ${row.getString(
+                "ref",
+            )} (${row.getJSONObject("view").text("name")}) and verify its unique checkable",
+        )
+    }
+
     fun suggestedRow(
         tree: JSONObject,
         target: JSONObject,

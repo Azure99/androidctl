@@ -272,6 +272,17 @@ class UiOutcomeTest {
             assertTrue(data.getBoolean("dispatchStarted"))
             assertFalse(data.has("resolved"))
         }
+        val read = UiRun("locate", lease, JSONObject(), UiBudget(5000) { 0 })
+        read.remember(outcome("locate", data = json("ref" to "e7")))
+        assertEquals(
+            setOf("ref"),
+            read
+                .response()
+                .getJSONObject("data")
+                .keys()
+                .asSequence()
+                .toSet(),
+        )
     }
 
     @Test fun compoundReplyKeepsBoundedTargetFactsAndDispatchThroughWireSerialization() {

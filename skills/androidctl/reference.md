@@ -15,7 +15,7 @@ accepts a local `--json` option.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
-| Observe and target | `snapshot`, `find` | [Observations](#observations-and-targets) |
+| Observe and target | `snapshot`, `find`, `locate` | [Observations](#observations-and-targets) |
 | Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `fill`, `check`, `uncheck`, `focus`, `scroll`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
@@ -459,6 +459,8 @@ Read the original observation when row or ancestor context is needed.
 
 Actions wait for their target, with the current scroll-direction exception below,
 then dispatch once and normally return an observation.
+`locate` waits for the target's direct action readiness; check/uncheck can also use
+a qualified suggested row.
 A `notReady` reason explains the blocking condition checked for the target, or
 distinguishes no selector match from incomplete uniqueness. Before any completed
 check, it remains neutral.
@@ -477,10 +479,13 @@ The observation's `scroll` attribute retains the actual `page-*` names.
 After the original identity and window are confirmed fresh, a visible, enabled
 scroll target with none of the routes above for the requested direction immediately returns
 `notReady`; it does not wait for that direction to appear later in the request.
+This applies to REF actions and selectors after discovery. Observe again for
+current directions, or use a selector with `locate --action scroll-<dir>` to wait
+explicitly, then act on the ref returned at that time.
 
 `expand`, `collapse` and `dismiss` request the corresponding exposed platform
 action. Their names appear in `actions` and make the node a target, including when
-it is also clickable. `done` confirms
+it is also clickable. Use the same name with `locate --action`; `done` confirms
 the platform receipt, so read the resulting observation to verify the App effect.
 These actions do not fall back to coordinates or expose custom actions.
 Noneditable, long-clickable nodes show `long-click` only when not clickable;
@@ -527,6 +532,9 @@ complete. A matching fresh control sends no input. The click may open details
 without changing the value; failed/UNKNOWN cannot undo that effect, and no second
 click or replacement target is attempted. An unchecked radio already
 meets uncheck; change a selected radio by selecting another option.
+For a complete unique target known to be a radio, `locate --action uncheck`
+rejects selected, mixed or unknown checked state before waiting for readiness.
+It reports `radioUncheck`/`not sent`/exit 2; locate does not make a later action atomic.
 
 `fill` reports separate focus/fill results and submit when requested. Failures
 before step results are recorded can omit them; text then shows `step results=unknown`.
@@ -624,7 +632,8 @@ UI observation and action commands accept `--print` to echo the saved body after
 the result and paths.
 It cannot be combined with global `--json`. The body is generated once and echoed
 only after saving succeeds; print is neither a body-only stdout format nor a
-fallback for a failed save.
+fallback for a failed save. `--out` is available only on snapshot/find; actions,
+locate and screenshot still save their bodies automatically.
 
 For a cache-path or permission error, preserve the existing object and choose
 an existing `--workspace-root` where AndroidCtl can create a new cache. To repair

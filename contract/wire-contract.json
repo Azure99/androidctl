@@ -1493,6 +1493,24 @@
       "switch",
       "text",
       "textbox"
+    ],
+    "actions": [
+      "check",
+      "click",
+      "collapse",
+      "dismiss",
+      "expand",
+      "fill",
+      "focus",
+      "ime",
+      "long-click",
+      "scroll-backward",
+      "scroll-down",
+      "scroll-forward",
+      "scroll-left",
+      "scroll-right",
+      "scroll-up",
+      "uncheck"
     ]
   },
   "queryMethods": [

@@ -107,6 +107,7 @@ internal class UiBackend(
                     capture(run)
                     outcome("screenshot")
                 }
+                "locate" -> actions.locate(run)
                 "tap", "swipe" -> visuals.perform(run)
                 "key" ->
                     if (run.args.has("ref")) {

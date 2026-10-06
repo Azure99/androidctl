@@ -49,6 +49,19 @@ def test_duration_units_reach_ui_wire(captured_ui_calls, args, field, expected):
     assert captured_ui_calls[0][1][field] == expected
 
 
+@pytest.mark.parametrize(
+    ("args", "field"),
+    [
+        (["locate", "--text", "Ready"], "selector"),
+    ],
+)
+def test_wait_contains_preserves_selector_text(captured_ui_calls, args, field):
+    CliRunner().invoke(cli.app, args)
+    assert len(captured_ui_calls) == 1
+    value = captured_ui_calls[0][1][field]
+    assert value == ("Ready" if field == "text" else {"text": "Ready"})
+
+
 def test_duration_error_in_real_cli_process():
     result = subprocess.run(
         [
@@ -278,6 +291,35 @@ def test_ui_budget_reaches_client(captured_ui_calls, tmp_path, args, timeout):
         assert payload["settleMs"] == DEFAULT_SETTLE_MS
     if "--screenshot" in args:
         assert payload["screenshot"] is True
+
+
+@pytest.mark.parametrize("action", ["fill", "expand", "collapse", "dismiss"])
+def test_locate_passes_selector_scope_action_and_budget(captured_ui_calls, action):
+    calls = captured_ui_calls
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "locate",
+            "--role",
+            "textbox",
+            "--name",
+            "Search",
+            "--in",
+            "example.app",
+            "--action",
+            action,
+            "--timeout",
+            "900ms",
+        ],
+    )
+    assert result.exit_code == 2, result.output
+    assert len(calls) == 1
+    command, payload = calls[0]
+    assert command == "locate"
+    assert payload["selector"] == {"role": "textbox", "name": "Search"}
+    assert payload["scope"] == {"package": "example.app"}
+    assert payload["action"] == action
+    assert payload["timeoutMs"] == 900
 
 
 @pytest.mark.parametrize("action", ["expand", "collapse", "dismiss"])

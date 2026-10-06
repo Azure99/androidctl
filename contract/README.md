@@ -5,7 +5,7 @@ and complete responses from the Kotlin producers described below.
 Raw checked values and window types use the names published by `NodeFacts`.
 The projector publishes `nameConsumed` and `selectionTarget` after resolving
 name sources; the source reference remains internal to projection.
-The same fixture carries the allowed role vocabulary; Python compares
+The same fixture carries the allowed role and action vocabulary; Python compares
 it with its offline selector choices. Kotlin also checks actual node classification.
 `entityForms` shares the literal and once-decoded XML entity candidates used by
 device selectors and host find; candidate order is not significant.

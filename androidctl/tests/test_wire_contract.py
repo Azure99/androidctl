@@ -14,7 +14,7 @@ from androidctl.coordinator import QUERY_METHODS
 from androidctl.output import Output
 from androidctl.protocol import CHUNK_BYTES, Result
 from androidctl.ui_client import UiClient
-from androidctl.ui_commands import ROLES
+from androidctl.ui_commands import LOCATE_ACTIONS, ROLES
 from ui_test_support import load_wire_contract
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -194,6 +194,7 @@ def test_wire_limits_agree_across_boundaries():
 
 def test_offline_selector_choices_match_device_classification_and_actions():
     assert sorted(ROLES) == WIRE_CONTRACT["vocabulary"]["roles"]
+    assert sorted(LOCATE_ACTIONS) == WIRE_CONTRACT["vocabulary"]["actions"]
 
 
 def test_query_pools_share_the_expected_control_methods():
