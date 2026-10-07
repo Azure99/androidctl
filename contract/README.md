@@ -28,7 +28,7 @@ Captures retain explicit encoding/content expectations and checks on their actua
 chunks and decoded content. Python renders compound focus/fill and optional submit
 steps with their known and unknown outcomes. These samples do not simulate platform
 dispatch or platform sampling. Wait responses use the production `UiWait` result
-owner with supplied trees.
+owner with real `UiDelivery` published-baseline admission and supplied trees.
 The scroll failure uses `UiRun.failure` after the real route and budget checks.
 
 The fixture also records `OutputStore` metadata and bounded chunks for both shell

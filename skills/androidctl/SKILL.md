@@ -162,6 +162,9 @@ Prefer positive business conditions, such as `wait --contains "Order confirmed"`
 or `wait --app PACKAGE`. Read the result area: an input echo alone is insufficient.
 `wait --gone --text "Saving"` requires complete evidence of absence. `wait --idle`
 requires complete stable samples, which can still precede business readiness.
+`wait --screen-change` compares against the session's preceding complete published
+observation; retain its collection policy. Missing/partial baselines or changed
+scope are rejected. Use exactly one wait condition.
 
 `changed`, `unchanged`, `loading` and `unsettled` describe observations, not
 business success. `--timeout` sets the request budget; `--settle` limits ordinary

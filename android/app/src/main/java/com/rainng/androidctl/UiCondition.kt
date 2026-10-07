@@ -13,11 +13,12 @@ internal class UiCondition(
     args: JSONObject,
 ) {
     private val field =
-        listOf("text", "app", "gone", "idle").filter(args::has).singleOrNull()
-            ?: throw Rejected("condition", "Provide exactly one of --contains, --app, --gone or --idle")
+        listOf("text", "app", "gone", "idle", "screenChange").filter(args::has).singleOrNull()
+            ?: throw Rejected("condition", "Provide exactly one of --contains, --app, --gone, --idle or --screen-change")
     private val expected: String
     private val selector: UiSelector?
     private val samples = if (field == "idle") SettledSamples(null) else null
+    private var publishedBaseline: JSONObject? = null
 
     init {
         expected = if (field in listOf("text", "app")) args.getString(field) else ""
@@ -26,8 +27,8 @@ internal class UiCondition(
                 throw Rejected("condition", "Wait condition must not be empty")
             }
         }
-        if (field in listOf("gone", "idle") && !args.getBoolean(field)) {
-            throw Rejected("condition", "--$field must be enabled")
+        if (field in listOf("gone", "idle", "screenChange") && !args.getBoolean(field)) {
+            throw Rejected("condition", "${if (field == "screenChange") "--screen-change" else "--$field"} must be enabled")
         }
         if (args.has("selector") && field != "gone") throw Rejected("condition", "Selector fields require --gone")
         selector =
@@ -49,6 +50,7 @@ internal class UiCondition(
         when (field) {
             "gone" -> gone(tree)
             "idle" -> idle(tree)
+            "screenChange" -> screenChange(tree)
             else -> {
                 val predicate = (if (field == "text") text(tree) else app(tree))?.put("condition", field)
                 ConditionEvaluation(predicate != null, predicate)
@@ -57,6 +59,44 @@ internal class UiCondition(
 
     fun missing(reason: String) {
         samples?.missing(reason)
+    }
+
+    fun published(
+        baseline: JSONObject,
+        requestedScope: JSONObject,
+    ): JSONObject {
+        val selectionScope = baseline.getJSONObject("selectionScope")
+        if (listOf("window", "package").any { requestedScope.opt(it) != selectionScope.opt(it) }) {
+            throw Rejected("scopeMismatch", "Screen change requires the published observation selection scope")
+        }
+        publishedBaseline = copy(baseline)
+        return publishedPredicate()
+    }
+
+    private fun publishedPredicate(): JSONObject {
+        val baseline = requireNotNull(publishedBaseline)
+        return json(
+            "condition" to "screen-change",
+            "baseline" to "published",
+            "baselineCapture" to baseline.getString("capture"),
+            "baselineSequence" to baseline.getLong("sequence"),
+            "scope" to copy(baseline.getJSONObject("scope")),
+            "selectionScope" to copy(baseline.getJSONObject("selectionScope")),
+        )
+    }
+
+    @Suppress("UnreachableCode") // Android SDK JSON stubs differ from the real JSON exercised by condition tests.
+    private fun screenChange(tree: JSONObject): ConditionEvaluation {
+        val complete = !tree.getBoolean("partial")
+        val tested =
+            publishedPredicate()
+                .put("sequence", tree.getLong("sequence"))
+                .put("complete", complete)
+                .put("currentScope", copy(tree.getJSONObject("scope")))
+        return ConditionEvaluation(
+            complete && UiSnapshot.signature(tree) != requireNotNull(publishedBaseline).getString("signature"),
+            tested,
+        )
     }
 
     @Suppress("UnreachableCode") // Android SDK JSON stubs differ from the real JSON exercised by condition tests.
@@ -135,12 +175,26 @@ internal class WaitFailure(
 )
 
 internal class UiWait(
-    args: JSONObject,
+    private val args: JSONObject,
 ) {
     private val condition = UiCondition(args)
     private var predicate: JSONObject? = null
 
-    fun start(): JSONObject = result()
+    fun start(
+        delivery: UiDelivery,
+        lease: Lease,
+        currentTree: JSONObject?,
+    ): JSONObject {
+        if (args.optBoolean("screenChange")) {
+            try {
+                predicate = condition.published(delivery.publishedBaseline(lease, currentTree), args.optJSONObject("scope") ?: JSONObject())
+            } catch (error: Rejected) {
+                if (error.code !in setOf("noPublishedSnapshot", "partialBaseline", "scopeMismatch")) throw error
+                return outcome("wait", Outcome.NOT_SENT, message(error)).put("error", problem(error))
+            }
+        }
+        return result()
+    }
 
     fun observe(tree: JSONObject): JSONObject {
         val evaluation = condition.evaluate(tree)
@@ -173,7 +227,9 @@ internal fun waitUiCondition(
     run: UiRun,
 ): JSONObject {
     val wait = UiWait(run.args)
-    var result = wait.start()
+    var result = wait.start(ui.delivery, run.lease, ui.snapshots.tree)
+    if (result.getJSONObject("data").has("predicate")) run.remember(result)
+    if (result.getString("result") == Outcome.NOT_SENT) return result
     while (run.budget.remaining() > 0) {
         var retryable = true
         result =

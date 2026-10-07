@@ -601,7 +601,8 @@ and animation waits can exceed the budget, and effects can arrive after UNKNOWN;
 they do not revise that result or authorize repetition. Key completion does not
 verify animation completion or the App's business result.
 
-`wait` accepts exactly one of `--contains`, `--app`, `--gone` or `--idle`.
+`wait` accepts exactly one of `--contains`, `--app`, `--gone`, `--idle` or
+`--screen-change`.
 The positive text condition uses visible
 text/descriptions/state descriptions, excluding hints and unknown fields, with
 NFKC/whitespace/case/hyphen normalization also used by `find`. A reliable partial
@@ -620,6 +621,20 @@ recognized loading indicator. A partial tree, collection failure or loading samp
 breaks that sequence. This describes tree stability; silent work or Canvas animation
 may continue. `data.predicate` retains the last sampled judgment on expiry: gone
 reports matches/unknown/complete, and idle reports sequence/complete/loading/stable.
+
+`--screen-change` compares complete new samples with the same session's current
+complete published capture. Downloading the capture is not required. Missing or
+partial baselines and a different collection policy are rejected as not sent before
+sampling; after reopening a session, take a new snapshot first. Collection policy
+comes from the original sampling input: default active scope can cross Activity or
+app, `--in PACKAGE` permits another window of that package, and `--window ID` fixes
+the window. Use the same policy for the baseline and wait. An admitted wait that
+only sees partial or unchanged samples, or collection failures, ends failed.
+Its predicate keeps `baseline=published`, `baselineCapture`, `baselineSequence`,
+`selectionScope`, the baseline's actual `scope` and the last sample's `sequence`,
+`complete` and `currentScope`.
+Without a new sample, only the admitted baseline facts are known. A changed tree
+can precede business readiness; verify the result needed for the next action.
 
 `apps [QUERY]` filters launchable names/packages by case-insensitive substring.
 `open PACKAGE` or `open --url URL` navigates. Notifications reports dispatch,

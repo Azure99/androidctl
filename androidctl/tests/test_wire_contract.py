@@ -129,8 +129,27 @@ WAIT_EXPECTED = {
             '"complete":true,"loading":true}'
         ],
     ),
+    "screen-change-cross-window": (
+        "done",
+        0,
+        [
+            'wait: done; match={"sequence":2,"condition":"screen-change",'
+            '"baselineSequence":1,"selectionScope":{},'
+            '"currentScope":{"package":"other","window":2},'
+            '"scope":{"package":"fixture","window":1},"baselineCapture":"worker:1",'
+            '"baseline":"published","complete":true}'
+        ],
+    ),
+    "screen-change-scope-mismatch": (
+        "not sent",
+        2,
+        [
+            "wait: not sent; Screen change requires the published observation "
+            "selection scope; "
+            "code=scopeMismatch"
+        ],
+    ),
 }
-
 
 FILE_FAILURE_EXPECTED = {
     "before-open": (

@@ -68,6 +68,7 @@ def test_wait_contains_preserves_selector_text(captured_ui_calls, args, field):
     ("args", "expected"),
     [
         (["wait", "--idle"], {"idle": True}),
+        (["wait", "--screen-change"], {"screenChange": True}),
         (["wait", "--app", "example.shop"], {"app": "example.shop"}),
         (
             ["wait", "--gone", "--role", "text", "--name", "Saving", "--id", "status"],
@@ -97,6 +98,8 @@ def test_wait_conditions_reach_the_existing_ui_call(captured_ui_calls, args, exp
         ["wait", "--app", "example.shop", "--role", "text"],
         ["wait", "--app", "example.shop", "--idle"],
         ["wait", "--contains", ""],
+        ["wait", "--screen-change", "--idle"],
+        ["wait", "--screen-change", "--text", "Saving"],
     ],
 )
 def test_wait_conflicts_are_not_sent_before_any_connection(

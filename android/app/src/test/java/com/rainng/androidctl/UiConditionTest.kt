@@ -69,11 +69,61 @@ class UiConditionTest {
             json("idle" to true, "selector" to json("text" to "Saving")),
             json("app" to "fixture", "selector" to json("text" to "Saving")),
             json("idle" to false),
+            json("screenChange" to true, "idle" to true),
+            json("screenChange" to true, "selector" to json("text" to "Saving")),
+            json("screenChange" to false),
         )) {
             val error = assertThrows(Rejected::class.java) { UiCondition(args) }
             assertEquals("condition", error.code)
             val run = UiRun("wait", Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS), args, UiBudget(5000) { 0 })
             assertEquals(Outcome.NOT_SENT, run.failure(error).getString("result"))
+        }
+    }
+
+    @Test fun publishedChangeRequiresACompleteChangedSampleAndComparesSelectionPolicy() {
+        for (selection in listOf(JSONObject(), json("package" to "fixture"), json("window" to 1))) {
+            val sessions = Sessions({ 0L }, {})
+            val delivery = UiDelivery(sessions, "worker")
+            val lease = sessions.acquire(SessionOwner("pair", "task", "host"))
+            val before =
+                tree(
+                    node("e1", "Before"),
+                ).put("selectionScope", selection).put("scope", json("window" to 1, "package" to "fixture"))
+            delivery.createCapture(lease, UiDelivery.prepareTree(before), false)
+            val baseline = delivery.publishedBaseline(lease, before)
+            val condition = UiCondition(json("screenChange" to true))
+            condition.published(baseline, copy(selection))
+            assertFalse(condition.evaluate(copy(before).put("sequence", 2)).matched)
+            val after =
+                tree(node("e1", "After"))
+                    .put("sequence", 3)
+                    .put(
+                        "scope",
+                        json(
+                            "window" to if (selection.has("window")) 1 else 2,
+                            "package" to if (selection.length() == 0) "other" else "fixture",
+                        ),
+                    )
+            val partial = condition.evaluate(copy(after).put("partial", true))
+            assertFalse(partial.matched)
+            assertFalse(partial.predicate!!.getBoolean("complete"))
+            condition.missing("Collection failed")
+            val changed = condition.evaluate(after)
+            assertTrue(changed.matched)
+            assertEquals(1, changed.predicate!!.getJSONObject("scope").getInt("window"))
+            assertEquals(if (selection.has("window")) 1 else 2, changed.predicate.getJSONObject("currentScope").getInt("window"))
+            val mismatch =
+                if (selection.has("window")) {
+                    json("window" to 2)
+                } else if (selection.has("package")) {
+                    json("package" to "other")
+                } else {
+                    json(
+                        "window" to 1,
+                    )
+                }
+            val error = assertThrows(Rejected::class.java) { UiCondition(json("screenChange" to true)).published(baseline, mismatch) }
+            assertEquals("scopeMismatch", error.code)
         }
     }
 
@@ -105,6 +155,21 @@ class UiConditionTest {
             assertEquals(message(error), failed.result.getString("reason"))
             assertEquals(problem(error).toString(), failed.result.getJSONObject("error").toString())
         }
+    }
+
+    @Test fun waitOwnsPublishedBaselineRejections() {
+        val sessions = Sessions({ 0L }, {})
+        val lease = sessions.acquire(SessionOwner("pair", "task", "host"))
+        val delivery = UiDelivery(sessions, "worker")
+        val args = json("screenChange" to true)
+        val missing = UiWait(args).start(delivery, lease, null)
+        assertEquals(Outcome.NOT_SENT, missing.getString("result"))
+        assertEquals("noPublishedSnapshot", missing.getJSONObject("error").getString("code"))
+        val partial = tree(node("e1", "Before")).put("partial", true).put("selectionScope", JSONObject())
+        delivery.createCapture(lease, UiDelivery.prepareTree(partial), false)
+        val rejected = UiWait(args).start(delivery, lease, partial)
+        assertEquals(Outcome.NOT_SENT, rejected.getString("result"))
+        assertEquals("partialBaseline", rejected.getJSONObject("error").getString("code"))
     }
 
     private fun tree(vararg nodes: JSONObject): JSONObject {

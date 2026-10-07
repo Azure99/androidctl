@@ -54,6 +54,31 @@ internal class UiDelivery(
         current = null
     }
 
+    fun publishedBaseline(
+        lease: Lease,
+        tree: JSONObject?,
+    ): JSONObject {
+        val baseline =
+            sessions.withCurrentLease(lease) {
+                synchronized(this) {
+                    val capture =
+                        current?.takeIf { it.lease === lease && tree != null && it.sequence == tree.getLong("sequence") }
+                            ?: throw Rejected("noPublishedSnapshot", "No current published observation; run snapshot")
+                    val observed = requireNotNull(tree)
+                    if (observed.getBoolean("partial")) {
+                        throw Rejected("partialBaseline", "Published screen-change baseline must be complete")
+                    }
+                    json(
+                        "capture" to capture.id,
+                        "sequence" to capture.sequence,
+                        "scope" to copy(observed.getJSONObject("scope")),
+                        "selectionScope" to copy(observed.getJSONObject("selectionScope")),
+                    )
+                }
+            }
+        return baseline.put("signature", UiSnapshot.signature(requireNotNull(tree)))
+    }
+
     fun cached(
         lease: Lease,
         prepared: PreparedTree,

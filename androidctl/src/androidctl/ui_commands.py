@@ -244,7 +244,7 @@ def register(app: typer.Typer) -> None:
     @app.command(
         "wait",
         cls=CliCommand,
-        help="Wait read-only for a text, app, absence or stability condition.",
+        help="Wait read-only for a text, app, absence, stability or change condition.",
     )
     def wait(
         ctx: typer.Context,
@@ -264,6 +264,12 @@ def register(app: typer.Typer) -> None:
                 help="Two complete samples with equal signatures and no loading.",
             ),
         ] = False,
+        screen_change: Annotated[
+            bool,
+            typer.Option(
+                "--screen-change", help="Change from the current published observation."
+            ),
+        ] = False,
         role: Role = None,
         name: Name = None,
         text: Text = None,
@@ -280,6 +286,7 @@ def register(app: typer.Typer) -> None:
                     package_name is not None,
                     gone,
                     idle,
+                    screen_change,
                 )
             )
             != 1
@@ -289,7 +296,7 @@ def register(app: typer.Typer) -> None:
             raise Fault(
                 "arguments",
                 "Provide exactly one nonempty condition: "
-                "--contains, --app, --gone or --idle",
+                "--contains, --app, --gone, --idle or --screen-change",
             )
         fields = selector(role, name, text, identifier)
         if gone and not fields:
@@ -309,6 +316,8 @@ def register(app: typer.Typer) -> None:
                     else {"gone": True, "selector": fields}
                     if gone
                     else {"idle": True}
+                    if idle
+                    else {"screenChange": True}
                 ),
                 "scope": scope(package, window),
                 "timeoutMs": timeout,

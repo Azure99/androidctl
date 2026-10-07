@@ -85,6 +85,27 @@ class UiOutcomeTest {
         assertTrue(run.failure(observationError).getJSONObject("data").getBoolean("dispatchStarted"))
     }
 
+    @Test fun publishedWaitKeepsKnownBaselineAtExpiryBeforeTheFirstSample() {
+        val sessions = Sessions({ 0L }, {})
+        val lease = sessions.acquire(SessionOwner("pair", "task", "host"))
+        val delivery = UiDelivery(sessions, "worker")
+        val before = tree("Before").put("sequence", 1).put("selectionScope", JSONObject())
+        val capture = delivery.createCapture(lease, UiDelivery.prepareTree(before), false)
+        val args = json("screenChange" to true)
+        val wait = UiWait(args)
+        val run = UiRun("wait", lease, args, UiBudget(5000) { 0 })
+        run.remember(wait.start(delivery, lease, before))
+        val response = run.response(expired = true)
+        val data = response.getJSONObject("data")
+        val predicate = data.getJSONObject("predicate")
+        assertEquals(Outcome.FAILED, response.getString("result"))
+        assertEquals(capture, predicate.getString("baselineCapture"))
+        assertEquals(1L, predicate.getLong("baselineSequence"))
+        for (field in listOf("sequence", "complete", "currentScope")) assertFalse(predicate.has(field))
+        for (field in listOf("requested", "selected", "sent", "dispatchStarted")) assertFalse(data.has(field))
+        assertTrue(data.has("snapshotError"))
+    }
+
     @Test fun unsatisfiedWaitKeepsTheLastPredicateAtResponseExpiryWithoutActionFacts() {
         val wait = UiWait(json("gone" to true, "selector" to json("text" to "Saving")))
         val tree = tree("Saving").put("partial", true)

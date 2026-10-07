@@ -39,6 +39,58 @@
         "command": "wait"
       },
       "name": "idle-loading"
+    },
+    {
+      "request": {
+        "args": {
+          "scope": {},
+          "screenChange": true
+        },
+        "command": "wait"
+      },
+      "response": {
+        "result": "done",
+        "reason": "",
+        "data": {"predicate": {
+          "sequence": 2,
+          "condition": "screen-change",
+          "baselineSequence": 1,
+          "selectionScope": {},
+          "currentScope": {
+            "package": "other",
+            "window": 2
+          },
+          "scope": {
+            "package": "fixture",
+            "window": 1
+          },
+          "baselineCapture": "worker:1",
+          "baseline": "published",
+          "complete": true
+        }},
+        "command": "wait"
+      },
+      "name": "screen-change-cross-window"
+    },
+    {
+      "request": {
+        "args": {
+          "scope": {"window": 1},
+          "screenChange": true
+        },
+        "command": "wait"
+      },
+      "response": {
+        "result": "not sent",
+        "reason": "Screen change requires the published observation selection scope",
+        "data": {},
+        "error": {
+          "code": "scopeMismatch",
+          "message": "Screen change requires the published observation selection scope"
+        },
+        "command": "wait"
+      },
+      "name": "screen-change-scope-mismatch"
     }
   ],
   "captures": [

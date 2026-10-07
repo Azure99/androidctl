@@ -331,9 +331,12 @@ class WireContractTest {
                     Triple("gone-absent", gone, listOf(tree(ready))),
                     Triple("idle-loading", json("idle" to true), listOf(tree(loading), tree(copy(loading), sequence = 2))),
                 ).map { (name, args, observations) ->
+                    val sessions = Sessions({ 0L }, {})
+                    val delivery = UiDelivery(sessions, "contract-worker")
+                    val lease = sessions.acquire(SessionOwner("pair", "task", "host"))
                     val wait = UiWait(args)
                     val run = contractRun("wait", args)
-                    run.remember(wait.start())
+                    run.remember(wait.start(delivery, lease, null))
                     for (tree in observations) run.remember(wait.observe(tree))
                     json(
                         "name" to name,
@@ -342,6 +345,42 @@ class WireContractTest {
                     )
                 },
             )
+        for (name in listOf(
+            "screen-change-cross-window",
+            "screen-change-scope-mismatch",
+        )) {
+            val sessions = Sessions({ 0L }, {})
+            val delivery = UiDelivery(sessions, "worker")
+            val lease = sessions.acquire(SessionOwner("pair", "task", "host"))
+            val args =
+                json(
+                    "screenChange" to true,
+                    "scope" to if (name == "screen-change-scope-mismatch") json("window" to 1) else JSONObject(),
+                )
+            val run = UiRun("wait", lease, args, UiBudget(5000) { 0 })
+            val wait = UiWait(args)
+            val before =
+                tree(node("e1", "Before"))
+                    .put("selectionScope", JSONObject())
+                    .put("scope", json("window" to 1, "package" to "fixture"))
+            delivery.createCapture(lease, UiDelivery.prepareTree(before), false)
+            val initial = wait.start(delivery, lease, before)
+            run.remember(initial)
+            if (initial.getString("result") != Outcome.NOT_SENT) {
+                val after =
+                    tree(node("e1", "After").put("windowId", 2), sequence = 2)
+                        .put("selectionScope", JSONObject())
+                        .put("scope", json("window" to 2, "package" to "other"))
+                run.remember(wait.observe(after))
+            }
+            results.put(
+                json(
+                    "name" to name,
+                    "request" to json("command" to "wait", "args" to args),
+                    "response" to run.response(),
+                ),
+            )
+        }
         return results
     }
 

@@ -15,7 +15,44 @@ from androidctl import app as cli
 from androidctl import local_call, ui_commands
 from androidctl.protocol import CHUNK_BYTES, Result, completed
 from connection_test_support import connections
-from ui_test_support import node, raw_read_data, tree, xml_metadata
+from ui_test_support import load_wire_contract, node, raw_read_data, tree, xml_metadata
+
+
+async def test_wait_producer_result_survives_both_tls_hops(tmp_path, monkeypatch):
+    fixture = load_wire_contract()
+    case = next(
+        item
+        for item in fixture["waitResults"]
+        if item["name"] == "screen-change-cross-window"
+    )
+    received = []
+
+    async def dispatch(method, payload):
+        received.append(method)
+        assert method == "wait"
+        assert all(
+            payload[key] == value for key, value in case["request"]["args"].items()
+        )
+        return case["response"]
+
+    monkeypatch.chdir(tmp_path)
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        response = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            ["--json", "--device", "phone", "wait", "--screen-change"],
+        )
+    assert received == ["wait"]
+    assert response.exit_code == Result.model_validate(case["response"]).exit_code(), (
+        response.output
+    )
+    result = json.loads(response.output)
+    assert result["command"] == "wait"
+    assert result["data"]["predicate"] == case["response"]["data"]["predicate"]
+    assert (
+        not {"requested", "selected", "sent", "dispatchStarted"} & result["data"].keys()
+    )
 
 
 async def test_workspace_roots_keep_explicit_paths_at_caller_cwd(tmp_path, monkeypatch):
