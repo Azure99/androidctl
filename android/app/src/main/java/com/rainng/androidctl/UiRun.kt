@@ -84,16 +84,17 @@ internal class UiRun(
         fact = value.toString()
     }
 
-    private fun missingFactOutcome(): String =
+    private fun missingFactOutcome(error: Exception? = null): String =
         when {
             dispatchStarted -> Outcome.UNKNOWN
+            command == "wait" && (error as? Rejected)?.code != "condition" -> Outcome.FAILED
             else -> Outcome.NOT_SENT
         }
 
     @Synchronized fun failure(error: Exception): JSONObject {
         val result =
             fact?.let(::JSONObject)
-                ?: outcome(command, missingFactOutcome(), message(error)).put("error", problem(error))
+                ?: outcome(command, missingFactOutcome(error), message(error)).put("error", problem(error))
         if (result.getString("result") == Outcome.NOT_SENT) {
             result.put("reason", message(error)).put("error", problem(error))
         }

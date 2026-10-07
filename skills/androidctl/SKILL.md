@@ -142,7 +142,7 @@ automatic coordinate fallback. For navigation,
 use `apps`, `open`, `back`, `home`, `recents`, `notifications` and `wake`.
 Verify the destination; Recents can toggle and wake does not unlock credentials.
 
-## Results
+## Verify And Wait
 
 | Result | Next action |
 | --- | --- |
@@ -157,6 +157,11 @@ entered dispatch; each fill step keeps its own `selected` and `sent` facts.
 Missing facts do not mean false.
 Read focus/fill/submit independently, including verification and `actualValue`.
 Use `--json` for the [complete result fields](reference.md#json-field-guide).
+
+Prefer positive business conditions, such as `wait --contains "Order confirmed"`
+or `wait --app PACKAGE`. Read the result area: an input echo alone is insufficient.
+`wait --gone --text "Saving"` requires complete evidence of absence. `wait --idle`
+requires complete stable samples, which can still precede business readiness.
 
 `changed`, `unchanged`, `loading` and `unsettled` describe observations, not
 business success. `--timeout` sets the request budget; `--settle` limits ordinary
@@ -180,6 +185,22 @@ business outcome.
 3. Proved non-occurrence and an ended operation permit one new action on a current target; verify it.
 4. Stop after another UNKNOWN; switching input methods does not resolve uncertainty.
 5. For payment, sending or deletion, require authoritative records or clear object state; otherwise report uncertainty.
+
+## Complete A Form Task
+
+With the named session open, collect and read the form. Replace the placeholders
+with the actual package, current field ref, value and business-ready text.
+
+```sh
+androidctl --device DEVICE -s task snapshot --in PACKAGE --screenshot
+androidctl --device DEVICE -s task fill FIELD_REF "VALUE" --submit --in PACKAGE
+androidctl --device DEVICE -s task wait --contains "BUSINESS_READY_TEXT" --in PACKAGE
+```
+
+Run each command only after reading the preceding result. View the PNG when the
+decision needs it. After fill, check each step and the business result; handle
+non-done results before continuing. After wait, read the ready state and choose
+the current next target. Click it, verify the next business state and close the session.
 
 Example result prefix:
 

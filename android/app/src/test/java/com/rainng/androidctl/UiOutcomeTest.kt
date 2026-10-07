@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,6 +85,22 @@ class UiOutcomeTest {
         assertTrue(run.failure(observationError).getJSONObject("data").getBoolean("dispatchStarted"))
     }
 
+    @Test fun unsatisfiedWaitKeepsTheLastPredicateAtResponseExpiryWithoutActionFacts() {
+        val wait = UiWait(json("gone" to true, "selector" to json("text" to "Saving")))
+        val tree = tree("Saving").put("partial", true)
+        val run =
+            UiRun("wait", Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS), JSONObject(), UiBudget(5000) { 0 })
+        run.remember(wait.observe(tree))
+        val result = run.response(expired = true)
+        val data = result.getJSONObject("data")
+        assertEquals(Outcome.FAILED, result.getString("result"))
+        assertEquals("gone", data.getJSONObject("predicate").getString("condition"))
+        assertFalse(data.getJSONObject("predicate").getBoolean("complete"))
+        assertEquals(1, data.getJSONObject("predicate").getInt("matches"))
+        assertTrue(data.has("snapshotError"))
+        for (field in listOf("selected", "sent", "dispatchStarted")) assertFalse(data.has(field))
+    }
+
     @Test fun errorTextAndProblemPreserveOneWrapperAndEmptyMessages() {
         val samples =
             listOf(
@@ -101,15 +118,28 @@ class UiOutcomeTest {
         }
     }
 
+    @Test fun missingWaitFactDistinguishesInvalidConditionAndDispatch() {
+        val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
+        for ((code, expected) in listOf("condition" to "not sent", "timeout" to "failed")) {
+            val run = UiRun("wait", lease, JSONObject(), UiBudget(5000) { 0 })
+            val error = Rejected(code, "No wait fact")
+            assertEquals(expected, run.failure(error).getString("result"))
+            run.begin(null)
+            assertEquals(Outcome.UNKNOWN, run.failure(error).getString("result"))
+        }
+    }
+
     @Test fun productionFailurePreservesKnownFactsAndAddsOnlyUnsentErrors() {
         val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
         val error = Rejected("snapshotBudget", "Sampling ended")
-        for ((command, expected) in listOf("click" to Outcome.NOT_SENT)) {
+        for ((command, expected) in listOf("click" to Outcome.NOT_SENT, "wait" to Outcome.FAILED)) {
             val run = UiRun(command, lease, JSONObject(), UiBudget(5000) { 0 })
             val failed = run.failure(error)
             assertEquals(expected, failed.getString("result"))
             assertEquals("snapshotBudget", failed.getJSONObject("error").getString("code"))
         }
+        val invalid = UiRun("wait", lease, JSONObject(), UiBudget(5000) { 0 })
+        assertEquals(Outcome.NOT_SENT, invalid.failure(Rejected("condition", "Invalid condition")).getString("result"))
         for (state in listOf(Outcome.NOT_SENT, Outcome.DONE, Outcome.FAILED, Outcome.UNKNOWN)) {
             val run = UiRun("click", lease, JSONObject(), UiBudget(5000) { 0 })
             if (state != Outcome.NOT_SENT) run.begin(null)
@@ -132,7 +162,7 @@ class UiOutcomeTest {
 
     @Test fun responseKeepsKnownFactsAndDistinguishesUnsentWaitFromInput() {
         val lease = Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS)
-        for ((command, expected) in listOf("click" to "not sent", "fill" to "not sent")) {
+        for ((command, expected) in listOf("wait" to "failed", "click" to "not sent", "fill" to "not sent")) {
             val run = UiRun(command, lease, JSONObject(), UiBudget(5000) { 0 })
             val response = run.response()
             assertEquals(expected, response.getString("result"))
@@ -413,6 +443,36 @@ class UiOutcomeTest {
         withBaseline.accept(tree)
         assertEquals(Settlement.UNCHANGED, withBaseline.classification())
         assertFalse(withBaseline.stableWithoutBaseline())
+    }
+
+    @Test fun appConditionRequiresOneActiveTaskWindowWithTheMatchingRootAndScope() {
+        val condition = UiCondition(json("app" to "fixture"))
+        val window = json("id" to 1, "type" to "application", "active" to true, "rootAvailable" to true, "packageName" to "fixture")
+        val ime = json("id" to 2, "type" to "inputMethod", "active" to true)
+        val tree = json("scope" to json("window" to 1), "finishedMs" to 20, "windows" to JSONArray(listOf(window, ime)), "partial" to true)
+        val evaluation = condition.evaluate(tree)
+        assertTrue(evaluation.matched)
+        val match = evaluation.predicate!!
+        assertEquals("app", match.getString("condition"))
+        assertEquals("fixture", match.getString("matchedText"))
+        assertEquals(1, match.getInt("windowId"))
+        assertFalse(match.has("sampleMs"))
+        assertFalse(match.has("scope"))
+        window.put("rootAvailable", false)
+        val missing = condition.evaluate(tree)
+        assertFalse(missing.matched)
+        assertNull(missing.predicate)
+        window.put("rootAvailable", true).put("packageName", "other")
+        assertFalse(condition.evaluate(tree).matched)
+        window.put("packageName", "fixture")
+        tree.getJSONObject("scope").put("window", 2)
+        assertFalse(condition.evaluate(tree).matched)
+        tree.getJSONObject("scope").put("window", 1)
+        tree.getJSONArray("windows").put(copy(window).put("id", 3))
+        assertFalse(condition.evaluate(tree).matched)
+        assertEquals("condition", assertThrows(Rejected::class.java) { UiCondition(JSONObject()) }.code)
+        assertEquals("condition", assertThrows(Rejected::class.java) { UiCondition(json("app" to "fixture", "text" to "value")) }.code)
+        assertEquals("condition", assertThrows(Rejected::class.java) { UiCondition(json("app" to "")) }.code)
     }
 
     private fun tree(text: String): JSONObject {

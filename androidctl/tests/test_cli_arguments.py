@@ -369,6 +369,8 @@ def test_scroll_direction_without_target_rejects_before_connection(monkeypatch, 
 @pytest.mark.parametrize(
     "args",
     [
+        ["wait", "--contains", "Ready", "--app", "shop"],
+        ["wait", "--gone", "e1"],
         ["snapshot", "--cached", "--screenshot"],
         ["snapshot", "--cached", "--image-out", "cached.png"],
         ["snapshot", "e15", "--screenshot"],

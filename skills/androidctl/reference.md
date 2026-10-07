@@ -15,7 +15,7 @@ accepts a local `--json` option.
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
-| Observe and target | `snapshot`, `find`, `locate` | [Observations](#observations-and-targets) |
+| Observe and target | `snapshot`, `find`, `locate`, `wait` | [Observations](#observations-and-targets) |
 | Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `fill`, `check`, `uncheck`, `focus`, `scroll`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
@@ -232,9 +232,10 @@ continuing, rather than deleting locks or assuming automatic takeover.
 Cleanup failure, uncertainty or signal failure overrides exit to 3 while retaining
 the known main result. Known shell cancellation with only ordinary pending cleanup
 remains exit 1. Ordinary UI has no general job ID. `dispatchStarted=false` alone
-does not imply not sent: a URL with no handler is failed. Read-only results have no
-dispatch facts. A rejected platform action may have requested focus already.
-Late callbacks cannot revise a terminal UNKNOWN already returned.
+does not imply not sent: a URL with no handler is failed. Admitted wait sampling
+expiry is also failed, and read-only results have no dispatch facts.
+A rejected platform action may have requested focus already. Late callbacks cannot revise a
+terminal UNKNOWN already returned.
 
 Follow the [UNKNOWN checklist](SKILL.md#unknown). For its snapshot-based UI
 resource release check, obtain each capture from the corresponding JSON
@@ -251,7 +252,7 @@ capture is insufficient. A partial sample can establish UI resource release,
 but cannot prove business absence or completion. Without the original capture,
 with a changed worker or after a failed snapshot, the check is inconclusive;
 waiting out the budget supplies no missing proof. Reliable business success
-permits continuing without this capture check.
+permits continuing without this capture check. Read-only wait can be queried again.
 
 Text headings use the same fixed command path as JSON `command`.
 Ordinary UI text results occupy one line with available action and verification
@@ -600,6 +601,26 @@ and animation waits can exceed the budget, and effects can arrive after UNKNOWN;
 they do not revise that result or authorize repetition. Key completion does not
 verify animation completion or the App's business result.
 
+`wait` accepts exactly one of `--contains`, `--app`, `--gone` or `--idle`.
+The positive text condition uses visible
+text/descriptions/state descriptions, excluding hints and unknown fields, with
+NFKC/whitespace/case/hyphen normalization also used by `find`. A reliable partial
+match can succeed with that sample attached; only failed collection can attach
+explicitly cached facts. An admitted wait whose sampling budget expires is failed,
+even without a first observation.
+
+`--gone` requires at least one exact selector field (`--role`, `--name`, `--id`,
+`--text`). It succeeds only when a complete tree has zero true or unknown selector
+matches; invisible nodes do not match. A missing explicit window is a collection
+failure, not an empty tree. Selector fields are accepted only with `--gone`;
+`--contains` is a normalized substring condition, while selector `--text` is exact.
+
+`--idle` requires two consecutive complete trees with the same signature and no
+recognized loading indicator. A partial tree, collection failure or loading sample
+breaks that sequence. This describes tree stability; silent work or Canvas animation
+may continue. `data.predicate` retains the last sampled judgment on expiry: gone
+reports matches/unknown/complete, and idle reports sequence/complete/loading/stable.
+
 `apps [QUERY]` filters launchable names/packages by case-insensitive substring.
 `open PACKAGE` or `open --url URL` navigates. Notifications reports dispatch,
 recents toggles, and wake checks interactive state without unlocking credentials.
@@ -633,7 +654,7 @@ the result and paths.
 It cannot be combined with global `--json`. The body is generated once and echoed
 only after saving succeeds; print is neither a body-only stdout format nor a
 fallback for a failed save. `--out` is available only on snapshot/find; actions,
-locate and screenshot still save their bodies automatically.
+wait, locate and screenshot still save their bodies automatically.
 
 For a cache-path or permission error, preserve the existing object and choose
 an existing `--workspace-root` where AndroidCtl can create a new cache. To repair

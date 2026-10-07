@@ -35,6 +35,7 @@ CAPTURES = index_samples("captures", WIRE_CONTRACT["captures"])
 COMPOUND_RESULTS = index_samples("compoundResults", WIRE_CONTRACT["compoundResults"])
 ACTION_RESULTS = index_samples("actionResults", WIRE_CONTRACT["actionResults"])
 ENTITY_FORMS = index_samples("entityForms", WIRE_CONTRACT["entityForms"], "input")
+WAIT_RESULTS = index_samples("waitResults", WIRE_CONTRACT["waitResults"])
 FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
 
 COMPOUND_EXPECTED = {
@@ -105,6 +106,27 @@ ACTION_EXPECTED = {
             '"name":"Results","bounds":[0,0,100,100],"windowId":1}}',
             'Selected: {"action":"page-down","target":{"ref":"e30","role":"scroll",'
             '"name":"Results","bounds":[0,0,100,100],"windowId":1}}',
+        ],
+    ),
+}
+
+
+WAIT_EXPECTED = {
+    "gone-absent": (
+        "done",
+        0,
+        [
+            'wait: done; match={"condition":"gone","complete":true,'
+            '"matches":0,"unknown":0}'
+        ],
+    ),
+    "idle-loading": (
+        "failed",
+        1,
+        [
+            "wait: failed; Condition was not met within the request budget; "
+            'match={"sequence":2,"condition":"idle","stable":false,'
+            '"complete":true,"loading":true}'
         ],
     ),
 }
@@ -317,6 +339,25 @@ def test_host_consumes_device_action_facts_including_pending_responses(name, cap
     assert_json(original, result.wire())
 
 
+@pytest.mark.parametrize("name", WAIT_EXPECTED)
+def test_host_consumes_device_wait_predicates_without_action_facts(name, capsys):
+    case = WAIT_RESULTS[name]
+    expected_result, expected_exit, expected_lines = WAIT_EXPECTED[name]
+    result = Result.model_validate(case["response"])
+    assert_json(
+        case["response"],
+        result.model_dump(mode="json", by_alias=True, exclude_unset=True),
+    )
+    original = result.wire()
+    assert result.command == "wait"
+    assert result.result == expected_result
+    assert result.exit_code() == expected_exit
+    assert not {"requested", "selected", "sent", "dispatchStarted"} & result.data.keys()
+    ui_client.result_line(result, "wait", Output())
+    assert capsys.readouterr().out.splitlines() == expected_lines
+    assert_json(original, result.wire())
+
+
 @pytest.mark.parametrize("stream", ["stdout", "stderr"])
 def test_host_consumes_device_output_chunks(stream, monkeypatch):
     fixture = WIRE_CONTRACT["output"]
@@ -355,9 +396,10 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
         (CAPTURES, {"projected-tree", "raw-image", "large-tree", "minimal-tree"}),
         (COMPOUND_RESULTS, COMPOUND_EXPECTED.keys()),
         (ACTION_RESULTS, ACTION_EXPECTED.keys()),
+        (WAIT_RESULTS, WAIT_EXPECTED.keys()),
         (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
     ],
-    ids=["captures", "compoundResults", "actionResults", "fileFailures"],
+    ids=["captures", "compoundResults", "actionResults", "waitResults", "fileFailures"],
 )
 def test_named_sample_coverage_is_exact(samples, names):
     assert samples.keys() == names

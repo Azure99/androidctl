@@ -1,4 +1,46 @@
 {
+  "waitResults": [
+    {
+      "request": {
+        "args": {
+          "selector": {"text": "Saving"},
+          "gone": true
+        },
+        "command": "wait"
+      },
+      "response": {
+        "result": "done",
+        "reason": "",
+        "data": {"predicate": {
+          "condition": "gone",
+          "complete": true,
+          "matches": 0,
+          "unknown": 0
+        }},
+        "command": "wait"
+      },
+      "name": "gone-absent"
+    },
+    {
+      "request": {
+        "args": {"idle": true},
+        "command": "wait"
+      },
+      "response": {
+        "result": "failed",
+        "reason": "Condition was not met within the request budget",
+        "data": {"predicate": {
+          "sequence": 2,
+          "condition": "idle",
+          "stable": false,
+          "complete": true,
+          "loading": true
+        }},
+        "command": "wait"
+      },
+      "name": "idle-loading"
+    }
+  ],
   "captures": [
     {
       "expect": {

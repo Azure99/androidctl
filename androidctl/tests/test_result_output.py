@@ -547,6 +547,19 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         assert 'coordinates={"apiSupported": true, "image": "not checked"}\n' in output
 
 
+def test_wait_lost_reply_allows_read_only_query(monkeypatch):
+    async def call(self, command, args):
+        assert command == "wait"
+        assert args["text"] == "Ready"
+        return Result(command=command, result="UNKNOWN")
+
+    monkeypatch.setattr(ui_client.UiClient, "call", call)
+    output = CliRunner().invoke(cli.app, ["wait", "--contains", "Ready"])
+    assert output.exit_code == 3
+    assert "query again" in output.output
+    assert "Do not repeat" not in output.output
+
+
 @pytest.mark.parametrize("verification", ["differs", "unobservable"])
 def test_compound_value_facts_keep_each_stage_and_escape_controls(capsys, verification):
     value = Result(

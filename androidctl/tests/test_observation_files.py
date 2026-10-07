@@ -18,6 +18,7 @@ from androidctl import app as cli
 from androidctl import history, ui_client, ui_view
 from androidctl.cli_options import CliOptions
 from androidctl.local_call import BoundDevice
+from androidctl.output import Output
 from androidctl.private_files import private_directory
 from androidctl.protocol import CHUNK_BYTES, Fault, Result, completed
 from androidctl.ui_client import View, deliver
@@ -720,6 +721,47 @@ def test_missing_primary_artifact_does_not_rewrite_dispatch_facts(
     assert output.output.startswith(f"{command}: {expected}")
     assert output.exit_code == {"failed": 1, "not sent": 2, "UNKNOWN": 3}[expected]
     assert "Do not repeat" not in output.output
+
+
+def test_partial_wait_match_is_visible_beside_older_tree(capsys, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    predicate = {
+        "condition": "text",
+        "field": "description",
+        "matchedText": "Ready",
+        "windowId": 20,
+    }
+    result = Result(
+        command="wait",
+        result="done",
+        data={
+            "predicate": predicate,
+            "snapshotCached": True,
+            "snapshotSequence": 7,
+            "snapshotSampleMs": 100,
+            "snapshotAgeMs": 50,
+        },
+    )
+    ui_client.result_line(result, "wait", Output())
+    ui_client.deliver(
+        result,
+        tree(),
+        None,
+        ui_client.View(),
+        time.monotonic() + 1,
+        command="wait",
+        invocation={"command": "wait", "args": {}},
+        context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        paths=ui_client.DeliveryPaths(),
+    )
+    output = capsys.readouterr().out
+    assert "cached; sequence=7" in output
+    assert "sample=100ms" in output
+    assert "match=" + json.dumps(predicate, separators=(",", ":")) in output
+    assert "<screen" not in output
+    saved = (tmp_path / result.data["snapshotPath"]).read_text(encoding="utf-8")
+    assert '<screen app="example.shop"' in saved
+    assert 'id="12"' in saved
 
 
 def test_raw_json_does_not_require_xml_projection(monkeypatch, capsys, tmp_path):

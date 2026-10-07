@@ -52,6 +52,8 @@ def test_duration_units_reach_ui_wire(captured_ui_calls, args, field, expected):
 @pytest.mark.parametrize(
     ("args", "field"),
     [
+        (["wait", "--contains", "Ready"], "text"),
+        (["wait", "--gone", "--text", "Ready"], "selector"),
         (["locate", "--text", "Ready"], "selector"),
     ],
 )
@@ -60,6 +62,55 @@ def test_wait_contains_preserves_selector_text(captured_ui_calls, args, field):
     assert len(captured_ui_calls) == 1
     value = captured_ui_calls[0][1][field]
     assert value == ("Ready" if field == "text" else {"text": "Ready"})
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (["wait", "--idle"], {"idle": True}),
+        (["wait", "--app", "example.shop"], {"app": "example.shop"}),
+        (
+            ["wait", "--gone", "--role", "text", "--name", "Saving", "--id", "status"],
+            {
+                "gone": True,
+                "selector": {"role": "text", "name": "Saving", "id": "status"},
+            },
+        ),
+    ],
+)
+def test_wait_conditions_reach_the_existing_ui_call(captured_ui_calls, args, expected):
+    CliRunner().invoke(cli.app, args)
+    assert captured_ui_calls == [
+        ("wait", {**expected, "scope": {}, "timeoutMs": DEFAULT_TIMEOUT_MS})
+    ]
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["wait"],
+        ["wait", "--text", "Ready"],
+        ["wait", "--gone"],
+        ["wait", "--gone", "--text", "Saving", "--idle"],
+        ["wait", "--idle", "--name", "Saving"],
+        ["wait", "--contains", "Ready", "--text", "Saving"],
+        ["wait", "--app", "example.shop", "--role", "text"],
+        ["wait", "--app", "example.shop", "--idle"],
+        ["wait", "--contains", ""],
+    ],
+)
+def test_wait_conflicts_are_not_sent_before_any_connection(
+    captured_ui_calls, args, monkeypatch, capsys
+):
+    monkeypatch.setattr(sys, "argv", ["androidctl", "--json", *args])
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    assert stopped.value.code == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["command"] == "wait"
+    assert result["result"] == "not sent"
+    assert result["error"]["code"] == "arguments"
+    assert captured_ui_calls == []
 
 
 def test_duration_error_in_real_cli_process():

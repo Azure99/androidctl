@@ -83,6 +83,7 @@ class WireContractTest {
             "captures" to captures(projected),
             "compoundResults" to compoundResults(),
             "actionResults" to actionResults(),
+            "waitResults" to waitResults(),
             "output" to outputChunks(),
             "shellCleanupFailure" to shellCleanupFailure(),
             "fileFailures" to fileFailures(),
@@ -115,7 +116,7 @@ class WireContractTest {
             structure(produced.getJSONObject("projected")),
         )
         compareCaptures(fixture.getJSONArray("captures"), produced.getJSONArray("captures"))
-        for (section in listOf("compoundResults", "actionResults")) {
+        for (section in listOf("compoundResults", "actionResults", "waitResults")) {
             compareNamedSamples(section, fixture.getJSONArray(section), produced.getJSONArray(section))
         }
         for (section in listOf("output", "shellCleanupFailure")) {
@@ -304,6 +305,44 @@ class WireContractTest {
                 sample("enter-done", submitField = enterField),
             ),
         )
+    }
+
+    private fun waitResults(): JSONArray {
+        fun tree(
+            target: JSONObject,
+            sequence: Int = 1,
+        ): JSONObject {
+            UiSemantics.project(listOf(target))
+            return json(
+                "sequence" to sequence,
+                "partial" to false,
+                "connection" to 1,
+                "scope" to json("window" to 1),
+                "windows" to JSONArray(),
+                "nodes" to JSONArray(listOf(target)),
+            )
+        }
+        val ready = node("e1", "Ready")
+        val loading = node("e1").put("className", "android.widget.ProgressBar")
+        val gone = json("gone" to true, "selector" to json("text" to "Saving"))
+        val results =
+            JSONArray(
+                listOf(
+                    Triple("gone-absent", gone, listOf(tree(ready))),
+                    Triple("idle-loading", json("idle" to true), listOf(tree(loading), tree(copy(loading), sequence = 2))),
+                ).map { (name, args, observations) ->
+                    val wait = UiWait(args)
+                    val run = contractRun("wait", args)
+                    run.remember(wait.start())
+                    for (tree in observations) run.remember(wait.observe(tree))
+                    json(
+                        "name" to name,
+                        "request" to json("command" to "wait", "args" to copy(args)),
+                        "response" to run.response(),
+                    )
+                },
+            )
+        return results
     }
 
     private fun actionResults(): JSONArray {

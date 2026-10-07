@@ -108,6 +108,7 @@ internal class UiBackend(
                     outcome("screenshot")
                 }
                 "locate" -> actions.locate(run)
+                "wait" -> waitUiCondition(this, run)
                 "tap", "swipe" -> visuals.perform(run)
                 "key" ->
                     if (run.args.has("ref")) {

@@ -242,6 +242,81 @@ def register(app: typer.Typer) -> None:
         )
 
     @app.command(
+        "wait",
+        cls=CliCommand,
+        help="Wait read-only for a text, app, absence or stability condition.",
+    )
+    def wait(
+        ctx: typer.Context,
+        contains: Annotated[
+            str | None, typer.Option("--contains", help="Visible text substring.")
+        ] = None,
+        package_name: Annotated[
+            str | None, typer.Option("--app", help="Active app package.")
+        ] = None,
+        gone: Annotated[
+            bool, typer.Option("--gone", help="No selector matches in a complete tree.")
+        ] = False,
+        idle: Annotated[
+            bool,
+            typer.Option(
+                "--idle",
+                help="Two complete samples with equal signatures and no loading.",
+            ),
+        ] = False,
+        role: Role = None,
+        name: Name = None,
+        text: Text = None,
+        identifier: Identifier = None,
+        package: Package = None,
+        window: Window = None,
+        timeout: Timeout = DEFAULT_TIMEOUT_MS,
+        print_body: Print = False,
+    ) -> None:
+        if (
+            sum(
+                (
+                    contains is not None,
+                    package_name is not None,
+                    gone,
+                    idle,
+                )
+            )
+            != 1
+            or contains == ""
+            or package_name == ""
+        ):
+            raise Fault(
+                "arguments",
+                "Provide exactly one nonempty condition: "
+                "--contains, --app, --gone or --idle",
+            )
+        fields = selector(role, name, text, identifier)
+        if gone and not fields:
+            raise Fault("arguments", "--gone requires at least one selector field")
+        if fields and not gone:
+            raise Fault("arguments", "Selector fields require --gone")
+
+        execute(
+            ctx,
+            "wait",
+            {
+                **(
+                    {"text": contains}
+                    if contains is not None
+                    else {"app": package_name}
+                    if package_name is not None
+                    else {"gone": True, "selector": fields}
+                    if gone
+                    else {"idle": True}
+                ),
+                "scope": scope(package, window),
+                "timeoutMs": timeout,
+            },
+            View(print_body=print_body),
+        )
+
+    @app.command(
         "find",
         cls=CliCommand,
         help="Search current snapshot text without collecting a new screen.",

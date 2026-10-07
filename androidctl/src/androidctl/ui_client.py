@@ -27,7 +27,7 @@ from .protocol import (
 )
 from .user_files import create, require_new_file
 
-READ_ONLY_COMMANDS = {"snapshot", "find", "locate", "screenshot", "apps"}
+READ_ONLY_COMMANDS = {"snapshot", "find", "locate", "wait", "screenshot", "apps"}
 FILL_STEPS = (("focus", "focus"), ("fill", "fill"), ("submit", "ime"))
 
 
@@ -154,6 +154,8 @@ def result_line(
     parts.extend(value_facts(result.data))
     for step, item, default_action in steps:
         parts.append(step_facts(step, item, default_action, result.result))
+    if result.data.get("predicate"):
+        parts.append("match=" + compact(result.data["predicate"]))
     completeness = result.data.get("snapshotCompleteness", {})
     gaps = ["partial"] if completeness.get("partial") else []
     for field, name in (
@@ -178,7 +180,7 @@ def result_line(
     if result.result == "UNKNOWN":
         parts.append(
             "Read-only reply unavailable; query again. For a new sample, run snapshot."
-            if command in {"snapshot", "find", "locate", "screenshot"}
+            if command in {"snapshot", "find", "wait", "locate", "screenshot"}
             else "Do not repeat automatically; first check the effect "
             "with read-only observations."
         )
