@@ -14,7 +14,7 @@ accepts a local `--json` option.
 | Purpose | Commands | Details |
 | --- | --- | --- |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
-| Ownership and host | `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
+| Ownership and host | `use`, `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find`, `locate`, `wait` | [Observations](#observations-and-targets) |
 | Semantic input | `click`, `long-click`, `expand`, `collapse`, `dismiss`, `fill`, `check`, `uncheck`, `focus`, `scroll`, `ime`, `key` | [Targets](#observations-and-targets) |
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
@@ -23,10 +23,43 @@ accepts a local `--json` option.
 
 ## Connection And Sessions
 
-Device selection is `--device`, then `ANDROIDCTL_DEVICE`, the user-wide saved
-selection, then the sole paired device. Session selection is `-s`/`--session`,
-then `ANDROIDCTL_SESSION`, then `default`. Invalid selected devices never fall
-back. Use complete UUIDs or unique aliases; UUID prefix matching is not performed.
+Device selection is `--device`, then `ANDROIDCTL_DEVICE`, workspace config,
+the user-wide saved selection, then the sole paired device. Session selection is
+`-s/--session`, then `ANDROIDCTL_SESSION`, workspace config, then `default`.
+Each field is resolved independently. Invalid selected/configured devices never
+fall back. A command fixes its device UUID and requested session across subsequent
+RPCs, even when an alias or default changes; selection uses the current call's
+existing budget. Keep the UUID and pairing record for routing across a task.
+
+The existing root chosen by `--workspace-root`, `ANDROIDCTL_WORKSPACE_ROOT` or cwd
+contains `.androidctl/config.json`; no parent directories are searched. Save local
+defaults with `androidctl --device DEVICE_UUID -s task use`. Only explicit device
+and session arguments update their saved fields; other saved fields remain
+unchanged. An explicit device is resolved to its UUID before saving. Updating only
+the session does not require a paired device. Bare `use` reads the local config
+and shows its path and saved fields without contacting the daemon. Environment
+values affect normal command selection but are not saved by `use`. Use `devices`
+to inspect the current device selection and any selection error.
+`use --clear` removes the config, including malformed JSON, without selecting a
+device. A missing config is allowed; malformed, unreadable or invalid config
+reports its absolute path. Saving after replacement with a final synchronization
+or cleanup error retains the new config and reports exit 3.
+
+`device select DEVICE` changes the user-wide default; `use` changes only the local
+workspace. `device forget DEVICE` does not scan or remove workspace configs.
+If a config names a forgotten device, clear it or explicitly select another device
+when saving `use`. Commands sharing one workspace read its current defaults.
+Workspace defaults do not isolate concurrent agents; use explicit `--device`
+and `-s` when other agents may share the directory.
+Commands that consume device/session defaults read the config at their request
+boundary. Their JSON `data.context` reports `workspaceRoot`, requested `session`,
+each field's source (`args`, `env`, `config`, `global`, `sole` or `default`) and the
+actual `deviceId` when known. Preflight errors have no unconsumed context.
+`devices` reports only device context, with a confirmed UUID when available;
+device management preserves identity facts returned by the daemon.
+Text shows device or session context only when that field came from an implicit
+source; it omits the workspace root.
+The requested session is separate from the lease holder returned by `status`.
 
 Pairing uses a six-digit code valid for 600 seconds, five wrong attempts across
 connections, or one registration. Leading zeros matter. The user opens each new
@@ -68,8 +101,8 @@ in `data.context.deviceSource`. `data.selectionDevice` retains the requested or
 resolved identifier even when unusable; a list item's `selected` flag and
 `context.deviceId` require a confirmed active pairing. Selection errors remain
 in `data.selectionError`, while the listing itself returns done with exit 0.
-Job and UI commands keep their selected device and requested session across requests.
-
+A UI or job command keeps
+its selected device across its requests, including output-retrieval hints.
 Device management requires a positional complete UUID or unique alias:
 `device select DEVICE`, `device forget DEVICE`, `device address DEVICE HOST:PORT`
 and `device trust DEVICE PATH`. The global `--device` option and `ANDROIDCTL_DEVICE`

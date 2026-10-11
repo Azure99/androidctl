@@ -84,6 +84,12 @@ androidctl --device DEVICE_UUID -s trial session open
 androidctl --device DEVICE_UUID -s trial snapshot
 ```
 
+To reuse those defaults in this workspace, run
+`androidctl --device DEVICE_UUID -s trial use`, then `androidctl snapshot`.
+Workspace defaults do not isolate concurrent agents; use explicit
+`--device` and `-s` when other agents may share the directory.
+See [selection precedence and workspace rules](skills/androidctl/reference.md#connection-and-sessions).
+
 Read the reported absolute `snapshotPath` using your host's file tools.
 For visual details, capture and view the actual `imagePath` PNG. The reference
 covers [formats, paths and delivery options](skills/androidctl/reference.md#images-and-delivery).

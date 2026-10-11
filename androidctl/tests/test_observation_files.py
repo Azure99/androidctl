@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 
 from androidctl import app as cli
 from androidctl import history, ui_client, ui_view
-from androidctl.cli_options import CliOptions
+from androidctl.cli_options import CliOptions, call_context
 from androidctl.local_call import BoundDevice
 from androidctl.output import Output
 from androidctl.private_files import private_directory
@@ -518,6 +518,9 @@ def test_history_warning_keeps_delivered_observation(monkeypatch, tmp_path, caps
     )
     source = tree()
     source.update(connection=5)
+    result.data["context"] = call_context(
+        CliOptions("phone", "task", False, tmp_path), BoundDevice("phone", "args")
+    )
     deliver_snapshot(result, source, View(), session="task")
     assert result.result == "done"
     saved = (tmp_path / result.data["snapshotPath"]).read_text(encoding="utf-8")

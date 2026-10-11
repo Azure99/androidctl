@@ -145,7 +145,7 @@ def test_device_listing_preserves_complete_ids_and_record_facts(capsys):
 def test_empty_lists_keep_one_heading_and_selection_error(
     capsys, command, message, render
 ):
-    facts = {command: []}
+    facts = {command: [], "context": {"deviceSource": "config"}}
     if command == "devices":
         facts["selectionError"] = {"message": "choose a device"}
     result = completed(command, facts)
@@ -154,7 +154,7 @@ def test_empty_lists_keep_one_heading_and_selection_error(
         cli.emit(result, render=render)
     assert stopped.value.exit_code == 0
     lines = capsys.readouterr().out.splitlines()
-    expected = [f"{command}: done; {message}"]
+    expected = [f"{command}: done; {message}; deviceSource=config"]
     if command == "devices":
         expected.append("Selection: choose a device")
     assert lines == expected
@@ -426,6 +426,19 @@ async def test_forget_renderer_keeps_failed_facts(tmp_path, monkeypatch):
     assert json.loads(response.stdout) == forgotten.wire()
 
 
+def test_use_renders_saved_and_cleared_booleans(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    for arguments, fact in (
+        (["use"], "saved=false"),
+        (["-s", "task", "use"], "saved=true"),
+        (["use", "--clear"], "cleared=true"),
+    ):
+        response = runner.invoke(cli.app, arguments)
+        assert response.exit_code == 0, response.output
+        assert fact + "\n" in response.stdout
+
+
 @pytest.mark.parametrize("command", ["pair", "address", "trust"])
 async def test_connection_cleanup_renderer_uses_the_producer_string(
     tmp_path, monkeypatch, command
@@ -503,7 +516,15 @@ async def test_connection_cleanup_renderer_uses_the_producer_string(
 @pytest.mark.parametrize("done", [False, True])
 def test_status_renders_failure_checks_or_successful_state(capsys, done):
     checks = [{"check": "workerStatus", "result": "done" if done else "failed"}]
-    facts = {}
+    facts = {
+        "context": {
+            "workspaceRoot": "D:/Tasks/workspace",
+            "deviceId": "device-1",
+            "deviceSource": "config",
+            "session": "requested-task",
+            "sessionSource": "args",
+        }
+    }
     if done:
         facts.update(
             device="phone",
@@ -523,7 +544,7 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
                 "androidApi": 36,
                 "coordinates": {"apiSupported": True, "image": "not checked"},
             },
-            diagnostics={"maintenance": {}},
+            diagnostics={"uiCleanup": None},
             gateway={"state": "listening"},
         )
     else:
@@ -535,7 +556,9 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         )
     output = capsys.readouterr().out
     assert ("workerStatus:" in output) is not done
-    assert output.splitlines()[0] == ("status: " + ("done" if done else "failed"))
+    assert output.splitlines()[0] == (
+        "status: " + ("done" if done else "failed") + "; device=device-1(config)"
+    )
     assert ("device=phone connected worker=ready\n" in output) is done
     if done:
         assert 'session="held-task" pairing="another-host" idle=12s\n' in output
@@ -545,6 +568,42 @@ def test_status_renders_failure_checks_or_successful_state(capsys, done):
         assert "ui=0 shell=0 file=0\n" in output
         assert "helper pids=42\njobs=j1\nandroidApi=36\n" in output
         assert 'coordinates={"apiSupported": true, "image": "not checked"}\n' in output
+
+
+@pytest.mark.parametrize(
+    ("device_source", "session_source", "device_id", "session", "suffix"),
+    [
+        ("args", "args", "device-1", "task", ""),
+        ("config", "args", "device-1", "task", "; device=device-1(config)"),
+        ("args", "env", "device-1", "task", '; session="task"(env)'),
+        (
+            "sole",
+            "default",
+            "device-1",
+            "default",
+            '; device=device-1(sole) session="default"(default)',
+        ),
+        ("config", "args", None, "task", "; deviceSource=config"),
+    ],
+)
+def test_ui_text_shows_only_implicit_context(
+    capsys, device_source, session_source, device_id, session, suffix
+):
+    context = {
+        "workspaceRoot": "D:/Tasks/workspace",
+        "deviceSource": device_source,
+        "session": session,
+        "sessionSource": session_source,
+    }
+    if device_id is not None:
+        context["deviceId"] = device_id
+    result = completed("click", {"context": context})
+    original = result.wire()
+    ui_client.result_line(result, "click", Output())
+    assert capsys.readouterr().out == f"click: done{suffix}\n"
+    assert result.wire() == original
+    ui_client.print_delivery(result, observed=False, command="click", as_json=True)
+    assert json.loads(capsys.readouterr().out) == original
 
 
 def test_wait_lost_reply_allows_read_only_query(monkeypatch):

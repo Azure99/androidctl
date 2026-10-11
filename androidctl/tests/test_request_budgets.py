@@ -50,6 +50,28 @@ def test_default_local_request_shares_its_budget_with_close(monkeypatch):
     assert received == [("request", 120), ("close", 120)]
 
 
+def test_use_binding_and_close_share_one_budget(tmp_path, monkeypatch):
+    clock = [100.0]
+    received = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+
+    async def bind(self, deadline):
+        received.append(("bind", deadline))
+        clock[0] += 7
+        return local_call.BoundDevice("confirmed-device", "explicit")
+
+    async def close(self, *, deadline):
+        received.append(("close", deadline))
+        assert deadline - clock[0] == 13
+
+    monkeypatch.setattr(local_call.LocalCall, "bind", bind)
+    monkeypatch.setattr(local_call.LocalCall, "close", close)
+    response = CliRunner().invoke(cli.app, ["--device", "phone", "use"])
+    assert response.exit_code == 0, response.output
+    assert received == [("bind", 120), ("close", 120)]
+
+
 def test_stop_request_close_and_confirmation_share_one_budget(monkeypatch):
     clock = [100.0]
     received = []

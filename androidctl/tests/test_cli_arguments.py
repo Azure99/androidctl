@@ -100,6 +100,10 @@ def forbid_local_connection(monkeypatch):
     ("command", "leaf"),
     [
         (["snapshot"], "snapshot"),
+        (["job", "output", "j1", "--out", "out.bin"], "job output"),
+        (["use"], "use"),
+        (["use", "--clear"], "use"),
+        (["-s", "task", "use"], "use"),
     ],
 )
 def test_invalid_workspace_keeps_leaf_command_and_absolute_error(
@@ -364,6 +368,24 @@ def test_main_does_not_hide_program_value_error(monkeypatch):
 def test_scroll_direction_without_target_rejects_before_connection(monkeypatch, capsys):
     run_main(monkeypatch, ["scroll", "down"])
     assert "Provide a scroll ref or selector" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("option", ["-s", "--session", "--device"])
+def test_misplaced_global_option_explains_location_without_connection(
+    monkeypatch, capsys, option
+):
+    run_main(monkeypatch, ["snapshot", option, "task"])
+    assert (
+        f"Place global option '{option}' before the command" in capsys.readouterr().out
+    )
+
+
+@pytest.mark.parametrize("args", [["--device"], ["--session"], ["--json=value"]])
+def test_invalid_global_value_does_not_claim_misplaced_option(
+    monkeypatch, capsys, args
+):
+    run_main(monkeypatch, args)
+    assert "before the command" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

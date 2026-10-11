@@ -1,11 +1,13 @@
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
 import typer
 from typer.core import TyperCommand
 
+from . import workspace
+from .local_call import BoundDevice
 from .protocol import MAX_RUN_MS, Fault, Result, rejected
 
 
@@ -15,10 +17,51 @@ class CliOptions:
     session: str
     as_json: bool
     workspace_root: Path = field(default_factory=Path.cwd)
+    device_source: str = "default"
+    session_source: str = "default"
+
+
+def device_context(
+    context: CliOptions, device_id: str | None, source: str | None
+) -> dict[str, Any]:
+    facts: dict[str, Any] = {
+        "workspaceRoot": str(context.workspace_root),
+        "deviceSource": (
+            context.device_source
+            if context.device_source != "default"
+            else source or "default"
+        ),
+    }
+    if device_id is not None:
+        facts["deviceId"] = device_id
+    return facts
+
+
+def call_context(context: CliOptions, binding: BoundDevice | None) -> dict[str, Any]:
+    return {
+        **device_context(
+            context,
+            binding.device_id if binding is not None else None,
+            binding.source if binding is not None else None,
+        ),
+        "session": context.session,
+        "sessionSource": context.session_source,
+    }
 
 
 def options(ctx: typer.Context) -> CliOptions:
     return cast(CliOptions, ctx.obj)
+
+
+def load_workspace_options(context: CliOptions) -> CliOptions:
+    root = context.workspace_root
+    workspace.require_root(root)
+    saved = workspace.read(root)
+    if context.device_source == "default" and "device" in saved:
+        context = replace(context, device=saved["device"], device_source="config")
+    if context.session_source == "default" and "session" in saved:
+        context = replace(context, session=saved["session"], session_source="config")
+    return context
 
 
 def command_name(ctx: Any) -> str:

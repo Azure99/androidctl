@@ -855,7 +855,7 @@ def test_job_output_preserves_a_query_without_job_facts(
     value = json.loads(response.stdout)
     assert value["command"] == "job output"
     assert value["data"]["job"] == "j1"
-    assert set(value["data"]) == {"job"}
+    assert set(value["data"]) == {"job", "context"}
     assert value["result"] == query_result
     assert value["reason"] == "Original query reason"
     assert value.get("error") == (query_problem.wire() if query_problem else None)

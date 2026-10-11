@@ -414,6 +414,41 @@ def test_forget_retains_the_original_selection_problem(tmp_path, monkeypatch):
     assert not (state.pairings / f"{saved['deviceId']}.json").exists()
 
 
+@pytest.mark.parametrize("source", ["env", "config"])
+async def test_devices_reports_invalid_workspace_selection_without_device_rpc(
+    tmp_path, monkeypatch, source
+):
+    from androidctl import local_call, workspace
+    from connection_test_support import connections
+
+    async def dispatch(method, args):
+        pytest.fail("Listing an invalid selection sent a device RPC")
+
+    if source == "config":
+        workspace.save(tmp_path, {"device": "missing"})
+    else:
+        monkeypatch.setenv("ANDROIDCTL_DEVICE", "missing")
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        response = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            ["--json", "--workspace-root", str(tmp_path), "devices"],
+        )
+    assert response.exit_code == 0, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "devices"
+    assert value["result"] == "done"
+    assert value["data"]["selectionError"]["code"] == "deviceNotFound"
+    assert value["data"]["selectionDevice"] == "missing"
+    assert "selectionSource" not in value["data"]
+    assert value["data"]["context"] == {
+        "workspaceRoot": str(tmp_path),
+        "deviceSource": source,
+    }
+    assert not any(device["selected"] for device in value["data"]["devices"])
+
+
 def test_broken_candidate_and_active_are_explicitly_recoverable(tmp_path):
     private_directory(tmp_path / "host")
     state = HostState(tmp_path / "host")

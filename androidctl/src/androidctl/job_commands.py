@@ -15,7 +15,9 @@ import typer
 from .cli_options import (
     CliCommand,
     CliOptions,
+    call_context,
     command_name,
+    load_workspace_options,
     options,
     parse_duration,
     run_duration,
@@ -331,7 +333,7 @@ def run(
     wait_ms: int = 0,
 ) -> NoReturn:
     command = command_name(ctx)
-    context = options(ctx)
+    context = load_workspace_options(options(ctx))
     as_json = context.as_json
     delivery = Output()
     client = JobClient(context)
@@ -368,6 +370,7 @@ def run(
 
     result, streams = asyncio.run(request())
     result.command = command
+    result.data["context"] = call_context(context, client.local.binding)
     show(
         result,
         streams,
@@ -381,7 +384,7 @@ def run(
 def export_output(ctx: typer.Context, job: str, out: Path, stream: str) -> NoReturn:
     command = command_name(ctx)
     out = out.absolute()
-    context = options(ctx)
+    context = load_workspace_options(options(ctx))
     delivery = Output()
     require_new_file(
         out,
@@ -437,6 +440,7 @@ def export_output(ctx: typer.Context, job: str, out: Path, stream: str) -> NoRet
 
     result = asyncio.run(request())
     result.command = command
+    result.data["context"] = call_context(context, client.local.binding)
     show(
         result,
         {},

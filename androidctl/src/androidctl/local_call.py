@@ -16,7 +16,7 @@ from .private_files import (
     private_directory,
     state_directory,
 )
-from .protocol import CONNECT_SECONDS, VERSION, Fault, Problem, Result
+from .protocol import CONNECT_SECONDS, VERSION, Fault, Problem, Result, TransportFailure
 from .transport import Peer
 from .user_files import open_read
 
@@ -167,6 +167,30 @@ class BoundDevice:
     source: str
 
 
+async def bind_device(
+    peer: Peer, identifier: str | None, session: str, deadline: float
+) -> BoundDevice:
+    remaining = deadline - time.monotonic()
+    if remaining < 0.001:
+        raise Fault("timeout", "Request budget exhausted before device selection")
+    try:
+        selection = await peer.request(
+            "devices",
+            {"device": identifier},
+            session=session,
+            deadline=deadline,
+            validate=Result.model_validate,
+        )
+    except TransportFailure as error:
+        # A lost selection reply cannot mean that the business action was sent.
+        raise Fault.from_problem(error.problem) from error
+    data = selection.data
+    if data.get("selectionError"):
+        raise Fault.from_problem(Problem.model_validate(data["selectionError"]))
+    context = data["context"]
+    return BoundDevice(context["deviceId"], context["deviceSource"])
+
+
 async def confirm_stop(result: Result, deadline: float) -> Result:
     root = state_directory()
     instance = result.data["instance"]
@@ -220,6 +244,14 @@ class LocalCall:
     @property
     def device_id(self) -> str | None:
         return self.binding.device_id if self.binding is not None else None
+
+    async def bind(self, deadline: float) -> BoundDevice:
+        if self.binding is None:
+            peer = await self.connect(deadline=deadline)
+            self.binding = await bind_device(
+                peer, self.identifier, self.session, deadline
+            )
+        return self.binding
 
     async def connect(self, *, deadline: float, start: bool = True) -> Peer:
         if self.peer is None or not self.peer.opened:

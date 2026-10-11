@@ -32,6 +32,12 @@ The unnamed `default` session is shared. Respect `busy`/`connectionBusy`; use
 takeover only on explicit user instruction. After device-side release, explicitly
 open again only when continuing is intended.
 
+For repeated commands, `androidctl --device DEVICE -s task use` saves the
+explicitly supplied workspace defaults. Bare `use` shows the local config path
+and saved fields; `devices` shows the current device selection. Shared workspaces
+need explicit device/session arguments. See [selection precedence and config
+recovery](reference.md#connection-and-sessions).
+
 ## Read Observations
 
 Read the absolute `snapshotPath` with host file tools.

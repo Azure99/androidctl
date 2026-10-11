@@ -42,7 +42,26 @@ class Output:
         reason = f"; {result.reason}" if result.reason else ""
         self.echo(
             f"{result.command}: {result.result}{before_reason}{reason}{after_reason}"
+            + self.context(result)
         )
+
+    def context(self, result: Result) -> str:
+        facts = result.data.get("context")
+        if not facts:
+            return ""
+        parts = []
+        if facts["deviceSource"] != "args":
+            if "deviceId" in facts:
+                parts.append(f"device={facts['deviceId']}({facts['deviceSource']})")
+            else:
+                parts.append("deviceSource=" + facts["deviceSource"])
+        if "session" in facts and facts["sessionSource"] != "args":
+            parts.append(
+                "session="
+                + display_name(facts["session"])
+                + f"({facts['sessionSource']})"
+            )
+        return "; " + " ".join(parts) if parts else ""
 
     def error(self, result: Result) -> None:
         if result.error is not None:

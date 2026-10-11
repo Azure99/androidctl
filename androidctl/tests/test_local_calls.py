@@ -231,6 +231,7 @@ def test_uncertain_local_reply_uses_the_actual_cli_command(
             assert value["result"] == "UNKNOWN"
             assert value["error"] == problem.wire()
             assert received == ["call"]
+            assert "deviceId" not in value["data"]["context"]
 
     asyncio.run(run())
 
@@ -279,6 +280,7 @@ async def test_job_output_lost_query_reply_is_unknown(tmp_path, monkeypatch):
     assert value["data"]["job"] == "j1"
     assert value["error"]["code"] == "replyUnavailable"
     assert value["error"]["stage"] == "local.websocket"
+    assert "deviceId" not in value["data"]["context"]
     assert received == [("call", "job.get", {"job": "j1"})]
     assert not destination.exists()
 
@@ -314,10 +316,11 @@ async def test_job_output_unknown_device_is_rejected_before_device_rpc(
     assert value["result"] == "not sent"
     assert value["error"]["code"] == "deviceNotFound"
     assert value["data"]["job"] == "j1"
+    assert "deviceId" not in value["data"]["context"]
     assert not destination.exists()
 
 
-@pytest.mark.parametrize("case", ["rejected", "uncertain", "malformed"])
+@pytest.mark.parametrize("case", ["rejected", "uncertain", "selection", "malformed"])
 async def test_local_error_retains_problem_and_dispatch_classification(
     tmp_path, monkeypatch, case
 ):
@@ -338,7 +341,7 @@ async def test_local_error_retains_problem_and_dispatch_classification(
     async def reply(connection, value):
         value = json.loads(value)
         if "error" in value:
-            if case == "uncertain":
+            if case in ("uncertain", "selection"):
                 value = {**value, "uncertain": True}
             elif case == "malformed":
                 value = {**value, "error": {"code": "missing-message"}}
@@ -346,19 +349,24 @@ async def test_local_error_retains_problem_and_dispatch_classification(
 
     monkeypatch.setattr(local_server_module, "send", reply)
     async with local_server(tmp_path / "tls", dispatch) as (material, _):
-        client = local_call.LocalCall("phone", "task")
+        client = local_call.LocalCall(None if case == "selection" else "phone", "task")
         client.peer = await Peer.open(material, source="local")
         try:
-            operation = client.call("click", {}, deadline=time.monotonic() + 2)
+            operation = (
+                client.bind(time.monotonic() + 2)
+                if case == "selection"
+                else client.call("click", {}, deadline=time.monotonic() + 2)
+            )
             with pytest.raises(Fault) as caught:
                 await operation
             expected = {
                 "rejected": Fault,
                 "uncertain": TransportFailure,
+                "selection": Fault,
                 "malformed": TransportFailure,
             }[case]
             assert type(caught.value) is expected
-            assert received == ["call"]
+            assert received == (["devices"] if case == "selection" else ["call"])
             if case == "malformed":
                 assert caught.value.problem.code == "replyUnavailable"
                 assert caught.value.problem.stage == "local.websocket"
@@ -423,4 +431,108 @@ async def test_multi_rpc_command_keeps_its_device_when_default_changes(
                 coordinator.state.resolve_selection(None)[0].device_id == replacement_id
             )
         finally:
+            await client.close()
+
+
+@pytest.mark.parametrize("source", ["global", "sole"])
+@pytest.mark.parametrize("lost_reply", [False, True])
+async def test_job_query_final_context_keeps_first_binding_after_non_done_reply(
+    tmp_path, monkeypatch, source, lost_reply
+):
+    received = []
+
+    async def dispatch(method, args):
+        received.append(method)
+        if len(received) == 1:
+            write_json(
+                coordinator.state.selection, {"deviceId": replacement["deviceId"]}
+            )
+            return Result(
+                command=method, result="still running", data={"job": "j1"}
+            ).wire()
+        return completed(method, {"job": "j1"}).wire()
+
+    original_send = local_server_module.send
+
+    async def send(connection, value):
+        reply = json.loads(value)
+        if lost_reply and reply.get("result", {}).get("result") == "done":
+            await connection.close()
+            return
+        await original_send(connection, value)
+
+    monkeypatch.setattr(local_server_module, "send", send)
+    async with connections(tmp_path, dispatch) as (coordinator, material, connect):
+        replacement = {**new_device_identity(), "alias": "other", "credential": "other"}
+        if source == "global":
+            save_active(coordinator.state, replacement)
+            write_json(coordinator.state.selection, {"deviceId": material["deviceId"]})
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        response = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            [
+                "--json",
+                "--workspace-root",
+                str(tmp_path),
+                "job",
+                "get",
+                "j1",
+                "--wait",
+                "2s",
+            ],
+        )
+    assert response.exit_code == (3 if lost_reply else 0), response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "job get"
+    assert value["result"] == ("UNKNOWN" if lost_reply else "done")
+    assert value["data"]["context"] == {
+        "workspaceRoot": str(tmp_path),
+        "deviceId": material["deviceId"],
+        "deviceSource": source,
+        "session": "default",
+        "sessionSource": "default",
+    }
+    assert received == ["job.get", "job.get"]
+
+
+@pytest.mark.parametrize("lost", ["selection", "business"])
+async def test_selection_loss_is_not_business_dispatch_uncertainty(tmp_path, lost):
+    calls = []
+    release = asyncio.Event()
+
+    async def dispatch(method, args, deadline):
+        calls.append(method)
+        if method == "call":
+            assert args["device"] == "phone"
+            assert args["session"] == "named-task"
+            assert args["command"] == "fill"
+        await release.wait()
+        return completed(method).wire()
+
+    async with local_server(tmp_path / "identity", dispatch, credential="local") as (
+        material,
+        _,
+    ):
+        peer = await Peer.open(material, source="local")
+        client = local_call.LocalCall("phone", "named-task")
+        client.peer = peer
+        deadline = time.monotonic() + 0.15
+        try:
+            operation = (
+                client.bind(deadline)
+                if lost == "selection"
+                else client.call("fill", {}, deadline=deadline)
+            )
+            with pytest.raises(Fault) as failure:
+                await operation
+            assert isinstance(failure.value, TransportFailure) == (lost == "business")
+            assert calls == (["call"] if lost == "business" else ["devices"])
+            assert failure.value.problem == Problem(
+                code="replyUnavailable",
+                message="Reply was not received within the request budget",
+                stage="local.websocket",
+            )
+        finally:
+            release.set()
             await client.close()

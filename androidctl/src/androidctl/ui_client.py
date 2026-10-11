@@ -11,8 +11,14 @@ from typing import Any, NamedTuple, NoReturn
 
 import typer
 
-from . import history, ui_view, workspace
-from .cli_options import CliOptions, command_name, options
+from . import history, ui_view
+from .cli_options import (
+    CliOptions,
+    call_context,
+    command_name,
+    load_workspace_options,
+    options,
+)
 from .local_call import LocalCall
 from .output import Output, display_name
 from .protocol import (
@@ -184,7 +190,7 @@ def result_line(
             else "Do not repeat automatically; first check the effect "
             "with read-only observations."
         )
-    output.echo("; ".join(parts))
+    output.echo("; ".join(parts) + output.context(result))
     for line in selection_lines(result.data, compound=compound, steps=steps):
         output.echo(line)
 
@@ -417,8 +423,7 @@ def execute(
     actual_command = command_name(ctx)
     timeout = args["timeoutMs"]
     deadline = time.monotonic() + timeout / 1000
-    context = options(ctx)
-    workspace.require_root(context.workspace_root)
+    context = load_workspace_options(options(ctx))
     if view.print_body and context.as_json:
         raise Fault("arguments", "--print and --json cannot be used together")
     paths = delivery_paths(view)
@@ -489,6 +494,7 @@ def execute(
                     "imageError",
                     result.data.get("snapshotError") or "No capture was published",
                 )
+            result.data["context"] = call_context(context, client.local.binding)
             return result, tree, png
         finally:
             await client.close()

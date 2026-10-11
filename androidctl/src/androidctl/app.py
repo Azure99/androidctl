@@ -12,12 +12,16 @@ from typing import Annotated, Any, NoReturn
 import typer
 from typer.main import get_command
 
+from . import workspace
 from .cli_options import (
     CliCommand,
     CliOptions,
     CommandFailure,
+    call_context,
     command_name,
+    device_context,
     idle_duration,
+    load_workspace_options,
     options,
     parse_duration,
 )
@@ -68,7 +72,7 @@ def global_options(
             "--device",
             envvar="ANDROIDCTL_DEVICE",
             help="Default device for devices/status, sessions, UI, shell "
-            "and file jobs.",
+            "and file jobs. Saved by use only when explicit.",
         ),
     ] = None,
     session: Annotated[
@@ -77,7 +81,8 @@ def global_options(
             "-s",
             "--session",
             envvar="ANDROIDCTL_SESSION",
-            help="Default session for status, session, UI, shell and file jobs.",
+            help="Default session for status, session, UI, shell and file jobs. "
+            "Saved by use only when explicit.",
         ),
     ] = "default",
     workspace_root: Annotated[
@@ -87,7 +92,7 @@ def global_options(
             envvar="ANDROIDCTL_WORKSPACE_ROOT",
             readable=False,
             help=(
-                "Existing root for automatic artifacts; "
+                "Existing root for workspace defaults and automatic artifacts; "
                 "defaults to the working directory."
             ),
         ),
@@ -101,7 +106,15 @@ def global_options(
 ) -> None:
     del version
     root = workspace_root.absolute() if workspace_root is not None else Path.cwd()
-    ctx.obj = CliOptions(device, session, as_json, root)
+    sources = {}
+    for name in ("device", "session"):
+        source = ctx.get_parameter_source(name)
+        sources[name] = {"COMMANDLINE": "args", "ENVIRONMENT": "env"}.get(
+            source.name if source is not None else "", "default"
+        )
+    ctx.obj = CliOptions(
+        device, session, as_json, root, sources["device"], sources["session"]
+    )
 
 
 def emit_fields(values: dict[str, Any], output: Output) -> None:
@@ -161,7 +174,7 @@ def render_summary(result: Result, output: Output) -> None:
         parts.append(f"code={result.error.code}")
         if result.error.stage:
             parts.append(f"stage={result.error.stage}")
-    output.echo("; ".join(parts))
+    output.echo("; ".join(parts) + output.context(result))
     emit_fields({"cleanupError": result.data.get("cleanupError")}, output)
     output.unknown(result)
 
@@ -302,13 +315,14 @@ def device_call(
     render: Callable[[Result, Output], None] = render_summary,
 ) -> NoReturn:
     command = command_name(ctx)
-    context = options(ctx)
+    context = load_workspace_options(options(ctx))
     local = LocalCall(context.device, context.session)
     result = request_local(
         command,
         local,
         lambda deadline: local.call(name, args or {}, deadline=deadline),
     )
+    result.data["context"] = call_context(context, local.binding)
     emit(result, as_json=context.as_json, render=render)
 
 
@@ -340,7 +354,7 @@ def pair(
     help="List local pairing records, selection and pending confirmations.",
 )
 def devices(ctx: typer.Context) -> None:
-    context = options(ctx)
+    context = load_workspace_options(options(ctx))
     local = LocalCall()
     result = request_local(
         command_name(ctx),
@@ -349,7 +363,59 @@ def devices(ctx: typer.Context) -> None:
             "devices", {"device": context.device}, deadline=deadline
         ),
     )
+    selection = result.data["context"] if result.result == "done" else {}
+    result.data["context"] = device_context(
+        context, selection.get("deviceId"), selection.get("deviceSource")
+    )
     emit(result, as_json=context.as_json, render=render_devices)
+
+
+@app.command(
+    cls=CliCommand,
+    help="Show saved defaults, update explicit device/session fields, or clear them.",
+)
+def use(
+    ctx: typer.Context,
+    clear: Annotated[
+        bool, typer.Option("--clear", help="Remove this workspace's configuration.")
+    ] = False,
+) -> None:
+    context = options(ctx)
+    workspace.require_root(context.workspace_root)
+    if clear:
+        result = workspace.clear(context.workspace_root)
+    else:
+        saved = workspace.read(context.workspace_root)
+        if "args" not in (context.device_source, context.session_source):
+            result = completed(
+                "use",
+                {
+                    **saved,
+                    "path": str(workspace.config_path(context.workspace_root)),
+                    "saved": False,
+                },
+            )
+        else:
+            if context.session_source == "args":
+                if not context.session:
+                    raise Fault(
+                        "arguments", "Workspace session must be a nonempty string"
+                    )
+                saved["session"] = context.session
+            if context.device_source == "args":
+                local = LocalCall(context.device)
+                deadline = time.monotonic() + LOCAL_REQUEST_SECONDS
+
+                async def bind() -> None:
+                    try:
+                        binding = await local.bind(deadline)
+                        saved["device"] = binding.device_id
+                    finally:
+                        await local.close(deadline=deadline)
+
+                asyncio.run(bind())
+            result = workspace.save(context.workspace_root, saved)
+    emit(result, as_json=context.as_json, render=render_fields)
 
 
 @app.command(
