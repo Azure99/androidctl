@@ -42,7 +42,7 @@ internal class UiActions(
         val action = action(run)
         val source =
             run.measure("preWaitMs") {
-                if (run.args.has("ref")) ui.snapshots.target(run.args.getString("ref")) else selected(run, action)
+                if (run.args.has("ref")) UiRefRepair.resolve(ui, run) else selected(run, action)
             }
         val method = resolutionMethod(run)
         val report =
@@ -74,7 +74,7 @@ internal class UiActions(
         run: UiRun,
         send: () -> JSONObject,
     ): JSONObject {
-        val source = ui.snapshots.target(run.args.getString("ref"))
+        val source = UiRefRepair.resolve(ui, run)
         val method = resolutionMethod(run)
         val report =
             { target: JSONObject ->
@@ -115,6 +115,7 @@ internal class UiActions(
     private fun resolutionMethod(run: UiRun): String =
         when {
             !run.args.has("ref") -> "selector"
+            run.args.optBoolean("repairRef") -> "signature"
             else -> "original"
         }
 

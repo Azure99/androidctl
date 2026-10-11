@@ -34,9 +34,9 @@ def index_samples(section, samples, key="name"):
 CAPTURES = index_samples("captures", WIRE_CONTRACT["captures"])
 COMPOUND_RESULTS = index_samples("compoundResults", WIRE_CONTRACT["compoundResults"])
 ACTION_RESULTS = index_samples("actionResults", WIRE_CONTRACT["actionResults"])
-ENTITY_FORMS = index_samples("entityForms", WIRE_CONTRACT["entityForms"], "input")
 WAIT_RESULTS = index_samples("waitResults", WIRE_CONTRACT["waitResults"])
 FILE_FAILURES = index_samples("fileFailures", WIRE_CONTRACT["fileFailures"])
+ENTITY_FORMS = index_samples("entityForms", WIRE_CONTRACT["entityForms"], "input")
 
 COMPOUND_EXPECTED = {
     "ordinary-write": (
@@ -94,6 +94,21 @@ ACTION_EXPECTED = {
             "first check the effect with read-only observations."
         ],
     ),
+    "suggested-row-matches": (
+        2,
+        "done",
+        0,
+        [
+            'check: done; attempts=2; verification="matches"; '
+            'actualValue="true"; checkedModel="binary"',
+            'Requested: {"target":{"ref":"e7"},"action":"check"}',
+            'Resolved: {"method":"signature","target":{"ref":"e12","role":"text",'
+            '"name":"Option","bounds":[0,0,100,40],"windowId":1}}',
+            'Selected: {"action":"click","target":{"ref":"e20","role":"item",'
+            '"name":"Option","bounds":[0,0,100,100],"windowId":1}}',
+            'Verification target: {"ref":"e13"}',
+        ],
+    ),
     "scroll-page-not-sent": (
         1,
         "not sent",
@@ -109,7 +124,6 @@ ACTION_EXPECTED = {
         ],
     ),
 }
-
 
 WAIT_EXPECTED = {
     "gone-absent": (
@@ -183,6 +197,29 @@ FILE_FAILURE_EXPECTED = {
 }
 
 
+@pytest.mark.parametrize(
+    ("samples", "names"),
+    [
+        (CAPTURES, {"projected-tree", "raw-image", "large-tree", "minimal-tree"}),
+        (COMPOUND_RESULTS, COMPOUND_EXPECTED.keys()),
+        (ACTION_RESULTS, ACTION_EXPECTED.keys()),
+        (WAIT_RESULTS, WAIT_EXPECTED.keys()),
+        (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
+    ],
+    ids=["captures", "compoundResults", "actionResults", "waitResults", "fileFailures"],
+)
+def test_named_sample_coverage_is_exact(samples, names):
+    assert samples.keys() == names
+
+
+@pytest.mark.parametrize("key", ["name", "input"])
+def test_sample_index_rejects_duplicate_names_before_building_the_mapping(key):
+    with pytest.raises(
+        AssertionError, match=f"samples contains duplicate {key}: first"
+    ):
+        index_samples("samples", [{key: "first"}, {key: "first"}], key)
+
+
 def assert_json(expected, actual):
     if isinstance(expected, dict):
         assert isinstance(actual, dict)
@@ -211,6 +248,12 @@ def test_json_comparison_preserves_array_order():
         assert_json({"nodes": [1, 2]}, {"nodes": [2, 1]})
 
 
+def constant(source, name):
+    match = re.search(rf"\b{name}\s*(?:=\s*)?\(?([0-9][0-9uL *]*)", source)
+    assert match, f"Production constant {name} was not found"
+    return math.prod(int(part.strip().rstrip("uL")) for part in match[1].split("*"))
+
+
 def test_wire_limits_agree_across_boundaries():
     limits = {
         "MESSAGE_BYTES": protocol.MAX_MESSAGE,
@@ -233,6 +276,15 @@ def test_wire_limits_agree_across_boundaries():
     )
 
 
+def test_device_shell_cleanup_overrides_the_public_exit_without_losing_execution():
+    result = Result.model_validate(WIRE_CONTRACT["shellCleanupFailure"])
+    assert result.result == "failed"
+    assert result.exit == 3
+    assert result.exit_code() == 3
+    assert result.data["execution"]["exitCode"] == 7
+    assert result.data["cleanup"] == "unknown"
+
+
 def test_offline_selector_choices_match_device_classification_and_actions():
     assert sorted(ROLES) == WIRE_CONTRACT["vocabulary"]["roles"]
     assert sorted(LOCATE_ACTIONS) == WIRE_CONTRACT["vocabulary"]["actions"]
@@ -240,12 +292,6 @@ def test_offline_selector_choices_match_device_classification_and_actions():
 
 def test_query_pools_share_the_expected_control_methods():
     assert WIRE_CONTRACT["queryMethods"] == sorted(QUERY_METHODS | {"pair.register"})
-
-
-def constant(source, name):
-    match = re.search(rf"\b{name}\s*(?:=\s*)?\(?([0-9][0-9uL *]*)", source)
-    assert match, f"Production constant {name} was not found"
-    return math.prod(int(part.strip().rstrip("uL")) for part in match[1].split("*"))
 
 
 @pytest.mark.parametrize("sample", ENTITY_FORMS.values(), ids=ENTITY_FORMS)
@@ -303,15 +349,6 @@ def test_host_consumes_device_produced_chunks_without_reencoding(capture, monkey
     prefix = screen.find(".//text[@name='Readable prefix']")
     assert prefix is not None
     assert prefix.attrib["unreadable"] == "true"
-
-
-def test_device_shell_cleanup_overrides_the_public_exit_without_losing_execution():
-    result = Result.model_validate(WIRE_CONTRACT["shellCleanupFailure"])
-    assert result.result == "failed"
-    assert result.exit == 3
-    assert result.exit_code() == 3
-    assert result.data["execution"]["exitCode"] == 7
-    assert result.data["cleanup"] == "unknown"
 
 
 @pytest.mark.parametrize("name", COMPOUND_EXPECTED)
@@ -407,29 +444,6 @@ def test_host_consumes_device_output_chunks(stream, monkeypatch):
     assert len(chunks) == (2 if stream == "stdout" else 1)
     assert meta["read"] == len(expected)
     assert meta["truncated"] is False
-
-
-@pytest.mark.parametrize(
-    ("samples", "names"),
-    [
-        (CAPTURES, {"projected-tree", "raw-image", "large-tree", "minimal-tree"}),
-        (COMPOUND_RESULTS, COMPOUND_EXPECTED.keys()),
-        (ACTION_RESULTS, ACTION_EXPECTED.keys()),
-        (WAIT_RESULTS, WAIT_EXPECTED.keys()),
-        (FILE_FAILURES, FILE_FAILURE_EXPECTED.keys()),
-    ],
-    ids=["captures", "compoundResults", "actionResults", "waitResults", "fileFailures"],
-)
-def test_named_sample_coverage_is_exact(samples, names):
-    assert samples.keys() == names
-
-
-@pytest.mark.parametrize("key", ["name", "input"])
-def test_sample_index_rejects_duplicate_names_before_building_the_mapping(key):
-    with pytest.raises(
-        AssertionError, match=f"samples contains duplicate {key}: first"
-    ):
-        index_samples("samples", [{key: "first"}, {key: "first"}], key)
 
 
 @pytest.mark.parametrize("name", FILE_FAILURE_EXPECTED)

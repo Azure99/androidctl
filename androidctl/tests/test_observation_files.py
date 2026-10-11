@@ -25,7 +25,9 @@ from androidctl.ui_client import View, deliver
 from ui_test_support import BrokenStream, node, tree, xml_metadata
 
 
-def deliver_snapshot(result, source, view, *, as_json=False, session="default"):
+def deliver_snapshot(
+    result, source, view, *, as_json=False, binding=None, session="default"
+):
     ui_client.deliver(
         result,
         source,
@@ -35,6 +37,7 @@ def deliver_snapshot(result, source, view, *, as_json=False, session="default"):
         command="snapshot",
         invocation={"command": "snapshot", "args": {}},
         context=CliOptions(None, session, as_json, workspace_root=Path.cwd()),
+        binding=binding,
         paths=ui_client.DeliveryPaths(),
     )
 
@@ -67,6 +70,7 @@ def test_observation_files_preserve_body_source_and_missing_facts(
         command="snapshot",
         invocation={"command": "snapshot", "args": {"window": 12}},
         context=CliOptions(None, "default", as_json, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -517,11 +521,13 @@ def test_history_warning_keeps_delivered_observation(monkeypatch, tmp_path, caps
         },
     )
     source = tree()
-    source.update(connection=5)
+    source.update(refContext="worker:3", connection=5)
     result.data["context"] = call_context(
         CliOptions("phone", "task", False, tmp_path), BoundDevice("phone", "args")
     )
-    deliver_snapshot(result, source, View(), session="task")
+    deliver_snapshot(
+        result, source, View(), binding=BoundDevice("phone", "args"), session="task"
+    )
     assert result.result == "done"
     saved = (tmp_path / result.data["snapshotPath"]).read_text(encoding="utf-8")
     metadata = xml_metadata(saved)
@@ -564,6 +570,7 @@ def test_before_action_timing_is_not_a_snapshot_path(
         command="click",
         invocation={"command": "click", "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -632,6 +639,7 @@ def test_malformed_observation_preserves_known_action_and_explicit_exit(
         command="click",
         invocation={"command": "click", "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -755,6 +763,7 @@ def test_partial_wait_match_is_visible_beside_older_tree(capsys, tmp_path, monke
         command="wait",
         invocation={"command": "wait", "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -784,6 +793,7 @@ def test_raw_json_does_not_require_xml_projection(monkeypatch, capsys, tmp_path)
         command="snapshot",
         invocation={"command": "snapshot", "args": {}},
         context=CliOptions(None, "default", True, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = json.loads(capsys.readouterr().out)
@@ -889,6 +899,7 @@ def test_required_observation_save_failure_keeps_cleanup_exit(
         command="snapshot",
         invocation={"command": "snapshot", "args": {}},
         context=CliOptions(None, "default", True, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     value = json.loads(capsys.readouterr().out)
@@ -917,6 +928,7 @@ def test_rejection_guidance_names_the_observation_actually_delivered(
         command="click",
         invocation={"command": "click", "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -966,6 +978,7 @@ def test_rejection_with_undeliverable_tree_keeps_known_observation_facts(
         command="click",
         invocation={"command": "click", "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -1005,6 +1018,7 @@ def test_bad_history_keeps_action_done_without_stdout_body(
         command="click",
         invocation={"command": "click", "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     output = capsys.readouterr().out
@@ -1049,6 +1063,7 @@ def test_delivery_timing_counts_local_rendering_without_fabricating_other_stages
         command="snapshot",
         invocation={"command": "snapshot", "args": {}},
         context=CliOptions(None, "default", True, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     wire = json.loads(capsys.readouterr().out)
@@ -1066,6 +1081,7 @@ def test_delivery_timing_counts_local_rendering_without_fabricating_other_stages
         command="click",
         invocation={"command": "click", "args": {}},
         context=CliOptions(None, "default", True, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(),
     )
     assert json.loads(capsys.readouterr().out)["data"] == {}

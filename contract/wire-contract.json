@@ -908,6 +908,116 @@
     {
       "request": {
         "args": {
+          "ref": "e7",
+          "repairRef": true,
+          "sourceSignature": {
+            "sourceId": "old-label",
+            "parent": "e20",
+            "resourceId": "example.options:id/label",
+            "unavailable": [],
+            "clickable": false,
+            "description": null,
+            "className": "android.widget.TextView",
+            "showingHintText": false,
+            "enabled": true,
+            "sourceContext": "worker:3",
+            "ref": "e7",
+            "password": false,
+            "view": {
+              "detailComplete": true,
+              "role": "text",
+              "nameComplete": true,
+              "selectionTarget": null,
+              "nameConsumed": false,
+              "name": "Option",
+              "detail": ""
+            },
+            "checkedModel": "binary",
+            "checked": "false",
+            "text": "Option",
+            "packageName": "example.options",
+            "row": {
+              "chain": [{
+                "column": 0,
+                "row": 0
+              }],
+              "label": "Option",
+              "complete": true,
+              "nearest": {
+                "column": 0,
+                "row": 0
+              }
+            },
+            "scrollable": false,
+            "visible": true,
+            "checkable": false,
+            "editable": false,
+            "collectionInfo": null,
+            "windowId": 1,
+            "longClickable": false,
+            "collectionItemInfo": null,
+            "hint": null,
+            "bounds": [
+              0,
+              0,
+              100,
+              40
+            ],
+            "focused": false,
+            "sourceCapture": "worker:8",
+            "refAvailable": true,
+            "actions": []
+          }
+        },
+        "command": "check"
+      },
+      "response": {
+        "result": "done",
+        "reason": null,
+        "data": {
+          "dispatchStarted": true,
+          "verificationTarget": {"ref": "e13"},
+          "checkedModel": "binary",
+          "actualValue": "true",
+          "verification": "matches",
+          "selected": {
+            "action": "click",
+            "target": {
+              "ref": "e20",
+              "role": "item",
+              "name": "Option",
+              "bounds": [
+                0,
+                0,
+                100,
+                100
+              ],
+              "windowId": 1
+            }
+          },
+          "resolved": {
+            "method": "signature",
+            "target": {
+              "ref": "e12",
+              "role": "text",
+              "name": "Option",
+              "bounds": [
+                0,
+                0,
+                100,
+                40
+              ],
+              "windowId": 1
+            }
+          }
+        },
+        "command": "check"
+      },
+      "name": "suggested-row-matches"
+    },
+    {
+      "request": {
+        "args": {
           "ref": "e30",
           "direction": "down"
         },

@@ -730,6 +730,51 @@ def test_action_roles_expand_only_existing_ref_or_action_differences(capsys):
     }
     ui_client.result_line(completed("check", data), "check", Output())
     assert capsys.readouterr().out == "check: done\n"
+    data["attempts"] = 2
+    ui_client.result_line(completed("check", data), "check", Output())
+    assert capsys.readouterr().out == "check: done; attempts=2\n"
+    data["requested"] = {"target": {"ref": "e7"}, "action": "fill", "submit": True}
+    data.pop("selected")
+    data["focus"] = {
+        "result": "done",
+        "data": {
+            "selected": {"target": {"ref": "e7"}, "action": "focus"},
+            "sent": True,
+        },
+    }
+    data["fill"] = {
+        "result": "done",
+        "data": {
+            "selected": {"target": {"ref": "e7"}, "action": "fill"},
+            "sent": False,
+        },
+    }
+    data["submit"] = {
+        "result": "done",
+        "data": {"selected": {"target": {"ref": "e8"}, "action": "ime"}, "sent": True},
+    }
+    ui_client.result_line(completed("fill", data), "fill", Output())
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == (
+        "fill: done; attempts=2; focus=done; fill=done, sent=false; submit=done"
+    )
+    assert lines[1].startswith("Requested: ")
+    assert lines[2].startswith("Resolved: ")
+    assert any(
+        line.startswith("submit Selected: ") and '"ref":"e8"' in line for line in lines
+    )
+    data["submit"]["data"]["selected"] = {
+        "target": {"ref": "e7"},
+        "action": "key",
+        "key": "enter",
+    }
+    ui_client.result_line(completed("fill", data), "fill", Output())
+    lines = capsys.readouterr().out.splitlines()
+    assert "submit=done, action=key, key=enter" in lines[0]
+    assert any(
+        line.startswith("submit Selected: ") and '"key":"enter"' in line
+        for line in lines
+    )
 
 
 @pytest.mark.parametrize("state", ["changed", "unchanged", "unknown"])

@@ -144,6 +144,122 @@ class WireContractTest {
         )
     }
 
+    private fun indexSamples(
+        section: String,
+        samples: JSONArray,
+        key: String = "name",
+    ): Map<String, JSONObject> {
+        val names = mutableSetOf<String>()
+        val objects = samples.objects()
+        for (sample in objects) {
+            val name = sample.getString(key)
+            assertTrue("$section contains duplicate $key: $name", names.add(name))
+        }
+        return objects.associateBy { it.getString(key) }
+    }
+
+    private fun compareNamedSamples(
+        section: String,
+        reviewed: JSONArray,
+        produced: JSONArray,
+    ) {
+        val saved = indexSamples("$section reviewed", reviewed)
+        val actual = indexSamples("$section produced", produced)
+        assertEquals("$section sample names differ from the reviewed contract", saved.keys, actual.keys)
+        for ((name, sample) in actual) {
+            assertEquals("$section/$name differs from the reviewed contract", structure(saved.getValue(name)), structure(sample))
+        }
+    }
+
+    private fun compareCaptures(
+        reviewed: JSONArray,
+        actual: JSONArray,
+    ) {
+        val golden = indexSamples("captures reviewed", reviewed)
+        val current = indexSamples("captures produced", actual)
+        assertEquals("captures sample names differ from the reviewed contract", golden.keys, current.keys)
+        for ((name, produced) in current) {
+            val saved = golden.getValue(name)
+            assertEquals(fields(saved), fields(produced))
+            assertEquals(saved.getString("kind"), produced.getString("kind"))
+            assertEquals(structure(saved.getJSONObject("expect")), structure(produced.getJSONObject("expect")))
+            val encoding = produced.getJSONObject("expect").getString("encoding")
+            assertEquals(
+                encoding,
+                produced
+                    .getJSONArray("chunks")
+                    .getJSONObject(0)
+                    .getJSONObject("data")
+                    .getString("encoding"),
+            )
+            assertEquals(
+                encoding,
+                saved
+                    .getJSONArray("chunks")
+                    .getJSONObject(0)
+                    .getJSONObject("data")
+                    .getString("encoding"),
+            )
+            val currentBytes = decode(produced)
+            val savedBytes = decode(saved)
+            if (produced.getString("kind") == "tree") {
+                assertEquals(
+                    structure(JSONObject(savedBytes.toString(Charsets.UTF_8))),
+                    structure(JSONObject(currentBytes.toString(Charsets.UTF_8))),
+                )
+            } else {
+                assertArrayEquals(savedBytes, currentBytes)
+                assertEquals(
+                    structure(
+                        saved
+                            .getJSONArray("chunks")
+                            .getJSONObject(0)
+                            .getJSONObject("data")
+                            .getJSONObject("image"),
+                    ),
+                    structure(
+                        produced
+                            .getJSONArray("chunks")
+                            .getJSONObject(0)
+                            .getJSONObject("data")
+                            .getJSONObject("image"),
+                    ),
+                )
+            }
+            assertEquals(
+                fields(saved.getJSONArray("chunks").getJSONObject(0).getJSONObject("data")),
+                fields(produced.getJSONArray("chunks").getJSONObject(0).getJSONObject("data")),
+            )
+        }
+    }
+
+    private fun shellCleanupFailure(): JSONObject {
+        val protocol = ShellProtocol("j-cleanup", OutputStore { 0L }) { }
+        protocol.sent = true
+        val execution =
+            json(
+                "event" to "foreground",
+                "created" to true,
+                "cancelled" to false,
+                "reason" to "finished",
+                "domainEmpty" to true,
+                "rootDone" to true,
+                "exitCode" to 7,
+                "signal" to 0,
+                "signalOK" to 0,
+                "signalFailed" to 0,
+                "cleanupUnknown" to false,
+                "startupUnknown" to false,
+                "startupStage" to 0,
+                "startupErrno" to 0,
+            )
+        protocol.accept(ShellFrame('S', execution.toString().toByteArray()))
+        val cleanup = json("event" to "helperEnd", "cleanupUnknown" to true, "signalFailed" to 0)
+        protocol.accept(ShellFrame('S', cleanup.toString().toByteArray()))
+        protocol.ended()
+        return protocol.view(ended = true)
+    }
+
     private fun selectorVocabulary(): JSONObject {
         val samples =
             listOf(
@@ -164,6 +280,8 @@ class WireContractTest {
         UiAction.entries.forEach { assertTrue(it.platformId > 0) }
         return json("roles" to JSONArray(roles), "actions" to JSONArray(actions))
     }
+
+    private fun fields(value: JSONObject): Set<String> = value.keys().asSequence().toSet()
 
     private fun projectionFacts(tree: JSONObject) {
         val nodes = tree.getJSONArray("nodes").objects().associateBy { it.getString("ref") }
@@ -236,12 +354,6 @@ class WireContractTest {
         return result
     }
 
-    private fun contractRun(
-        command: String,
-        args: JSONObject,
-        budget: UiBudget = UiBudget(5000) { 0 },
-    ): UiRun = UiRun(command, Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS), args, budget)
-
     private fun compoundResults(): JSONArray {
         val target = node("e7", "Search").put("editable", true).put("focused", true).put("isMultiLine", false)
         target.put("actions", JSONArray(listOf("fill", "ime")))
@@ -306,6 +418,12 @@ class WireContractTest {
             ),
         )
     }
+
+    private fun contractRun(
+        command: String,
+        args: JSONObject,
+        budget: UiBudget = UiBudget(5000) { 0 },
+    ): UiRun = UiRun(command, Lease(1, SessionOwner("pair", "task", "host"), 0, Sessions.DEFAULT_IDLE_MS), args, budget)
 
     private fun waitResults(): JSONArray {
         fun tree(
@@ -417,6 +535,7 @@ class WireContractTest {
                 sample("plain-click", click, outcome("click")),
                 sample("selector-click", selector, outcome("click")),
                 sample("coordinate-pending-at-expiry", tap, expired = true),
+                rowResult(),
                 scrollResult(),
             ),
         )
@@ -443,6 +562,51 @@ class WireContractTest {
         }
         return json(
             "name" to "scroll-page-not-sent",
+            "request" to json("command" to run.command, "args" to copy(run.args)),
+            "response" to run.response(),
+        )
+    }
+
+    private fun rowResult(): JSONObject {
+        val row =
+            node("e20", "Option")
+                .put("collectionItemInfo", json("rowIndex" to 0, "columnIndex" to 0))
+                .put("refAvailable", true)
+                .put("actions", JSONArray(listOf("click")))
+        val label =
+            node("e12", "Option", "e20")
+                .put("refAvailable", true)
+                .put("packageName", "example.options")
+                .put("resourceId", "example.options:id/label")
+                .put("bounds", JSONArray(listOf(0, 0, 100, 40)))
+        val control = node("e13", parent = "e20").put("refAvailable", true).put("checkable", true)
+        val nodes = listOf(row, label, control)
+        UiSemantics.project(nodes)
+        val tree = json("partial" to false, "nodes" to JSONArray(nodes))
+        val source =
+            copy(label)
+                .put("ref", "e7")
+                .put("sourceId", "old-label")
+                .put("sourceContext", "worker:3")
+                .put("sourceCapture", "worker:8")
+        UiRefRepair.requireSource(source, "e7", "worker:3")
+        val repaired = UiRefRepair.select(source, tree)
+        val selection = UiAdvice.suggestedRow(tree, repaired, UiAction.CHECK)!!
+        val selectedRow = selection.row
+        val verifiedControl = selection.verificationControl
+        val run = contractRun("check", json("ref" to "e7", "sourceSignature" to source, "repairRef" to true))
+        run.resolve("signature", repaired)
+        run.select("click", selectedRow)
+        val data = json("verificationTarget" to json("ref" to verifiedControl.getString("ref")))
+        run.begin(outcome("check", Outcome.UNKNOWN, "Suggested row click pending", copy(data)))
+        val result =
+            UiVerification.verifiedResult(
+                outcome("check", data = data),
+                UiVerification.evaluate(UiAction.CHECK, run.args, copy(verifiedControl).put("checked", "true")),
+            )
+        run.remember(result)
+        return json(
+            "name" to "suggested-row-matches",
             "request" to json("command" to run.command, "args" to copy(run.args)),
             "response" to run.response(),
         )
@@ -487,124 +651,6 @@ class WireContractTest {
             ),
         )
     }
-
-    private fun compareCaptures(
-        reviewed: JSONArray,
-        actual: JSONArray,
-    ) {
-        val golden = indexSamples("captures reviewed", reviewed)
-        val current = indexSamples("captures produced", actual)
-        assertEquals("captures sample names differ from the reviewed contract", golden.keys, current.keys)
-        for ((name, produced) in current) {
-            val saved = golden.getValue(name)
-            assertEquals(fields(saved), fields(produced))
-            assertEquals(saved.getString("kind"), produced.getString("kind"))
-            assertEquals(structure(saved.getJSONObject("expect")), structure(produced.getJSONObject("expect")))
-            val encoding = produced.getJSONObject("expect").getString("encoding")
-            assertEquals(
-                encoding,
-                produced
-                    .getJSONArray("chunks")
-                    .getJSONObject(0)
-                    .getJSONObject("data")
-                    .getString("encoding"),
-            )
-            assertEquals(
-                encoding,
-                saved
-                    .getJSONArray("chunks")
-                    .getJSONObject(0)
-                    .getJSONObject("data")
-                    .getString("encoding"),
-            )
-            val currentBytes = decode(produced)
-            val savedBytes = decode(saved)
-            if (produced.getString("kind") == "tree") {
-                assertEquals(
-                    structure(JSONObject(savedBytes.toString(Charsets.UTF_8))),
-                    structure(JSONObject(currentBytes.toString(Charsets.UTF_8))),
-                )
-            } else {
-                assertArrayEquals(savedBytes, currentBytes)
-                assertEquals(
-                    structure(
-                        saved
-                            .getJSONArray("chunks")
-                            .getJSONObject(0)
-                            .getJSONObject("data")
-                            .getJSONObject("image"),
-                    ),
-                    structure(
-                        produced
-                            .getJSONArray("chunks")
-                            .getJSONObject(0)
-                            .getJSONObject("data")
-                            .getJSONObject("image"),
-                    ),
-                )
-            }
-            assertEquals(
-                fields(saved.getJSONArray("chunks").getJSONObject(0).getJSONObject("data")),
-                fields(produced.getJSONArray("chunks").getJSONObject(0).getJSONObject("data")),
-            )
-        }
-    }
-
-    private fun shellCleanupFailure(): JSONObject {
-        val protocol = ShellProtocol("j-cleanup", OutputStore { 0L }) { }
-        protocol.sent = true
-        val execution =
-            json(
-                "event" to "foreground",
-                "created" to true,
-                "cancelled" to false,
-                "reason" to "finished",
-                "domainEmpty" to true,
-                "rootDone" to true,
-                "exitCode" to 7,
-                "signal" to 0,
-                "signalOK" to 0,
-                "signalFailed" to 0,
-                "cleanupUnknown" to false,
-                "startupUnknown" to false,
-                "startupStage" to 0,
-                "startupErrno" to 0,
-            )
-        protocol.accept(ShellFrame('S', execution.toString().toByteArray()))
-        val cleanup = json("event" to "helperEnd", "cleanupUnknown" to true, "signalFailed" to 0)
-        protocol.accept(ShellFrame('S', cleanup.toString().toByteArray()))
-        protocol.ended()
-        return protocol.view(ended = true)
-    }
-
-    private fun indexSamples(
-        section: String,
-        samples: JSONArray,
-        key: String = "name",
-    ): Map<String, JSONObject> {
-        val names = mutableSetOf<String>()
-        val objects = samples.objects()
-        for (sample in objects) {
-            val name = sample.getString(key)
-            assertTrue("$section contains duplicate $key: $name", names.add(name))
-        }
-        return objects.associateBy { it.getString(key) }
-    }
-
-    private fun compareNamedSamples(
-        section: String,
-        reviewed: JSONArray,
-        produced: JSONArray,
-    ) {
-        val saved = indexSamples("$section reviewed", reviewed)
-        val actual = indexSamples("$section produced", produced)
-        assertEquals("$section sample names differ from the reviewed contract", saved.keys, actual.keys)
-        for ((name, sample) in actual) {
-            assertEquals("$section/$name differs from the reviewed contract", structure(saved.getValue(name)), structure(sample))
-        }
-    }
-
-    private fun fields(value: JSONObject): Set<String> = value.keys().asSequence().toSet()
 
     private fun read(
         delivery: UiDelivery,

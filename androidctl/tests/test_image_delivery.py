@@ -84,6 +84,7 @@ def test_published_image_survives_history_failure(
         command=command,
         invocation={"command": command, "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
+        binding=None,
         paths=ui_client.DeliveryPaths(image=destination),
     )
     assert result.result == "done"

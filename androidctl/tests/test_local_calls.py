@@ -377,6 +377,29 @@ async def test_local_error_retains_problem_and_dispatch_classification(
             await client.close()
 
 
+async def test_ref_binding_keeps_a_reported_selection_problem_before_device_rpc(
+    tmp_path, monkeypatch
+):
+    async def dispatch(method, args):
+        pytest.fail("An unusable selection sent a device RPC")
+
+    async with connections(tmp_path, dispatch) as (coordinator, _, connect):
+        write_json(coordinator.state.selection, {})
+        problem = coordinator.state.devices()["selectionError"]
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        response = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            ["--json", "--workspace-root", str(tmp_path), "click", "e15"],
+        )
+    assert response.exit_code == 2, response.output
+    value = json.loads(response.stdout)
+    assert value["command"] == "click"
+    assert value["result"] == "not sent"
+    assert value["error"] == problem
+    assert "deviceId" not in value["data"]["context"]
+
+
 @pytest.mark.parametrize("entry", ["ui", "job"])
 @pytest.mark.parametrize("explicit", [False, True])
 async def test_multi_rpc_command_keeps_its_device_when_default_changes(
