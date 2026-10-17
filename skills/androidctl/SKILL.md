@@ -7,7 +7,8 @@ description: Use when operating or inspecting apps on an Android phone, tablet, 
 
 Use the installed `androidctl` CLI. The user prepares shell-UID Shizuku, enables
 Gateway and supplies a reachable address and current pairing code. Host and App
-versions must match. Follow the [upgrade guidance](reference.md#connection-and-sessions)
+versions must match. Export these instructions and their [reference](reference.md)
+with `androidctl skill --out NEW_DIRECTORY`. Follow the [upgrade guidance](reference.md#connection-and-sessions)
 before replacing either package.
 
 Wait for each original host process, retain all output chunks and the CLI exit

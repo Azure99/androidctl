@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import sys
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from copy import copy
+from importlib.resources import files
+from io import BufferedWriter
 from pathlib import Path
 from typing import Annotated, Any, NoReturn
 
@@ -434,6 +437,75 @@ def apps(
     ctx: typer.Context, query: Annotated[str | None, typer.Argument()] = None
 ) -> None:
     device_call(ctx, "apps", {"query": query or ""}, render=render_apps)
+
+
+@app.command(
+    cls=CliCommand,
+    help="Extract this package's top-level skill Markdown files to a new directory.",
+)
+def skill(
+    ctx: typer.Context,
+    out: Annotated[
+        Path,
+        typer.Option(
+            "--out",
+            metavar="NEW_DIRECTORY",
+            readable=False,
+            help="New directory in an existing parent directory.",
+        ),
+    ],
+) -> None:
+    out = out.absolute()
+    resource = files("androidctl.agent_skill")
+    created = False
+    try:
+        out.mkdir()
+        created = True
+        exported = []
+        entries = sorted(
+            (
+                entry
+                for entry in resource.iterdir()
+                if entry.is_file() and entry.name.endswith(".md")
+            ),
+            key=lambda entry: entry.name,
+        )
+        for entry in entries:
+            name = entry.name
+            payload = entry.read_bytes()
+            path = out / name
+            with path.open("xb") as target:
+                digest = write_resource(target, (payload,))
+            exported.append(
+                {
+                    "name": name,
+                    "path": str(path),
+                    "sha256": digest,
+                }
+            )
+        result = completed(
+            "skill",
+            {"path": str(out), "version": VERSION, "files": exported},
+        )
+    except OSError as error:
+        result = resource_failure("skill", out, error, created)
+    emit(result, as_json=options(ctx).as_json)
+
+
+def write_resource(target: BufferedWriter, chunks: Iterable[bytes]) -> str:
+    digest = hashlib.sha256()
+    for chunk in chunks:
+        target.write(chunk)
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
+def resource_failure(command: str, out: Path, error: OSError, created: bool) -> Result:
+    return Result(
+        command=command,
+        result="failed" if created else "not sent",
+        reason=f"{out}: {error}" + ("; partial output retained" if created else ""),
+    )
 
 
 @device_app.command(

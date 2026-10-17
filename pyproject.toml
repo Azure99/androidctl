@@ -47,10 +47,15 @@ Repository = "https://github.com/Azure99/androidctl"
 Issues = "https://github.com/Azure99/androidctl/issues"
 
 [tool.setuptools]
-packages = ["androidctl"]
+packages = ["androidctl", "androidctl.agent_skill"]
 
 [tool.setuptools.package-dir]
 androidctl = "androidctl/src/androidctl"
+# Ship the public instructions from their sole source in every installation mode.
+"androidctl.agent_skill" = "skills/androidctl"
+
+[tool.setuptools.package-data]
+"androidctl.agent_skill" = ["*.md"]
 
 [tool.setuptools.dynamic]
 version = { file = ["VERSION"] }

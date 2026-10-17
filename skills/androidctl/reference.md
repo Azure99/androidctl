@@ -1,6 +1,6 @@
 # AndroidCtl Command Reference
 
-This page defines externally observable CLI behavior.
+This page defines externally observable behavior for the CLI that exports it.
 Use the accompanying [SKILL](SKILL.md) for an agent's task workflow and
 [device setup](#device-setup-and-adb-route) for connection prerequisites.
 `androidctl COMMAND --help` gives accepted parameters.
@@ -13,6 +13,7 @@ accepts a local `--json` option.
 
 | Purpose | Commands | Details |
 | --- | --- | --- |
+| Installed resources | `skill` | [Local files](#local-package-files) |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `use`, `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find`, `locate`, `wait` | [Observations](#observations-and-targets) |
@@ -20,6 +21,19 @@ accepts a local `--json` option.
 | Navigate | `apps`, `open`, `back`, `home`, `recents`, `notifications`, `wake` | [Navigation](#observations-and-targets) |
 | Images and coordinates | `screenshot`, `tap`, `swipe` | [Images](#images-and-delivery) |
 | Jobs and transfers | `shell`, `job get/cancel/output`, `push`, `pull` | [Jobs](#jobs-and-files) |
+
+## Local Package Files
+
+`skill --out NEW_DIRECTORY` exports all top-level `.md` files from the installed
+skill, sorted by filename. Start with `SKILL.md`, which links to `reference.md`.
+JSON reports `data.path`, `data.version` and `data.files`, a list of
+`{name, path, sha256}` for the exported files; there is no top-level skill `sha256`.
+
+This command requires an existing parent and refuses an existing target unchanged.
+It does not start the daemon or contact a device. Failure before target creation
+is `not sent`; a read/write failure after creation is `failed` with partial output
+retained. Skill export is not an atomic directory transaction: inspect a failed
+target before removing it or choosing a new path.
 
 ## Connection And Sessions
 
@@ -328,6 +342,7 @@ original meanings.
 | `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
 | `data.queryError`, `outputError` | Failure to query or export a job, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
 | `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
+| `data.path`, `version`, `files` | Local resource paths, hashes and package version. [Package files](#local-package-files) |
 
 `resolved.target` and each non-null `selected.target` contain
 `{ref, role, name, windowId, bounds}`. Names keep the first 256 UTF-16 units,
@@ -693,7 +708,7 @@ The root is the global `--workspace-root PATH`, then `ANDROIDCTL_WORKSPACE_ROOT`
 then the CLI working directory. It must be an existing directory; AndroidCtl does
 not search parent directories. This root does not change user-level credentials
 or create a separate daemon. All reported host file paths are absolute, including
-`job output` exports.
+`job output` and `skill` exports.
 `snapshot/find --out PATH` writes the body only to that new file in an existing directory;
 relative explicit paths resolve against the CLI cwd. Automatic PNGs use
 `.androidctl/shots/`. Matching filename stems identify a delivery, not an atomic

@@ -15,9 +15,12 @@ The App uses these labels for that same worker:
 | Stop idle executor | 停止空闲执行器 |
 | Force executor exit | 强制结束执行器 |
 
-The [SKILL](skills/androidctl/SKILL.md) covers a session workflow, and the
-[command reference](skills/androidctl/reference.md) defines pairing, results and
-recovery. Each command also has `--help`.
+For agent workflows, run `androidctl skill --out androidctl-skill` after installing.
+It creates a new directory with all top-level Markdown files from the installed
+version's skill; start with `SKILL.md`. In this checkout, the corresponding
+[SKILL](skills/androidctl/SKILL.md) covers complete tasks and the
+[command reference](skills/androidctl/reference.md) defines results and limits.
+Each command also has `--help`.
 
 ## Requirements
 
@@ -100,7 +103,8 @@ androidctl --device DEVICE_UUID -s trial screenshot
 androidctl --device DEVICE_UUID -s trial session close
 ```
 
-Preserve `UNKNOWN` results and diagnose before further changes; never
+For actions, verification, jobs and cleanup, follow the installed SKILL's complete
+task loop. Preserve `UNKNOWN` results and diagnose before further changes; never
 automatically resend the input. See the SKILL's
 [recovery guidance](skills/androidctl/SKILL.md#recover-and-finish).
 
