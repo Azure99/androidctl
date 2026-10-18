@@ -401,7 +401,7 @@ async def test_rejection_is_received_in_band_with_source_specific_guidance(
         assert caught.value.problem.stage == f"{source}.authentication"
         if reason == "protocolMismatch" and source == "device":
             assert "CLI release other-release" in str(caught.value)
-            assert "obtain the same release APK" in str(caught.value)
+            assert "androidctl apk --out NEW_PATH" in str(caught.value)
         else:
             assert "androidctl apk" not in str(caught.value)
         assert received[0]["event"] == "rejected"
@@ -449,7 +449,7 @@ async def test_connected_version_mismatch_guidance_does_not_dispatch(
         assert caught.value.problem.stage == f"{source}.authentication"
         if source == "device":
             assert f"CLI release {VERSION}" in str(caught.value)
-            assert "obtain the same release APK" in str(caught.value)
+            assert "androidctl apk --out NEW_PATH" in str(caught.value)
         else:
             assert "androidctl apk" not in str(caught.value)
         assert not calls

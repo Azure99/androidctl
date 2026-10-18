@@ -10,7 +10,7 @@ from copy import copy
 from importlib.resources import files
 from io import BufferedWriter
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 
 import typer
 from typer.main import get_command
@@ -42,6 +42,9 @@ from .protocol import (
     uncertain,
 )
 from .ui_commands import register as register_ui
+
+if TYPE_CHECKING:
+    from importlib.abc import Traversable
 
 LOCAL_REQUEST_SECONDS = 20
 
@@ -441,6 +444,47 @@ def apps(
 
 @app.command(
     cls=CliCommand,
+    help="Extract the matching APK from this host package to a new file.",
+)
+def apk(
+    ctx: typer.Context,
+    out: Annotated[
+        Path,
+        typer.Option(
+            "--out", readable=False, help="New file in an existing parent directory."
+        ),
+    ],
+) -> None:
+    out = out.absolute()
+    try:
+        is_directory = out.is_dir()
+    except OSError as error:
+        raise Fault("arguments", f"{out}: {error}") from error
+    if is_directory:
+        raise Fault("arguments", f"Output must be a file, not a directory: {out}")
+    resource = files("androidctl.resources").joinpath(
+        f"androidctl-agent-{VERSION}-release.apk"
+    )
+    if not resource.is_file():
+        emit(
+            rejected(
+                "apk",
+                Fault(
+                    "apkUnavailable",
+                    "This source installation has no bundled APK; install the release "
+                    "package or obtain its matching release APK",
+                ),
+            ),
+            as_json=options(ctx).as_json,
+        )
+    emit(
+        extract_resource("apk", resource, out),
+        as_json=options(ctx).as_json,
+    )
+
+
+@app.command(
+    cls=CliCommand,
     help="Extract this package's top-level skill Markdown files to a new directory.",
 )
 def skill(
@@ -490,6 +534,25 @@ def skill(
     except OSError as error:
         result = resource_failure("skill", out, error, created)
     emit(result, as_json=options(ctx).as_json)
+
+
+def extract_resource(command: str, resource: Traversable, out: Path) -> Result:
+    out = out.absolute()
+    created = False
+    try:
+        with resource.open("rb") as source, out.open("xb") as target:
+            created = True
+            digest = write_resource(target, iter(lambda: source.read(1024 * 1024), b""))
+        return completed(
+            command,
+            {
+                "path": str(out),
+                "sha256": digest,
+                "version": VERSION,
+            },
+        )
+    except OSError as error:
+        return resource_failure(command, out, error, created)
 
 
 def write_resource(target: BufferedWriter, chunks: Iterable[bytes]) -> str:

@@ -1,1 +1,1 @@
-"""Packaged Android Device Agent APK resources."""
+"""Packaged Android application."""

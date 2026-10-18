@@ -121,12 +121,7 @@ def test_invalid_workspace_keeps_leaf_command_and_absolute_error(
 
 
 @pytest.mark.parametrize(
-    "kind",
-    [
-        "certificate",
-        "script",
-        "job-parent",
-    ],
+    "kind", ["certificate", "apk-directory", "script", "job-parent"]
 )
 def test_relative_input_and_output_errors_report_absolute_paths(
     tmp_path, monkeypatch, capsys, kind
@@ -139,6 +134,7 @@ def test_relative_input_and_output_errors_report_absolute_paths(
             ["device", "trust", "phone", "missing.pem"],
             tmp_path / "missing.pem",
         ),
+        "apk-directory": (["apk", "--out", "directory"], tmp_path / "directory"),
         "script": (["shell", "--script-file", "missing.sh"], tmp_path / "missing.sh"),
         "job-parent": (
             ["job", "output", "j1", "--out", "missing/out.bin"],
@@ -151,13 +147,7 @@ def test_relative_input_and_output_errors_report_absolute_paths(
     assert value["result"] == "not sent"
 
 
-@pytest.mark.parametrize(
-    "kind",
-    [
-        "workspace",
-        "trust",
-    ],
-)
+@pytest.mark.parametrize("kind", ["workspace", "apk", "trust"])
 def test_path_stat_permission_error_keeps_structured_absolute_result(
     tmp_path, monkeypatch, capsys, kind
 ):
@@ -177,6 +167,7 @@ def test_path_stat_permission_error_keeps_structured_absolute_result(
             "snapshot",
             "workspace",
         ),
+        "apk": (["apk", "--out", "blocked"], "apk", "arguments"),
         "trust": (
             ["device", "trust", "phone", "blocked"],
             "device trust",

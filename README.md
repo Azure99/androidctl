@@ -43,13 +43,18 @@ replaces the old worker. Before reinstalling the same App version, use
 **Stop idle executor** first. See [upgrade and recovery
 rules](skills/androidctl/reference.md#connection-and-sessions).
 
-Install the host package and obtain the matching Android APK, or build it from
-this checkout using the [development instructions](AGENTS.md#build-test-and-development-commands).
-Transfer and open the APK on Android. For an ADB installation, identify the device:
-
 ```sh
 pip install androidctl
 androidctl --version
+androidctl apk --out androidctl.apk
+```
+
+The release package includes its matching APK. Extraction requires a new output
+path and reports SHA-256. If a source installation reports `apkUnavailable`, obtain
+its matching APK from the [release files](https://github.com/Azure99/androidctl/releases).
+Transfer and open the APK on Android, or install on an explicitly identified device:
+
+```sh
 adb devices -l
 adb -s SERIAL install androidctl.apk
 ```

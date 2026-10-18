@@ -13,7 +13,7 @@ accepts a local `--json` option.
 
 | Purpose | Commands | Details |
 | --- | --- | --- |
-| Installed resources | `skill` | [Local files](#local-package-files) |
+| Installed resources | `apk`, `skill` | [Local files](#local-package-files) |
 | Device access | `pair`, `devices`, `device select/address/trust/forget`, `status` | [Connections](#connection-and-sessions) |
 | Ownership and host | `use`, `session open/close/takeover`, `daemon status/stop` | [Sessions](#connection-and-sessions) |
 | Observe and target | `snapshot`, `find`, `locate`, `wait` | [Observations](#observations-and-targets) |
@@ -24,13 +24,17 @@ accepts a local `--json` option.
 
 ## Local Package Files
 
+`apk --out NEW_PATH` copies the installed package's APK to one new file and reports
+`data.path`, `data.sha256` and `data.version`. A source installation without the APK
+reports `apkUnavailable`.
+
 `skill --out NEW_DIRECTORY` exports all top-level `.md` files from the installed
 skill, sorted by filename. Start with `SKILL.md`, which links to `reference.md`.
 JSON reports `data.path`, `data.version` and `data.files`, a list of
 `{name, path, sha256}` for the exported files; there is no top-level skill `sha256`.
 
-This command requires an existing parent and refuses an existing target unchanged.
-It does not start the daemon or contact a device. Failure before target creation
+These commands require an existing parent and refuse an existing target unchanged.
+They do not start the daemon or contact a device. Failure before target creation
 is `not sent`; a read/write failure after creation is `failed` with partial output
 retained. Skill export is not an atomic directory transaction: inspect a failed
 target before removing it or choosing a new path.
@@ -186,7 +190,8 @@ the device is unreachable.
 Connection `stage=local.*` names IPC and `device.*` names device transport, including
 connect/TLS/WebSocket/authentication phases; remote errors retain their own stage.
 Device `protocolMismatch` reports this CLI's release and requires a matching App.
-Rejection does not always include the peer's version.
+Use `androidctl apk --out NEW_PATH` or obtain that release's APK; source installs
+may have no bundled APK. Rejection does not always include the peer's version.
 
 **Gateway off** stops new requests; stopping/failed may still have live work.
 After that work ends, **Refresh status** can confirm completion. **Stop idle executor**
@@ -225,7 +230,7 @@ cleanup failures keep their own results.
 
 ### Device Setup And ADB Route
 
-Install the matching APK. Start Shizuku
+Install the matching APK from `androidctl apk --out NEW_PATH`. Start Shizuku
 through ADB or wireless debugging as shell UID 2000, authorize AndroidCtl, and
 enable **Gateway**. Check **Listening** and **Executor attached**, then choose
 **Show new pairing code**. Pair using its address and current code; displayed
@@ -342,7 +347,7 @@ original meanings.
 | `data.resourcesActive`, `cleanupError` | Transfer resources and cleanup for the reported side; host completion does not confirm device completion. [Jobs](#jobs-and-files) |
 | `data.queryError`, `outputError` | Failure to query or export a job, separate from its execution result; supplies code/message and optional stage/diagnosticTruncated. [Jobs](#jobs-and-files) |
 | `data.outputBytes` | Present in `shell`, `job get` and `job cancel` JSON when this call retrieved retained output; maps stream names to base64-encoded original bytes. [Jobs](#jobs-and-files) |
-| `data.path`, `version`, `files` | Local resource paths, hashes and package version. [Package files](#local-package-files) |
+| `data.path`, `sha256`, `version`, `files` | Local resource paths, hashes and package version. [Package files](#local-package-files) |
 
 `resolved.target` and each non-null `selected.target` contain
 `{ref, role, name, windowId, bounds}`. Names keep the first 256 UTF-16 units,
@@ -708,7 +713,7 @@ The root is the global `--workspace-root PATH`, then `ANDROIDCTL_WORKSPACE_ROOT`
 then the CLI working directory. It must be an existing directory; AndroidCtl does
 not search parent directories. This root does not change user-level credentials
 or create a separate daemon. All reported host file paths are absolute, including
-`job output` and `skill` exports.
+`job output`, `apk` and `skill` exports.
 `snapshot/find --out PATH` writes the body only to that new file in an existing directory;
 relative explicit paths resolve against the CLI cwd. Automatic PNGs use
 `.androidctl/shots/`. Matching filename stems identify a delivery, not an atomic

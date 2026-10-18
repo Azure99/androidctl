@@ -259,7 +259,7 @@ class Peer:
             await peer.acknowledge(welcome)
             mismatch = (
                 f"CLI release {VERSION} requires the matching AndroidCtl App; "
-                "obtain the same release APK"
+                "use androidctl apk --out NEW_PATH or obtain the same release APK"
                 if source == "device"
                 else "Peer uses a different release contract"
             )

@@ -47,7 +47,7 @@ Repository = "https://github.com/Azure99/androidctl"
 Issues = "https://github.com/Azure99/androidctl/issues"
 
 [tool.setuptools]
-packages = ["androidctl", "androidctl.agent_skill"]
+packages = ["androidctl", "androidctl.resources", "androidctl.agent_skill"]
 
 [tool.setuptools.package-dir]
 androidctl = "androidctl/src/androidctl"
@@ -55,6 +55,7 @@ androidctl = "androidctl/src/androidctl"
 "androidctl.agent_skill" = "skills/androidctl"
 
 [tool.setuptools.package-data]
+"androidctl.resources" = ["*.apk"]
 "androidctl.agent_skill" = ["*.md"]
 
 [tool.setuptools.dynamic]
