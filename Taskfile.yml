@@ -33,3 +33,9 @@ tasks:
     deps:
       - task: android:quality
       - task: python:quality
+
+  release:android:
+    desc: Build, stage and verify the Android APK candidate
+    cmds:
+      - task: android:build:release
+      - python -m tools.release.android_release prepare

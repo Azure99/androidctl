@@ -63,7 +63,7 @@ version = { file = ["VERSION"] }
 
 [tool.pytest.ini_options]
 pythonpath = ["androidctl/src"]
-testpaths = ["androidctl/tests"]
+testpaths = ["androidctl/tests", "tools/release/tests"]
 
 [tool.ruff]
 line-length = 88
@@ -94,13 +94,17 @@ known-first-party = [
 extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.ruff.lint.per-file-ignores]
-"androidctl/tests/**/*.py" = ["ARG001", "S101"]
+"{androidctl,tools/release}/tests/**/*.py" = ["ARG001", "S101"]
 
 [tool.mypy]
 python_version = "3.12"
 files = [
     "androidctl/src",
+    "tools/release",
 ]
+exclude = ["^tools/release/tests/"]
+mypy_path = "androidctl/src"
+explicit_package_bases = true
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_untyped_defs = true
