@@ -9,7 +9,8 @@ Public instructions live in `skills/androidctl`. The shared
 `contract/wire-contract.json` records current wire limits and query methods.
 Root `VERSION` anchors host/app version lockstep.
 Release tooling lives in `tools/`. See [Release Operations](tools/release/README.md)
-for signing, Android candidate preparation with `task release:android` and manual publishing.
+for signing, Android and Python candidate preparation with `task release:android` /
+`task release:pypi`, and manual publishing.
 
 ## Build, Test, and Development Commands
 

@@ -39,3 +39,9 @@ tasks:
     cmds:
       - task: android:build:release
       - python -m tools.release.android_release prepare
+
+  release:pypi:
+    desc: Build and verify the Android APK, wheel and sdist with a clean wheel install
+    cmds:
+      - task: android:build:release
+      - python -m tools.release.pypi_release prepare

@@ -35,29 +35,40 @@ service discovery or serialization need verification in the release APK.
 
 ## Local Candidates
 
-Run `task release:android` to prepare the Android APK candidate. It does not
-publish anything. Preserve any previous candidate that must remain traceable
-before rebuilding the same version.
+For the Android APK only, run `task release:android`. For the complete
+Android and Python candidate, run `task release:pypi`. Neither publishes
+anything. Preserve any previous candidate that must remain traceable before
+rebuilding the same version.
 
 | Task | Work performed, in order |
 | --- | --- |
 | `release:android` | Gradle build, require a clean source tree, stage the public APK, write SHA256SUMS and verify. |
+| `release:pypi` | Gradle build, require a clean source tree, stage/checksum/verify the APK, build sdist then wheel, run Twine and smoke one clean wheel install. |
 
 `task android:build:release` only runs Gradle `assembleRelease`.
 `task python:quality` checks all Python source and behavior, including release tools.
 
-Use the module command when consuming an existing candidate without implicit
-build predecessors:
+Use module commands when consuming existing artifacts without implicit build
+predecessors:
 
 ```sh
 python -m tools.release.android_release verify
+python -m tools.release.pypi_release check
+python -m tools.release.pypi_release install
 ```
 
 The Android module's `prepare` requires a clean source tree before staging
 `android/app/build/outputs/apk/release/app-release.apk`, writing its checksum and
-verifying it.
+verifying it. The PyPI module has four entries:
 
-The module does not invoke Gradle. Use module `--help` for arguments.
+| Command | Work performed, in order |
+| --- | --- |
+| `build` | Require a clean source tree, verify the staged APK and checksum, then build and inspect sdist/wheel. |
+| `check` | Verify the staged APK and existing sdist/wheel, then run Twine. |
+| `install` | Verify the staged APK and existing sdist/wheel, then smoke one clean wheel install. |
+| `prepare` | Require a clean source tree, stage and checksum the current Gradle APK, then perform build, check and install on the same candidate. |
+
+Neither module invokes Gradle. Use module `--help` for arguments.
 `--repo-root PATH` before the subcommand selects a different input tree; module
 imports still require the repository root on Python's module search path.
 
@@ -68,11 +79,28 @@ the code. Verification does not prove equality with the current Gradle output,
 that the code follows the formula, or that it permits an upgrade. The build
 directory can be removed without preventing verification of a retained candidate.
 
-Device testing and approval of the signing identity remain separate release inputs.
+Every independent PyPI entry verifies current APK manifest, signature and bytes,
+and checks wheel/sdist metadata and their sole APK resource. Device testing and
+approval of the signing identity remain separate release inputs.
 
 Android assets and verification logs are under `dist/release/android/<version>`.
-The `prepare` command requires a clean Git source tree before staging.
-A source copy without `.git` skips this check.
+Python artifacts are under `dist/release/pypi/<version>/build-output`; build,
+Twine and installation logs are in its parent directory. Both `prepare` commands require a clean Git
+source tree before staging; independent PyPI `build` also checks before building.
+A source copy without `.git` skips these checks.
+Building replaces the same-version build-output and related
+logs. Building uses an isolated source copy with the verified APK, creates the
+sdist and then builds the wheel from it. Original package resources, build and
+egg-info directories remain untouched.
+
+The smoke check installs the wheel in one isolated venv, runs console and module
+help away from the source root, and checks the version and exported APK/skill
+against the source candidate's hashes and file bytes. Success removes the venv;
+failure retains it and its log for diagnosis.
+This smoke check covers these basic entries and resources on the current platform
+and Python, rather than daemon, TLS or device behavior. Retain the source commit
+and artifact hashes with validation results so the candidate can be identified
+beyond its version string.
 
 ## Publishing An Approved Candidate
 
@@ -99,7 +127,12 @@ push commits, upload packages or create a GitHub Release.
    publishing also supports repositories with immutable releases, as described
    in the [GitHub CLI guide](https://cli.github.com/manual/gh_release_create).
 4. Check that the README's versioned pages and anchors are publicly reachable
-   through the approved tag.
+   through the approved tag. Upload the verified wheel and sdist with
+   `python -m twine upload` followed by
+   their two exact paths from `build-output`, using the intended PyPI account.
+   Confirm the published version and downloadable assets. PyPI does not allow
+   [reusing an uploaded filename](https://docs.pypi.org/publishing/troubleshooting/#why-am-i-getting-a-filename-or-contents-already-exists-or-filename-has-been-previously-used-error), including
+   after deletion.
 5. After publishing, restore repository-relative README links on `main` in a new
    commit. Keep the release tag and generated release assets unchanged so
    published packages retain their versioned links.
