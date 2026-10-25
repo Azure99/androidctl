@@ -37,7 +37,8 @@ Task uses the selected environment's `python`. `quality` covers host, CLI proces
 Android and release tooling; `ci` also checks Linux/Darwin type branches. Signed
 candidate preparation is separate. Use `task --list` for individual targets and
 their scope. Runtime dependencies are in `pyproject.toml`; `constraints-ci.txt`
-pins the directly tested development tools.
+pins the directly tested development tools. The [CI workflow](.github/workflows/quality.yml)
+defines platform/version jobs and triggers.
 
 ## Coding Style & Naming Conventions
 

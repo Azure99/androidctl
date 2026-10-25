@@ -85,7 +85,9 @@ approval of the signing identity remain separate release inputs.
 
 Android assets and verification logs are under `dist/release/android/<version>`.
 Python artifacts are under `dist/release/pypi/<version>/build-output`; build,
-Twine and installation logs are in its parent directory. Both `prepare` commands require a clean Git
+Twine and installation logs are in its parent directory. A failed Android CI job
+retains any generated text logs and Android reports in the
+`android-failure-evidence` artifact. Both `prepare` commands require a clean Git
 source tree before staging; independent PyPI `build` also checks before building.
 A source copy without `.git` skips these checks.
 Building replaces the same-version build-output and related

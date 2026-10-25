@@ -1,0 +1,97 @@
+name: quality
+
+on:
+  push:
+    branches: [main]
+    tags: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-posix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: '3.12'
+          - os: macos-15-intel
+            python: '3.12'
+          - os: ubuntu-24.04
+            python: '3.14'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -c constraints-ci.txt -e . pytest
+      - run: python -m pytest
+
+  python-windows:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.49.1'
+      - run: python -m pip install -c constraints-ci.txt -e ".[dev]"
+      - run: task python:ci
+
+  android:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: go-task/setup-task@v2
+        with:
+          version: '3.49.1'
+      - name: Install Android build dependencies
+        run: |
+          $ndkVersion = (Get-Content android/gradle.properties -Raw | ConvertFrom-StringData).androidctlNdkVersion
+          & "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" "platforms;android-36" "build-tools;35.0.0" "ndk;$ndkVersion"
+      - name: List installed Android SDK packages
+        run: '& "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat" --list_installed'
+      - run: python -m pip install -c constraints-ci.txt -e ".[dev]"
+      - run: task android:quality
+      - name: Verify a candidate with a temporary signing key
+        env:
+          ANDROIDCTL_RELEASE_STORE_FILE: ${{ runner.temp }}/androidctl-candidate.jks
+          ANDROIDCTL_RELEASE_STORE_PASSWORD: android
+          ANDROIDCTL_RELEASE_KEY_ALIAS: androidctl-ci
+          ANDROIDCTL_RELEASE_KEY_PASSWORD: android
+        run: |
+          keytool -genkeypair -keystore "$env:ANDROIDCTL_RELEASE_STORE_FILE" -alias androidctl-ci -storepass android -keypass android -dname "CN=AndroidCtl CI" -keyalg RSA -keysize 2048 -validity 1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          task release:pypi
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-failure-evidence
+          path: |
+            android/build/reports/
+            android/app/build/reports/
+            android/app/build/test-results/
+            dist/release/android/*/apksigner-verify.txt
+            dist/release/pypi/*/build.txt
+            dist/release/pypi/*/twine-check.txt
+            dist/release/pypi/*/local-install.txt
