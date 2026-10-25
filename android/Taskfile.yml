@@ -23,7 +23,7 @@ tasks:
     cmds:
       - task: gradlew
         vars:
-          GRADLE_ARGS: ktlintCheck detektMain detektTest lintDebug
+          GRADLE_ARGS: lintCheck
 
   format:
     desc: Format Android Kotlin sources

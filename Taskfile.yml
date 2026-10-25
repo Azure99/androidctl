@@ -13,26 +13,36 @@ tasks:
     desc: List available tasks
     cmds:
       - task --list
+
   test:
-    desc: Run host and Android tests
+    desc: Run host, Android and release tooling tests
     deps:
       - task: android:test
       - task: python:test
+
   lint:
     desc: Run linters and static checks across all modules
     deps:
       - task: android:lint
       - task: python:lint
+
   format:
     desc: Auto-format code across all modules
     deps:
       - task: android:format
       - task: python:format
+
   quality:
-    desc: Run host and Android quality gates
+    desc: Run host, Android, and release tooling quality gates
     deps:
       - task: android:quality
       - task: python:quality
+
+  ci:
+    desc: Run quality gates and cross-platform type checks
+    deps:
+      - task: android:quality
+      - task: python:ci
 
   release:android:
     desc: Build, stage and verify the Android APK candidate

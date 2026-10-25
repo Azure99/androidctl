@@ -9,12 +9,10 @@ junit = "4.13.2"
 activityCompose = "1.13.0"
 composeBom = "2026.03.00"
 json = "20251224"
-slf4j = "2.0.13"
-websocket = "1.6.0"
-
 shizuku = "13.1.5"
-
+slf4j = "2.0.13"
 bouncycastle = "1.81"
+websocket = "1.6.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -24,18 +22,13 @@ androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", versi
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 json = { group = "org.json", name = "json", version.ref = "json" }
-slf4j = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
-websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "websocket" }
-
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
-
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
-
+slf4j = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
 bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
-
 bcutil = { group = "org.bouncycastle", name = "bcutil-jdk18on", version.ref = "bouncycastle" }
-
 bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
+websocket = { group = "org.java-websocket", name = "Java-WebSocket", version.ref = "websocket" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

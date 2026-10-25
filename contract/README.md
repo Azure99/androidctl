@@ -45,25 +45,10 @@ each section against the reviewed fixture in the normal test run; Python compare
 the fixture with its own limits and pool. Native output and frame limits retain
 two direct source checks because C does not participate in the JVM exporter.
 
-Validate both sides from the repository root:
-
-```powershell
-& .\android\gradlew.bat -p .\android :app:testDebugUnitTest --tests 'com.rainng.androidctl.WireContractTest' --rerun-tasks
-conda run -p ./.conda python -m pytest androidctl/tests/test_wire_contract.py
-```
-
-For an intentional contract change, export to a separate candidate:
-
-```powershell
-$env:ANDROIDCTL_CONTRACT_OUTPUT = Join-Path (Get-Location) 'android/app/build/wire-contract.candidate.json'
-try {
-    & .\android\gradlew.bat -p .\android :app:testDebugUnitTest --tests 'com.rainng.androidctl.WireContractTest.deviceProjectionAndTransferMatchTheSharedContract' --rerun-tasks
-} finally {
-    Remove-Item Env:ANDROIDCTL_CONTRACT_OUTPUT
-}
-```
-
-Export intentionally fails after writing the candidate and does not validate the
-reviewed fixture. Read that failure, review the differences, then replace the
-fixture only when the producer and consumer change is intended. With the output
-variable unset, run both validations again.
+Use the [contract regeneration commands](../AGENTS.md#testing-guidelines) after an
+intentional contract change. The command places the candidate under
+`android/app/build`; the exporter writes only to the explicitly supplied path.
+Export ends with an explicit
+test failure because it has not validated the reviewed fixture. Review the generated
+projection and responses before replacing the fixture, then unset
+`ANDROIDCTL_CONTRACT_OUTPUT` and run both test suites.

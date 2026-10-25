@@ -183,6 +183,18 @@ android {
     sourceSets.getByName("test").resources.srcDir(rootProject.file("../contract"))
     // Extract native artifacts so ShellJobs can execute the helper.
     packaging.jniLibs.useLegacyPackaging = true
+    lint {
+        checkAllWarnings = true
+        warningsAsErrors = true
+        checkDependencies = true
+        informational +=
+            setOf(
+                "AndroidGradlePluginVersion",
+                "GradleDependency",
+                "NewerVersionAvailable",
+                "OldTargetApi",
+            )
+    }
 }
 
 androidComponents {

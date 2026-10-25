@@ -96,7 +96,8 @@ egg-info directories remain untouched.
 The smoke check installs the wheel in one isolated venv, runs console and module
 help away from the source root, and checks the version and exported APK/skill
 against the source candidate's hashes and file bytes. Success removes the venv;
-failure retains it and its log for diagnosis.
+failure retains it and its log for diagnosis. The tool does not pass
+`constraints-ci.txt` to pip; record the resolved dependencies with the result.
 This smoke check covers these basic entries and resources on the current platform
 and Python, rather than daemon, TLS or device behavior. Retain the source commit
 and artifact hashes with validation results so the candidate can be identified

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Only X.509 certificate builders are used; JNDI/DANE and EST client code is not reachable. -->
+    <issue id="InvalidPackage">
+        <ignore path="**/bcpkix-jdk18on-*.jar" />
+    </issue>
+    <issue id="TrustAllX509TrustManager">
+        <ignore path="**/bcpkix-jdk18on-*.jar" />
+    </issue>
+</lint>

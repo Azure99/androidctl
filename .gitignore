@@ -1,18 +1,16 @@
 *.iml
+*.jks
+*.keystore
 .gradle
 .conda
-/local.properties
 .idea/
 .kotlin/
 .DS_Store
 /build
-/dist/
 dist/
-/android/build
 /android/**/build
 /captures
-.externalNativeBuild
-.cxx
+/android/captures
 local.properties
 .venv/
 .worktrees/
@@ -27,6 +25,6 @@ __pycache__/
 .androidctl/
 .local/
 
-docs/
+/docs/
 
 AGENTS.override.md

@@ -1,0 +1,11 @@
+# Direct dependencies exercised by the quality jobs.
+cryptography==50.0.1
+pydantic==2.13.4
+typer==0.27.2
+websockets==15.0.1
+build==1.5.0
+# Keep the validated mypy baseline.
+mypy==1.10.1
+pytest==8.4.2
+ruff==0.15.14
+twine==6.2.0

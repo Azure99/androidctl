@@ -31,10 +31,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "build",
-    "mypy<1.11",
+    "mypy",
     "pytest>=8,<9",
     "ruff",
-    "tomli",
     "twine",
 ]
 
@@ -62,8 +61,13 @@ androidctl = "androidctl/src/androidctl"
 version = { file = ["VERSION"] }
 
 [tool.pytest.ini_options]
-pythonpath = ["androidctl/src"]
-testpaths = ["androidctl/tests", "tools/release/tests"]
+pythonpath = [
+    "androidctl/src",
+]
+testpaths = [
+    "androidctl/tests",
+    "tools/release/tests",
+]
 
 [tool.ruff]
 line-length = 88
@@ -74,20 +78,16 @@ src = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "SIM", "C4", "RUF009", "UP"]
-extend-select = [
+select = [
+    "E", "F", "I", "B", "SIM", "C4", "UP",
     "ARG001",
     "PT",
     "RUF005",
+    "RUF009",
     "RUF012",
     "RUF022",
     "RUF100",
     "S101",
-]
-
-[tool.ruff.lint.isort]
-known-first-party = [
-    "androidctl",
 ]
 
 [tool.ruff.lint.flake8-bugbear]

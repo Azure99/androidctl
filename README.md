@@ -116,6 +116,5 @@ automatically resend the input. See the SKILL's
 ## Development
 
 See [Repository Guidelines](AGENTS.md#build-test-and-development-commands) for
-environment setup, Host tests, JVM tests and direct Android builds.
-See [Release Operations](tools/release/README.md) for signing, Android and Python
-candidate preparation with `task release:android` / `task release:pypi`, and manual publishing.
+environment setup and quality checks, and [Release Operations](tools/release/README.md)
+for signing, local candidates and manual publishing.

@@ -1,17 +1,6 @@
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
 
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
 val ktlintVersion = libs.versions.ktlint.get()
-
-fun KtlintExtension.applySharedKtlintConfig() {
-    version.set(ktlintVersion)
-    android.set(true)
-    outputToConsole.set(true)
-    ignoreFailures.set(false)
-    filter {
-        exclude("**/build/**")
-    }
-}
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -21,27 +10,32 @@ plugins {
     alias(libs.plugins.detekt) apply false
 }
 
-configure<KtlintExtension> {
-    applySharedKtlintConfig()
-}
-
-subprojects {
+allprojects {
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
 
     extensions.configure<KtlintExtension> {
-        applySharedKtlintConfig()
+        version.set(ktlintVersion)
+        android.set(true)
+        filter {
+            exclude("**/build/**")
+        }
     }
 }
 
-tasks.register("qualityCheck") {
+tasks.register("lintCheck") {
     group = "verification"
-    description = "Runs the default local Android quality gate."
+    description = "Runs Kotlin formatting, static analysis and Android lint checks."
     dependsOn(
         ":ktlintCheck",
         ":app:ktlintCheck",
         ":app:detektMain",
         ":app:detektTest",
         ":app:lintDebug",
-        ":app:testDebugUnitTest",
     )
+}
+
+tasks.register("qualityCheck") {
+    group = "verification"
+    description = "Runs the default local Android quality gate."
+    dependsOn("lintCheck", ":app:testDebugUnitTest")
 }

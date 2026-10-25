@@ -1,26 +1,32 @@
 version: '3'
 
+vars:
+  PYTHON_SOURCES: androidctl/src androidctl/tests tools/release
+
 tasks:
   test:
-    desc: Run androidctl tests
+    desc: Run host, CLI process and release tooling tests
     cmds:
       - python -m pytest
-
   lint:
-    desc: Run androidctl lint and type checks
+    desc: Check Python sources
     cmds:
-      - ruff check androidctl/src androidctl/tests tools/release
-      - ruff format --check androidctl/src androidctl/tests tools/release
-      - mypy androidctl/src tools/release
-
+      - python -m ruff check {{.PYTHON_SOURCES}}
+      - python -m ruff format --check {{.PYTHON_SOURCES}}
+      - python -m mypy
   format:
-    desc: Auto-format androidctl sources
+    desc: Format Python sources
     cmds:
-      - ruff check --fix androidctl/src androidctl/tests tools/release
-      - ruff format androidctl/src androidctl/tests tools/release
-
+      - python -m ruff check --fix {{.PYTHON_SOURCES}}
+      - python -m ruff format {{.PYTHON_SOURCES}}
   quality:
-    desc: Run androidctl quality gate
+    desc: Run Python lint, type checks, and behavior tests
     cmds:
       - task: lint
       - task: test
+  ci:
+    desc: Run Python quality and cross-platform type checks
+    cmds:
+      - task: quality
+      - python -m mypy --platform linux
+      - python -m mypy --platform darwin
