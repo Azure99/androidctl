@@ -1,117 +1,120 @@
 # AndroidCtl
 
-AndroidCtl lets people and AI agents operate Android apps through a local CLI
-and Shizuku. The host connects to the Android app over the network; daily use
-does not require ADB.
+[![PyPI](https://img.shields.io/pypi/v/androidctl.svg)](https://pypi.org/project/androidctl/)
+[![CI](https://github.com/Azure99/androidctl/actions/workflows/quality.yml/badge.svg)](https://github.com/Azure99/androidctl/actions/workflows/quality.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
-The App's Gateway accepts connections, and its shell-UID worker operates the
-device.
+**A Playwright-like CLI for Android automation, built for AI agents.**
 
-The App uses these labels for that same worker:
+AndroidCtl lets your agent operate apps on an Android phone or emulator. The agent
+reads the screen as compact XML, acts on its elements, waits for results and takes
+screenshots; it can also run shell scripts and transfer files.
 
-| English App label | Chinese App label |
-| --- | --- |
-| Executor attached / Executor unavailable | 执行器已连接 / 执行器不可用 |
-| Stop idle executor | 停止空闲执行器 |
-| Force executor exit | 强制结束执行器 |
+Works with Claude Code, Codex, OpenCode and any other agent that can run shell
+commands.
 
-For agent workflows, run `androidctl skill --out androidctl-skill` after installing.
-It creates a new directory with all top-level Markdown files from the installed
-version's skill; start with `SKILL.md`. In this checkout, the corresponding
-[SKILL](skills/androidctl/SKILL.md) covers complete tasks and the
-[command reference](skills/androidctl/reference.md) defines results and limits.
-Each command also has `--help`.
+- **No root, no ADB for daily use.** The Android app runs through Shizuku and
+  accepts connections over your network after a one-time pairing.
+- **Built for agents.** Snapshots carry refs such as `e6`, and every command
+  reports `done`, `failed`, `not sent` or `UNKNOWN`. Uncertain actions are never
+  resent automatically.
+- **Light on context.** Snapshots and screenshots are saved as files and each
+  command prints a short result, so the agent reads only what it needs.
+- **Everything in one package.** `pip install androidctl` includes the CLI, the
+  matching Android app and the agent skill.
 
 ## Requirements
 
 - Python 3.12 or newer on Windows, macOS or Linux.
-- Android 11 (API 30) or newer, arm64-v8a or x86_64 userspace, Android user 0 and
-  default display. Coordinates require API 34 or newer.
-- Shizuku running through ADB or wireless debugging as shell UID 2000, with
-  AndroidCtl authorized. Root mode is unsupported.
-- A reachable network route to the AndroidCtl app, and matching host/app versions.
+- Android 11 or newer on arm64-v8a or x86_64, main user and default display only.
+- [Shizuku](https://shizuku.rikka.app/) started through ADB or wireless debugging.
+  Root mode is not supported.
+- A network route from the computer to the phone.
 
-AndroidCtl does not restart a killed app or Shizuku. After device reboot, start
-Shizuku again, open AndroidCtl and enable **Gateway**.
+## Setup
 
-## Install And Pair
-
-Before replacing the host package, including a same-version reinstall, finish
-active work and run `androidctl daemon stop` with the installed version.
-Finish device work before upgrading the App: its first executor attachment
-replaces the old worker. Before reinstalling the same App version, use
-**Stop idle executor** first. See [upgrade and recovery
-rules](skills/androidctl/reference.md#connection-and-sessions).
+### 1. Install
 
 ```sh
 pip install androidctl
-androidctl --version
 androidctl apk --out androidctl.apk
 ```
 
-The release package includes its matching APK. Extraction requires a new output
-path and reports SHA-256. If a source installation reports `apkUnavailable`, obtain
-its matching APK from the [release files](https://github.com/Azure99/androidctl/releases).
-Transfer and open the APK on Android, or install on an explicitly identified device:
+Install `androidctl.apk` on the phone, for example with `adb install androidctl.apk`.
+It always matches the installed CLI; the two versions must be the same.
+
+### 2. Install The Skill
+
+Export the skill into the directory your agent loads skills from:
 
 ```sh
-adb devices -l
-adb -s SERIAL install androidctl.apk
+mkdir -p ~/.claude/skills
+androidctl skill --out ~/.claude/skills/androidctl
 ```
 
-Open Shizuku and follow its wireless debugging procedure or displayed ADB startup
-command. In AndroidCtl, authorize Shizuku and enable **Gateway**. Check **Listening**
-and **Executor attached**, then choose **Show new pairing code**.
+That is the location for Claude Code. For Codex, use `~/.agents/skills` instead;
+OpenCode reads both. The export contains `SKILL.md`, the agent's workflow, and
+`reference.md`, the full command reference.
+
+### 3. Pair
+
+Start Shizuku, open AndroidCtl, tap **Authorize Shizuku** and turn on **Gateway**.
+When it shows **Listening** and **Executor attached**, tap **Show new pairing code**.
+Give your agent the address and code, or pair yourself:
 
 ```sh
 androidctl pair 192.168.1.20:18843 000042 --name phone
-androidctl device select phone
-androidctl --device phone status
 ```
 
-Replace the address and code with the device's current values; keep leading zeros.
-Displayed addresses are candidates, not connectivity tests. The
-[connection reference](skills/androidctl/reference.md#connection-and-sessions)
-covers pairing recovery, device management and IPv6 addresses.
+The first pairing trusts the certificate the phone presents, so pair on a network
+you trust. For an emulator or a phone without a network route, use an
+[ADB route](skills/androidctl/reference.md#device-setup-and-adb-route). After the
+phone restarts, start Shizuku and turn on **Gateway** again.
 
-First pairing trusts the presented certificate and cannot resist an active
-intermediary. Later connections pin that complete certificate. Routing, firewall
-and any port forwarding are your responsibility.
+## Ask Your Agent
 
-For an emulator or device without a LAN route, follow the optional
-[ADB route setup](skills/androidctl/reference.md#device-setup-and-adb-route).
+With the skill installed, ask for the result you want:
 
-## Try An Observation
+- "Open Settings on my phone and turn on dark mode."
+- "Go through the sign-up flow in the Example app and take a screenshot of each
+  screen."
+- "Copy the newest file in /sdcard/Download on my phone to this folder."
 
-Use the `deviceId` returned by `pair`, or find a paired UUID with `--json devices`,
-and choose a name for this task. Global options
-precede the command. Open the named session once; if busy, respect its holder.
+If your agent does not support skills, start with: "Use androidctl to control my
+phone. First run `androidctl skill --out androidctl-skill` and read its SKILL.md."
+
+To run several agents, start each one with its own session and device:
 
 ```sh
-androidctl --device DEVICE_UUID -s trial session open
-androidctl --device DEVICE_UUID -s trial snapshot
+ANDROIDCTL_DEVICE=phone ANDROIDCTL_SESSION=checkout claude
 ```
 
-To reuse those defaults in this workspace, run
-`androidctl --device DEVICE_UUID -s trial use`, then `androidctl snapshot`.
-Workspace defaults do not isolate concurrent agents; use explicit
-`--device` and `-s` when other agents may share the directory.
-See [selection precedence and workspace rules](skills/androidctl/reference.md#connection-and-sessions).
+A phone serves one session at a time, so agents on different phones run in
+parallel and agents sharing a phone take turns.
 
-Read the reported absolute `snapshotPath` using your host's file tools.
-For visual details, capture and view the actual `imagePath` PNG. The reference
-covers [formats, paths and delivery options](skills/androidctl/reference.md#images-and-delivery).
-Close your session when finished:
+## What Your Agent Runs
 
 ```sh
-androidctl --device DEVICE_UUID -s trial screenshot
-androidctl --device DEVICE_UUID -s trial session close
+androidctl session open
+androidctl snapshot
+androidctl fill e3 "Groceries" --submit
+androidctl click e6
+androidctl wait --contains "Saved"
+androidctl screenshot
+androidctl session close
 ```
 
-For actions, verification, jobs and cleanup, follow the installed SKILL's complete
-task loop. Preserve `UNKNOWN` results and diagnose before further changes; never
-automatically resend the input. See the SKILL's
-[recovery guidance](skills/androidctl/SKILL.md#recover-and-finish).
+Run `androidctl COMMAND --help` for options, or read the skill for the complete
+workflow.
+
+## Upgrading
+
+- Finish active work, then run `androidctl daemon stop` before replacing the
+  Python package, even with the same version.
+- Finish device work before installing a new app version. Before reinstalling the
+  same version, tap **Stop idle executor**.
+- Delete the exported skill directory and run `androidctl skill --out` again so
+  the instructions match the new version.
 
 ## Development
 
