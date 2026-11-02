@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import cast
 
+from . import paths
 from .private_files import PublishedWriteError, private_directory, write_json
 from .protocol import UNCERTAIN_EXIT, Fault, Result, completed
 
@@ -12,7 +13,7 @@ def config_path(root: Path) -> Path:
 
 def require_root(root: Path) -> None:
     try:
-        is_directory = root.is_dir()
+        is_directory = paths.is_dir(root)
     except OSError as error:
         raise Fault("workspace", f"{root}: {error}") from error
     if not is_directory:

@@ -10,6 +10,7 @@ from typing import Any, cast
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
+from . import paths
 from .identity import DeviceIdentity, endpoint, require_alias, trust_context
 from .private_files import check_private, private_directory, write_json
 from .protocol import Fault, Problem
@@ -211,7 +212,7 @@ class HostState:
 
     def selected_id(self) -> str | None:
         try:
-            if not self.selection.exists():
+            if not paths.exists(self.selection):
                 return None
             check_private(self.selection)
             identifier = json.loads(self.selection.read_bytes())["deviceId"]
@@ -282,7 +283,7 @@ class HostState:
                 alias in (*aliases, saved.device_id) or device_id in aliases
             ):
                 raise Fault("deviceName", "This device name is already paired")
-        if self._record_path(device_id).exists():
+        if paths.exists(self._record_path(device_id)):
             record = self.record(device_id)
             if record.certificate != identity.certificate:
                 raise Fault(

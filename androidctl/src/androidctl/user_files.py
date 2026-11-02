@@ -13,6 +13,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any, BinaryIO, cast
 
+from . import paths
 from .protocol import Fault
 
 RENAME_NOREPLACE = 1
@@ -66,9 +67,9 @@ def write_all(stream: BinaryIO, data: bytes) -> None:
 
 def require_new_file(path: Path, exists_message: str, parent_error: Fault) -> None:
     file_path(str(path))
-    if path.exists():
+    if paths.exists(path):
         raise Fault("fileExists", exists_message)
-    if not path.parent.is_dir():
+    if not paths.is_dir(path.parent):
         raise parent_error
 
 

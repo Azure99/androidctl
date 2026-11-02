@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
+from . import paths
 from .private_files import LifetimeLock, private_directory
 from .protocol import Fault
 from .user_files import create
@@ -75,7 +76,7 @@ def save(
     hint = "Choose a writable --workspace-root for automatic artifacts."
     for directory in (root, root / "snapshots", root / "shots"):
         try:
-            if directory.exists() and not directory.is_dir():
+            if paths.exists(directory) and not paths.is_dir(directory):
                 raise Fault("history", f"Cache path is not a directory: {directory}")
             private_directory(directory)
         except Fault as error:
@@ -94,7 +95,7 @@ def save(
         time.sleep(min(0.02, max(0, deadline - time.monotonic())))
     try:
         ignore = root / ".gitignore"
-        if not ignore.exists():
+        if not paths.exists(ignore):
             create(root, ignore.name, b"*\n")
         groups = scan(root)
         sequence = max((key[0] for key in groups), default=0) + 1

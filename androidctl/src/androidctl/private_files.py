@@ -14,6 +14,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from . import paths
 from .protocol import Fault
 
 
@@ -218,7 +219,7 @@ def check_private(path: Path) -> None:
 
 
 def private_directory(path: Path) -> None:
-    if path.exists():
+    if paths.exists(path):
         check_private(path)
         return
     path.parent.mkdir(parents=True, exist_ok=True)

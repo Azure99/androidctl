@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 import typer
 from typer.main import get_command
 
-from . import workspace
+from . import paths, workspace
 from .cli_options import (
     CliCommand,
     CliOptions,
@@ -457,7 +457,7 @@ def apk(
 ) -> None:
     out = out.absolute()
     try:
-        is_directory = out.is_dir()
+        is_directory = paths.is_dir(out)
     except OSError as error:
         raise Fault("arguments", f"{out}: {error}") from error
     if is_directory:
@@ -644,7 +644,7 @@ def device_trust(
 ) -> None:
     file = file.absolute()
     try:
-        if not file.exists() or file.is_dir():
+        if not paths.exists(file) or paths.is_dir(file):
             raise Fault("arguments", f"Certificate must be an existing file: {file}")
         pem = file.read_text(encoding="ascii")
     except (OSError, ValueError) as error:
