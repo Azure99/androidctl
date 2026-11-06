@@ -7,13 +7,12 @@ import ssl
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import SplitResult, urlsplit
 
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+# Keep cryptography imports local to avoid loading them during CLI startup.
+if TYPE_CHECKING:
+    from cryptography import x509
 
 from .private_files import atomic_write
 from .protocol import Fault
@@ -90,6 +89,8 @@ def require_alias(alias: str) -> None:
 
 def device_certificate(der: bytes) -> DeviceIdentity:
     """Read the first peer's identity without authenticating its origin (TOFU)."""
+    from cryptography import x509
+
     try:
         certificate = x509.load_der_x509_certificate(der)
         names = certificate.extensions.get_extension_for_class(
@@ -110,6 +111,8 @@ def device_certificate(der: bytes) -> DeviceIdentity:
 
 
 def trusted_certificate(pem: str, name: str) -> str:
+    from cryptography import x509
+
     try:
         certificate = x509.load_pem_x509_certificate(pem.encode("ascii"))
         return validate_certificate(certificate, name)
@@ -118,6 +121,9 @@ def trusted_certificate(pem: str, name: str) -> str:
 
 
 def validate_certificate(certificate: x509.Certificate, name: str) -> str:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import serialization
+
     try:
         now = dt.datetime.now(dt.UTC)
         if now < certificate.not_valid_before_utc:
@@ -142,6 +148,11 @@ def validate_certificate(certificate: x509.Certificate, name: str) -> str:
 
 
 def local_identity(root: Path) -> tuple[ssl.SSLContext, dict[str, Any]]:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+
     key = ec.generate_private_key(ec.SECP256R1())
     subject = x509.Name(
         [x509.NameAttribute(NameOID.COMMON_NAME, "AndroidCtl local daemon")]
