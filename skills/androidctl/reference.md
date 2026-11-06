@@ -746,8 +746,9 @@ reported permission error. On POSIX, `chmod 700` fixes access bits only when the
 reported owner is correct. Fix delivery before obtaining the missing observation;
 do not repeat a known or UNKNOWN action to repair its output.
 
-New observations save bodies and requested PNGs. AndroidCtl does not create or
-read workspace `.source` files for recovery.
+New observations save bodies and requested PNGs. A received PNG can be saved
+even when tree delivery fails. AndroidCtl does not create or read workspace
+`.source` files for recovery.
 
 Automatic bodies, PNGs and legacy source files share a 150-file/20-MiB quota.
 Later saves can reclaim old files matching AndroidCtl's complete filename

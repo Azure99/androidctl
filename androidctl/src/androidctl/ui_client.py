@@ -642,9 +642,13 @@ def save_delivery(
             result.data["snapshotError"] = str(error)
     history_body = body if paths.snapshot is None else None
     history_png = png if paths.image is None else None
-    if tree is not None and (history_body is not None or history_png is not None):
+    if history_body is not None or history_png is not None:
         try:
-            app, title = ui_view.app_title(tree, ui_view.window(tree))
+            app, title = (
+                ui_view.app_title(tree, ui_view.window(tree))
+                if tree is not None
+                else ("", "")
+            )
             saved = history.save(
                 workspace_root,
                 history_body,
