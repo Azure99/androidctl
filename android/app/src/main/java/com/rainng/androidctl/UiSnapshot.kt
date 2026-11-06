@@ -109,9 +109,22 @@ internal class UiSnapshot : Closeable {
                             signatureFields.map(node::opt),
                     )
                 }
+            val windows =
+                tree.getJSONArray("windows").objects().map { window ->
+                    if (window.getInt("id") == tree.getJSONObject("scope").getInt("window")) {
+                        window
+                    } else {
+                        // Only the selected root is read under every selection strategy.
+                        JSONObject().apply {
+                            for (field in window.keys()) {
+                                if (field != "rootAvailable" && field != "packageName") put(field, window.get(field))
+                            }
+                        }
+                    }
+                }
             return sha256(
                 json(
-                    "windows" to tree.get("windows"),
+                    "windows" to JSONArray(windows),
                     "partial" to tree.getBoolean("partial"),
                     "nodes" to JSONArray(values),
                 ).toString().toByteArray(),
