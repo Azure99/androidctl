@@ -33,7 +33,7 @@ from .protocol import (
 )
 from .user_files import create, require_new_file
 
-READ_ONLY_COMMANDS = {"snapshot", "find", "locate", "wait", "screenshot", "apps"}
+READ_ONLY_COMMANDS = {"snapshot", "find", "locate", "wait", "screenshot"}
 FILL_STEPS = (("focus", "focus"), ("fill", "fill"), ("submit", "ime"))
 
 
@@ -185,7 +185,7 @@ def result_line(
     if result.result == "UNKNOWN":
         parts.append(
             "Read-only reply unavailable; query again. For a new sample, run snapshot."
-            if command in {"snapshot", "find", "wait", "locate", "screenshot"}
+            if command in READ_ONLY_COMMANDS
             else "Do not repeat automatically; first check the effect "
             "with read-only observations."
         )
