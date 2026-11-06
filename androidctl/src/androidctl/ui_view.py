@@ -184,6 +184,22 @@ def project(
     )
     if ref and not roots:
         raise Fault("staleRef", "Ref is not in the current snapshot; run snapshot")
+    local_names: set[str] = set()
+    if ref and not all_nodes:
+        # Ancestors' displayed name/detail texts; " | " joins device text values.
+        pending_names = [(node, frozenset[str]()) for node in roots]
+        while pending_names:
+            node, shown = pending_names.pop()
+            if node.get("visible") is not False:
+                name = clean(node["view"]["name"])
+                if not any(f" | {name} | " in f" | {text} | " for text in shown):
+                    local_names.add(node["ref"])
+                    node = {**node, "view": {**node["view"], "nameConsumed": False}}
+                displayed = attributes(node, all_nodes=False, boxes=boxes)
+                shown |= {displayed[k] for k in ("name", "detail") if k in displayed}
+            pending_names.extend(
+                (child, shown) for child in children.get(node["ref"], [])
+            )
     elements: list[ET.Element] = []
     pending: list[tuple[dict[str, Any], list[ET.Element], list[ET.Element] | None]] = [
         (node, elements, None) for node in reversed(roots)
@@ -202,6 +218,8 @@ def project(
         if not all_nodes and node.get("visible") is False:
             destination.extend(nested)
             continue
+        if node["ref"] in local_names:
+            node = {**node, "view": {**node["view"], "nameConsumed": False}}
         attrs = attributes(node, all_nodes=all_nodes, boxes=boxes)
         role = node["view"]["role"]
         if not attrs and not (nested and role in ("list", "scroll", "item")):
