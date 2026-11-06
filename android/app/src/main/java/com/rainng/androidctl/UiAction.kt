@@ -48,7 +48,7 @@ internal enum class UiAction(
             }
         }
         if (this == FILL && !node.optBoolean("editable")) return "target is not editable"
-        if (this == IME && !UiSelector.focused(node)) return "target is not input-focused"
+        if (this == IME && !node.getBoolean("focused")) return "target is not input-focused"
         if (changesChecked && !node.optBoolean("checkable")) return "target is not checkable"
         return null
     }
@@ -58,7 +58,7 @@ internal enum class UiAction(
         node: JSONObject,
     ): Boolean {
         if (!node.getBoolean("visible")) return false
-        if (this == FOCUS) return UiSelector.focused(node)
+        if (this == FOCUS) return node.getBoolean("focused")
         val valueType =
             when (this) {
                 FILL -> node.getBoolean("editable")
@@ -69,7 +69,7 @@ internal enum class UiAction(
     }
 
     private fun available(node: JSONObject): Boolean {
-        if (this == FOCUS && UiSelector.focused(node)) return true
+        if (this == FOCUS && node.getBoolean("focused")) return true
         if (isScroll) return UiScroll.route(node, this) != null
         val radio = UiSemantics.role(node) == Role.RADIO
         val actions = node.getJSONArray("actions")
@@ -82,7 +82,7 @@ internal enum class UiAction(
             when {
                 !node.getBoolean("visible") -> "target is not visible"
                 !node.getBoolean("enabled") -> "target is disabled"
-                !UiSelector.focused(node) -> "target is not input-focused"
+                !node.getBoolean("focused") -> "target is not input-focused"
                 else -> null
             }
 

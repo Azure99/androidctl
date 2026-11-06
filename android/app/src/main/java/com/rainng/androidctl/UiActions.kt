@@ -71,7 +71,7 @@ internal class UiActions(
             val current = admitted.fresh
             val reported = copy(current).put("ref", original.getString("ref"))
             report(reported)
-            val focused = action == UiAction.FOCUS && UiSelector.focused(current)
+            val focused = action == UiAction.FOCUS && current.getBoolean("focused")
             when {
                 action == UiAction.UNCHECK && UiSemantics.role(current) == Role.RADIO ->
                     radioUncheck(run, current)
@@ -370,9 +370,9 @@ internal class UiActions(
 
         private fun focus() {
             run.remember(result())
-            val ready = if (UiSelector.focused(initial)) initial else awaitAction(run, node, original, UiAction.FOCUS).fresh
+            val ready = if (initial.getBoolean("focused")) initial else awaitAction(run, node, original, UiAction.FOCUS).fresh
             val data = stepData(UiAction.FOCUS, copy(ready).put("ref", original.getString("ref")))
-            if (UiSelector.focused(ready)) {
+            if (ready.getBoolean("focused")) {
                 progress.record(FillStep.FOCUS, outcome("focus", reason = "Target is already focused", data = data))
                 return
             }
@@ -725,7 +725,7 @@ internal class UiActions(
 
     companion object {
         fun submitSelection(target: JSONObject): JSONObject {
-            if (!target.getBoolean("editable") || !UiSelector.focused(target)) {
+            if (!target.getBoolean("editable") || !target.getBoolean("focused")) {
                 throw Rejected("submitUnsupported", "Submit requires the same editable, focused field")
             }
             val actions = target.getJSONArray("actions")

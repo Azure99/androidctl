@@ -91,8 +91,6 @@ internal class UiSelector(
                 value
             }
 
-        fun focused(node: JSONObject): Boolean = node.getBoolean("focused")
-
         fun forms(value: String): Set<String> =
             setOf(
                 value,

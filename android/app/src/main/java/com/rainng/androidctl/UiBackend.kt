@@ -13,12 +13,6 @@ import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-internal class ObservationDelivery(
-    val capture: String?,
-    val facts: JSONObject,
-    val problem: JSONObject?,
-)
-
 @SuppressLint("PrivateApi", "SoonBlockedPrivateApi") // Shizuku worker accesses the platform automation backend.
 internal class UiBackend(
     private val context: Context,
@@ -33,6 +27,7 @@ internal class UiBackend(
     private var generation = 0
     val snapshots = UiSnapshot()
     val delivery = UiDelivery(sessions, workerId)
+
     private val visuals = VisualInput(this)
     val postAction = UiPostAction(this)
     private val actions = UiActions(this)
@@ -130,9 +125,8 @@ internal class UiBackend(
         if (run.command != "screenshot") run.remember(result)
         val screenshot = run.command == "screenshot" || run.args.optBoolean("screenshot")
         if (screenshot) visuals.invalidate()
-        val observed = observation(run, screenshot)
-        val answer = observedResult(run, result, observed)
-        val capture = observed.capture
+        val answer = copy(result)
+        val capture = attachObservation(run, answer, screenshot)
         if (screenshot && run.budget.remaining() == 0L) answer.getJSONObject("data").put("imageError", "Request budget exhausted")
         if (run.command == "screenshot") {
             val imagePending = answer.getString("result") == Outcome.DONE
@@ -152,30 +146,13 @@ internal class UiBackend(
         }
     }
 
-    private fun observedResult(
+    private fun attachObservation(
         run: UiRun,
-        result: JSONObject,
-        observed: ObservationDelivery,
-    ): JSONObject {
-        val answer = copy(result)
-        val data = answer.getJSONObject("data")
-        val notice = listOf(data.text("notice"), observed.facts.text("notice")).filter(String::isNotEmpty).joinToString("; ")
-        for (field in observed.facts.keys()) data.put(field, observed.facts.get(field))
-        if (notice.isNotEmpty()) data.put("notice", notice)
-        if (observed.capture == null && !data.has("snapshotError")) data.put("snapshotError", "No current snapshot")
-        val missing = observed.capture == null || run.snapshotError != null
-        if (run.command == "snapshot" && missing && answer.getString("result") == Outcome.DONE) {
-            answer.put("result", Outcome.FAILED).put("reason", data.optString("snapshotError", "Snapshot unavailable"))
-            observed.problem?.let { answer.put("error", it) }
-        }
-        return answer
-    }
-
-    private fun observation(
-        run: UiRun,
+        answer: JSONObject,
         screenshot: Boolean,
-    ): ObservationDelivery {
-        val data = json("samples" to run.samples)
+    ): String? {
+        val data = answer.getJSONObject("data")
+        data.put("samples", run.samples)
         run.snapshotError?.let { data.put("snapshotError", it) }
         snapshots.tree?.let { tree ->
             data
@@ -201,9 +178,18 @@ internal class UiBackend(
             }
         if (capture != null) {
             data.put("capture", capture)
-            snapshots.notice()?.let { data.put("notice", it) }
+            snapshots.notice()?.let { notice ->
+                data.put("notice", listOf(data.text("notice"), notice).filter(String::isNotEmpty).joinToString("; "))
+            }
+        } else if (!data.has("snapshotError")) {
+            data.put("snapshotError", "No current snapshot")
         }
-        return ObservationDelivery(capture, data, captureProblem)
+        val missing = capture == null || run.snapshotError != null
+        if (run.command == "snapshot" && missing && answer.getString("result") == Outcome.DONE) {
+            answer.put("result", Outcome.FAILED).put("reason", data.optString("snapshotError", "Snapshot unavailable"))
+            captureProblem?.let { answer.put("error", it) }
+        }
+        return capture
     }
 
     private fun prepareCapture(
