@@ -84,7 +84,6 @@ def test_published_image_survives_history_failure(
         command=command,
         invocation={"command": command, "args": {}},
         context=CliOptions(None, "default", False, workspace_root=tmp_path),
-        binding=None,
         paths=ui_client.DeliveryPaths(image=destination),
     )
     assert result.result == "done"
@@ -140,7 +139,6 @@ def test_bad_attachment_cannot_replace_received_action_fact(
         return Result(command=command, result="done", data=data)
 
     monkeypatch.setattr(UiClient, "call", call)
-    monkeypatch.setattr(UiClient, "action", call)
     destination = tmp_path / "out.png"
     output = CliRunner().invoke(
         cli.app,
@@ -206,7 +204,6 @@ def test_image_delivery_reports_original_dimensions_and_preserves_action(
         )
 
     monkeypatch.setattr(UiClient, "call", call)
-    monkeypatch.setattr(UiClient, "action", call)
     args = ["click", "e15", "--screenshot"]
     if mode == "explicit":
         args += ["--image-out", "screen (original).png"]
@@ -252,7 +249,6 @@ def test_missing_capture_reports_requested_image_without_changing_action(
         return Result(command=command, result="done", data=data)
 
     monkeypatch.setattr(UiClient, "call", call)
-    monkeypatch.setattr(UiClient, "action", call)
     output = CliRunner().invoke(cli.app, ["click", "e15", "--screenshot"])
     assert output.exit_code == 0, output.output
     assert output.output.startswith("click: done;")

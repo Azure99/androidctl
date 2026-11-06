@@ -114,9 +114,11 @@ with `--in PACKAGE` or `--window ID`. Repeat a non-active window's explicit
 toward ambiguity. `ref-unavailable` is not actionable.
 
 Replace symbolic refs with observed targets and check their business identity.
-The CLI may repair an old ref once only after the entire action was definitely
-not dispatched, within the same budget. Inspect changed requested/resolved/selected
-targets. Repair does not prove business identity, and dispatched or UNKNOWN
+The App may repair an old ref once only after the entire action was definitely
+not dispatched, within the same budget, using that ref's latest collected device
+facts at action entry. These can differ from your last received observation.
+Inspect changed requested/resolved/selected targets. Repair does not prove
+business identity, and dispatched or UNKNOWN
 actions are never automatically retried. See [ref and action rules](reference.md#observations-and-targets).
 
 `fill` reports focus, fill and optional submit separately. A readable exact match

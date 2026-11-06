@@ -26,7 +26,6 @@ def captured_ui_calls(monkeypatch):
         raise Fault("testRejected", "Stop at the client boundary")
 
     monkeypatch.setattr(ui_client.UiClient, "call", call)
-    monkeypatch.setattr(ui_client.UiClient, "action", call)
     return calls
 
 
@@ -415,7 +414,6 @@ def test_key_preserves_requested_key_ref_and_ui_budget(monkeypatch, key, ref):
         return completed(command, {"dispatchStarted": True})
 
     monkeypatch.setattr(ui_client.UiClient, "call", call)
-    monkeypatch.setattr(ui_client.UiClient, "action", call)
     args = ["--json", "-s", "task", "key", key]
     if ref is not None:
         args += [ref, "--window", "17"]

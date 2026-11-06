@@ -626,7 +626,6 @@ def test_compound_value_facts_keep_each_stage_and_escape_controls(capsys, verifi
         result="failed",
         data={
             "requested": {"target": {"ref": "e7"}, "action": "fill", "submit": True},
-            "attempts": 1,
             "dispatchStarted": True,
             "samplingStopped": "Estimated next sample exceeds the observation deadline",
             "focus": {
@@ -726,13 +725,9 @@ def test_action_roles_expand_only_existing_ref_or_action_differences(capsys):
         "selected": {"target": {"ref": "e7"}, "action": "check"},
         "verificationTarget": {"ref": "e7"},
         "dispatchStarted": True,
-        "attempts": 1,
     }
     ui_client.result_line(completed("check", data), "check", Output())
     assert capsys.readouterr().out == "check: done\n"
-    data["attempts"] = 2
-    ui_client.result_line(completed("check", data), "check", Output())
-    assert capsys.readouterr().out == "check: done; attempts=2\n"
     data["requested"] = {"target": {"ref": "e7"}, "action": "fill", "submit": True}
     data.pop("selected")
     data["focus"] = {
@@ -755,9 +750,7 @@ def test_action_roles_expand_only_existing_ref_or_action_differences(capsys):
     }
     ui_client.result_line(completed("fill", data), "fill", Output())
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == (
-        "fill: done; attempts=2; focus=done; fill=done, sent=false; submit=done"
-    )
+    assert lines[0] == ("fill: done; focus=done; fill=done, sent=false; submit=done")
     assert lines[1].startswith("Requested: ")
     assert lines[2].startswith("Resolved: ")
     assert any(

@@ -22,14 +22,4 @@ class UiRefRepairTest {
             }
         }
     }
-
-    @Test fun sourceRequiresTheOriginalWorkerLeaseCaptureAndRef() {
-        val source = json("ref" to "e7", "sourceContext" to "worker:3", "sourceCapture" to "worker:8")
-        UiRefRepair.requireSource(source, "e7", "worker:3")
-        for ((ref, context) in listOf("e7" to "other:3", "e7" to "worker:4", "e8" to "worker:3")) {
-            assertThrows(Rejected::class.java) { UiRefRepair.requireSource(source, ref, context) }
-        }
-        source.put("sourceCapture", "other:8")
-        assertThrows(Rejected::class.java) { UiRefRepair.requireSource(source, "e7", "worker:3") }
-    }
 }

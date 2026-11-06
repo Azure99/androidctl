@@ -312,7 +312,7 @@ facts, full `snapshotPath` / `imagePath`, image dimensions and delivery errors o
 warnings. String values use JSON quoting; embedded newlines stay escaped on that
 line. Done results omit `dispatchStarted=true` and each fill step's `sent=true`;
 explicit false and dispatch facts on non-done results remain visible. Missing
-dispatch facts on non-done results show unknown. `attempts` appears only above 1.
+dispatch facts on non-done results show unknown.
 A different existing ref or selected action expands Requested, Resolved, Selected
 and Verification target lines;
 refreshed names/bounds and ordinary selector resolution keep one line.
@@ -335,10 +335,10 @@ original meanings.
 | `command`, `result`, optional `reason`, `error`, `exit` | Top-level outcome; `error` supplies code/message and optional stage. An explicit `exit` overrides the usual result exit code. |
 | `data.snapshotPath`, `imagePath` | Absolute paths to the saved observation and PNG. [Delivery](#images-and-delivery) also reports `snapshotError`, `imageError`, `historyError` and `deliveryError` when applicable. |
 | `data.focus`, `fill`, `submit` | Fill reports separate focus/fill results and submit when requested. Failures before step results are recorded can omit them; text then shows `step results=unknown`. Fill and submit steps can contain `data.verification`, `actualValue`, `verificationError` and `verificationTarget`. Submit fields describe its pre-submit exact-value gate and do not overwrite fill facts. [Targets](#observations-and-targets) |
-| `data.requested`, `resolved` | Original target/action and the resolved target. `resolved.method` is original for a published ref, selector for selector discovery, or signature for source repair; resolution does not prove admission or dispatch. |
+| `data.requested`, `resolved` | Original target/action and the resolved target. `resolved.method` is original for a published ref, selector for selector discovery, or signature for same-request recovery; resolution does not prove admission or dispatch. |
 | `data.selected` | The single action's selected target/action. Selection alone does not prove dispatch. Global actions use target=null; key REF names its focus-admission target. Each fill step keeps its known selected and sent facts in its data. |
 | `data.focus.data.sent`, `fill.data.sent`, `submit.data.sent` | Whether that fill step entered dispatch. A later step that was not sent does not negate earlier dispatch. |
-| `data.dispatchStarted`, `attempts` | Whether any step entered dispatch, and the number of CLI main-action attempts. Attachment reads do not count. Missing device replies retain only known request/attempt facts and do not imply false dispatch. |
+| `data.dispatchStarted` | Whether any step entered dispatch. Missing device replies retain only known request facts and do not imply false dispatch. |
 | `data.verificationTarget`, `verification` | The object checked by a value operation, and matches/differs/unobservable. Combined steps keep their own fields; naming an object does not prove successful verification. |
 | `data.platform` | For semantic input receipts, `accepted` is the synchronous platform call's return value, `callback` is the platform action-completion callback value (null when unavailable), and `acceptedError` is an exception while obtaining acceptance. A positive receipt does not prove App business completion. |
 | `data.segments[]`, `cancel` | Coordinate input has no `data.platform`. Each event reports `returned` or `error` in `segments[]`; after UNKNOWN, the CANCEL attempt reports `accepted` or `error` in `cancel`. |
@@ -434,13 +434,13 @@ splitScreenDivider or magnificationOverlay, with unknown integers as decimal str
 
 XML omits only the following explicitly reported exact defaults and duplicate
 facts. Missing input fields are not filled in; nulls, errors and non-default
-facts remain. Raw JSON and saved ref sources retain their existing facts.
+facts remain. Raw JSON retains its existing facts.
 
 | Location | XML rule |
 | --- | --- |
 | Invocation `args` | Omit `timeoutMs=5000`, `settleMs=1500`, `screenshot=false` and `scope={}`. Preserve query/renderRef/all/boxes/cached and non-default requests. Do not add an absent args object. |
 | `source` | Omit reported `snapshotCached=false` and `snapshotBeforeAction=false`. Preserve capture and age. A successful snapshot in this version reports both flags before XML rendering. |
-| `snapshotFacts` | Omit the windows copy, refContext, keyboard when equal to screen.keyboard, `selectionScope={}`, `partial=false` and empty missing/nodeUnavailable lists. Preserve startedMs/finishedMs, sequence, connection, scope and other facts. |
+| `snapshotFacts` | Omit the windows copy, keyboard when equal to screen.keyboard, `selectionScope={}`, `partial=false` and empty missing/nodeUnavailable lists. Preserve startedMs/finishedMs, sequence, connection, scope and other facts. |
 | `snapshotFacts.display` | Omit `interactive=true`, `deepIdle=false`, `userId=0`, `displayId=0`, `displayState=2` and `keyguardShowing/keyguardSecure/deviceLocked=false`. With displayError, retain displayId/displayState. Omit sampleMs only when it equals an actually reported, non-null finishedMs. Keep width/height/rotation and errors. |
 | Controls and windows | Omit a checkable node's reported `checkedModel=triState`; keep binary and other reported models. Omit window `active=false` and `focused=false`. Keep rootAvailable true/false; its absence means unreported, not true. Actions, including empty editable actions, and named coordinates keep their existing meaning. |
 | Collections | Render all reported non-null integer dimensions, indexes, spans and selectionMode, including negative values. rows/columns=-1 are unknown platform counts; other negative values are preserved as reported. Omit `selectionMode=0` only with rows or columns, and `rowSpan/columnSpan=1` only with rowIndex or columnIndex on that element. Keep zero, multi-cell and negative spans; absent collection fields add no defaults. These rules use fields, including on textbox/button, rather than list/item tags. |
@@ -494,17 +494,22 @@ absence fact and error remain, and the old tree and attachments are unavailable.
 This does not prove the window
 closed or was destroyed. It neither repeats input nor redirects verification/IME.
 
-Refs resolve in the latest snapshot while node identity remains. For explicit REF
-actions, the CLI uses that ref's latest valid saved observation signature from the selected
-device UUID, session and workspace history. If the entire first attempt is
-definitely not dispatched and rejects with staleRef, selectionChanged or
-identityUnknown, it may make one repair attempt within the original budget.
-Repair requires the same worker/session lease and a complete current observation,
-then selects a clear best match using name/ID and supporting facts. Conflicting
-nonempty names or row labels reject. This is a bounded selection aid, not a
-guarantee of business identity. UNKNOWN or any known dispatch never triggers repair.
-Damaged or unreadable optional source records are skipped. Without a valid signature,
-ordinary ref resolution proceeds without repair. Worker/session changes invalidate the source.
+Refs resolve in the latest collected tree while node identity remains. For explicit
+REF actions, the App retains the target's current collected facts at action entry,
+before fresh action admission. Every successful fresh tree collection, including
+a partial sample, replaces the device's current facts even when the body omits
+that ref or delivery fails. These facts can differ from the last body received
+by the caller. Reading a node for admission does not itself replace the collected
+tree. `snapshot --cached`, `snapshot REF` and `find` do not collect new facts.
+If the ref is absent or unusable at entry, the action rejects without repair.
+If the entire first attempt is definitely not dispatched and rejects with staleRef,
+selectionChanged or identityUnknown, the App may make one repair attempt within
+the same request budget. Repair requires retained entry facts and a complete new
+observation, then selects a clear best match using name/ID and supporting facts.
+Conflicting nonempty names or row labels reject. This is a bounded selection aid,
+not a guarantee of business identity. UNKNOWN or any known dispatch never triggers
+repair. On a failed repair, resolved/selected can still describe the first unsent
+attempt; they do not establish dispatch.
 `ref-unavailable` nodes have no usable ref. Filters (`--role`, `--name`, `--text`, `--id`) combine on one original
 node, with exact values and one XML-entity decode. Numeric entities decode only
 legal XML characters; literal candidates remain available. IDs accept full names or the
@@ -631,7 +636,7 @@ password fields keep the original full-identity requirement. A business
 reassignment expressed only by the field name can pass the write-time identity
 check. After fresh original-identity and focus admission, a non-password field
 must still be an exact match. A differs/unobservable value leaves submit not sent,
-with its verification facts and no `error`, so it does not trigger host repair.
+with its verification facts and no `error`, so it does not trigger ref repair.
 Any earlier dispatch, including focus alone, makes the overall result failed/exit 1;
 with no step dispatched it is not sent/exit 2.
 Submit prefers the original editable, focused field's advertised IME action.
@@ -741,20 +746,13 @@ reported permission error. On POSIX, `chmod 700` fixes access bits only when the
 reported owner is correct. Fix delivery before obtaining the missing observation;
 do not repeat a known or UNKNOWN action to repair its output.
 
-Each delivered body also saves a separate `.source` JSON in workspace history,
-including with explicit body/PNG outputs; it is not a sidecar beside an explicit
-`--out` file. XML does not carry the lease's refContext; it remains in raw
-tree.refContext and `.source.refSource.context`, and cannot be derived from
-capture or connection. Ordinary ref actions read their saved source
-automatically. Copying XML alone does not preserve that lease identity or ref
-repair capability. A source-write failure reports `historyError` and preserves
-delivered files and known action results.
+New observations save bodies and requested PNGs. AndroidCtl does not create or
+read workspace `.source` files for recovery.
 
-Automatic bodies, PNGs and source files share a 150-file/20-MiB quota, allowing
-about 50 three-file groups when the byte limit permits. Later saves can reclaim old
-files matching AndroidCtl's complete filename format, including edited or replaced
-files. Matching stems are reclaimed together and current
-file sizes count toward the quota. Copy files elsewhere for lasting retention;
+Automatic bodies, PNGs and legacy source files share a 150-file/20-MiB quota.
+Later saves can reclaim old files matching AndroidCtl's complete filename
+format, including edited or replaced files. Matching stems are reclaimed together
+and current file sizes count toward the quota. Copy files elsewhere for lasting retention;
 nonmatching files are left alone and failed deletions still occupy quota.
 This is not a physical directory-size guarantee. Explicit outputs outside these
 cache directories are not rotated. An explicit output inside them with a matching

@@ -74,7 +74,7 @@ internal class UiSnapshot : Closeable {
         val node = tree?.getJSONArray("nodes")?.objects()?.firstOrNull { it.getString("ref") == ref }
         val reason =
             node?.let { "Ref was not usable in this observation: ${it.text("refReason")}" }
-                ?: "Ref has expired or is absent from this observation; run snapshot"
+                ?: "Ref is absent from the current observation; use the attached observation if available, otherwise run snapshot"
         throw Rejected("staleRef", reason)
     }
 

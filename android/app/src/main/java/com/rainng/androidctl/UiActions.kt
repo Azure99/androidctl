@@ -28,9 +28,14 @@ internal class UiActions(
         )
     }
 
-    fun act(run: UiRun): JSONObject =
+    fun act(run: UiRun): JSONObject = withFillFailure(run) { actOnTarget(run) }
+
+    private fun withFillFailure(
+        run: UiRun,
+        action: () -> JSONObject,
+    ): JSONObject =
         try {
-            actOnTarget(run)
+            action()
         } catch (error: Exception) {
             if (run.command != "fill" || run.dispatchStarted) throw error
             val progress = FillProgress(null, run.args.optBoolean("submit"))
@@ -40,11 +45,22 @@ internal class UiActions(
 
     private fun actOnTarget(run: UiRun): JSONObject {
         val action = action(run)
-        val source =
-            run.measure("preWaitMs") {
-                if (run.args.has("ref")) UiRefRepair.resolve(ui, run) else selected(run, action)
+        return if (run.args.has("ref")) {
+            UiRefRepair.perform(ui.snapshots, run, { ui.capture(run) }) { source, method ->
+                withFillFailure(run) { performAction(run, action, source, method) }
             }
-        val method = resolutionMethod(run)
+        } else {
+            val source = run.measure("preWaitMs") { selected(run, action) }
+            performAction(run, action, source, "selector")
+        }
+    }
+
+    private fun performAction(
+        run: UiRun,
+        action: UiAction,
+        source: UiTarget,
+        method: String,
+    ): JSONObject {
         val report =
             { target: JSONObject ->
                 run.resolve(method, target)
@@ -64,7 +80,7 @@ internal class UiActions(
                 action.alreadySatisfied(run.args, current) ->
                     unchanged(run, current, action, if (focused) "Target is already focused" else "Value already matches")
                 action.changesChecked && !action.ready(current) ->
-                    rowCheck(run, node, original, action, requireNotNull(admitted.rowSelection))
+                    rowCheck(run, node, original, action, requireNotNull(admitted.rowSelection), method)
                 else -> sendAction(run, node, original, current, action)
             }
         }
@@ -73,9 +89,17 @@ internal class UiActions(
     fun key(
         run: UiRun,
         send: () -> JSONObject,
+    ): JSONObject =
+        UiRefRepair.perform(ui.snapshots, run, { ui.capture(run) }) { source, method ->
+            keyOnTarget(run, source, method, send)
+        }
+
+    private fun keyOnTarget(
+        run: UiRun,
+        source: UiTarget,
+        method: String,
+        send: () -> JSONObject,
     ): JSONObject {
-        val source = UiRefRepair.resolve(ui, run)
-        val method = resolutionMethod(run)
         val report =
             { target: JSONObject ->
                 run.resolve(method, target)
@@ -111,13 +135,6 @@ internal class UiActions(
             node.recycle()
         }
     }
-
-    private fun resolutionMethod(run: UiRun): String =
-        when {
-            !run.args.has("ref") -> "selector"
-            run.args.optBoolean("repairRef") -> "signature"
-            else -> "original"
-        }
 
     private fun requireScope(
         run: UiRun,
@@ -208,12 +225,14 @@ internal class UiActions(
         return answer
     }
 
+    @Suppress("LongParameterList") // Preserve the original handle, facts and resolution method for this checked-state attempt.
     private fun rowCheck(
         run: UiRun,
         originalNode: AccessibilityNodeInfo,
         original: JSONObject,
         action: UiAction,
         selection: RowSelection,
+        method: String,
     ): JSONObject {
         val row = selection.row
         val control = selection.verificationControl
@@ -234,7 +253,7 @@ internal class UiActions(
             val freshTarget =
                 if (original.getString("ref") == row.getString("ref")) currentRow else readOriginal(run, originalNode, original)
             val freshControl = if (sameControl) freshTarget else readOriginal(run, checkNode, control)
-            run.resolve(resolutionMethod(run), copy(freshTarget).put("ref", original.getString("ref")))
+            run.resolve(method, copy(freshTarget).put("ref", original.getString("ref")))
             checkedNoop(run, freshControl, action, data)?.let { return it }
             val before = ui.snapshots.cached()
             val pending = outcome(run.command, Outcome.UNKNOWN, "Suggested row click pending", copy(data))

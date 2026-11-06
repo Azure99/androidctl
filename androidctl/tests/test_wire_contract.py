@@ -80,10 +80,9 @@ COMPOUND_EXPECTED = {
 }
 
 ACTION_EXPECTED = {
-    "plain-click": (1, "done", 0, ["click: done"]),
-    "selector-click": (1, "done", 0, ["click: done; ref=e7"]),
+    "plain-click": ("done", 0, ["click: done"]),
+    "selector-click": ("done", 0, ["click: done; ref=e7"]),
     "coordinate-pending-at-expiry": (
-        1,
         "UNKNOWN",
         3,
         [
@@ -95,11 +94,10 @@ ACTION_EXPECTED = {
         ],
     ),
     "suggested-row-matches": (
-        2,
         "done",
         0,
         [
-            'check: done; attempts=2; verification="matches"; '
+            'check: done; verification="matches"; '
             'actualValue="true"; checkedModel="binary"',
             'Requested: {"target":{"ref":"e7"},"action":"check"}',
             'Resolved: {"method":"signature","target":{"ref":"e12","role":"text",'
@@ -110,7 +108,6 @@ ACTION_EXPECTED = {
         ],
     ),
     "scroll-page-not-sent": (
-        1,
         "not sent",
         2,
         [
@@ -364,7 +361,6 @@ def test_host_renders_device_compound_results_without_losing_steps(name, capsys)
     result.data["requested"] = ui_client.requested_action(
         request["command"], request["args"]
     )
-    result.data["attempts"] = 1
     original = result.wire()
     assert result.result == expected_result
     assert result.exit_code() == expected_exit
@@ -376,7 +372,7 @@ def test_host_renders_device_compound_results_without_losing_steps(name, capsys)
 @pytest.mark.parametrize("name", ACTION_EXPECTED)
 def test_host_consumes_device_action_facts_including_pending_responses(name, capsys):
     case = ACTION_RESULTS[name]
-    attempts, expected_result, expected_exit, expected_lines = ACTION_EXPECTED[name]
+    expected_result, expected_exit, expected_lines = ACTION_EXPECTED[name]
     result = Result.model_validate(case["response"])
     assert_json(
         case["response"],
@@ -386,7 +382,6 @@ def test_host_consumes_device_action_facts_including_pending_responses(name, cap
     result.data["requested"] = ui_client.requested_action(
         request["command"], request["args"]
     )
-    result.data["attempts"] = attempts
     original = result.wire()
     assert result.result == expected_result
     assert result.exit_code() == expected_exit

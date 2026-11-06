@@ -347,7 +347,6 @@ def test_blocked_history_counts_owned_file_and_tries_other_groups(
                 command="snapshot",
                 invocation={"command": "snapshot", "args": {}},
                 context=CliOptions(None, "default", as_json, workspace_root=tmp_path),
-                binding=None,
                 paths=ui_client.DeliveryPaths(),
             )
             output = capsys.readouterr().out

@@ -330,7 +330,6 @@ def metadata(
         {"selectionScope": {}, "partial": False, "missing": [], "nodeUnavailable": []},
     )
     facts.pop("windows", None)
-    facts.pop("refContext", None)
     if facts.get("keyboard") == keyboard:
         del facts["keyboard"]
     display = facts.get("display")

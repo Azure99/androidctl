@@ -38,7 +38,7 @@ internal class FreshNodes(
         currentRoot: JSONObject,
     ): JSONObject {
         budget.check()
-        if (!target.refresh()) throw Rejected("staleRef", "Original object is no longer available")
+        if (!target.refresh()) throw Rejected("staleRef", "Original object could not be refreshed")
         val facts = NodeFacts.read(target, "target", null)
         handles["target"] = target
         facts.put("view", UiSemantics.selection(facts, ::children, nameOnly = true).view)

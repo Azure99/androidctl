@@ -11,7 +11,7 @@ from typing import Any, NamedTuple, NoReturn
 
 import typer
 
-from . import history, ref_source, ui_view
+from . import history, ui_view
 from .cli_options import (
     CliOptions,
     call_context,
@@ -19,7 +19,7 @@ from .cli_options import (
     load_workspace_options,
     options,
 )
-from .local_call import BoundDevice, LocalCall
+from .local_call import LocalCall
 from .output import Output, display_name
 from .protocol import (
     IMAGE_BYTES,
@@ -75,7 +75,6 @@ class DeliveryPaths:
 @dataclass(frozen=True)
 class RenderedObservation:
     body: str | None
-    public_refs: set[str]
     facts: dict[str, Any]
 
 
@@ -125,8 +124,6 @@ def result_line(
             )
         )
     if command not in READ_ONLY_COMMANDS:
-        if result.data.get("attempts", 0) > 1:
-            parts.append(f"attempts={result.data['attempts']}")
         dispatch = result.data.get("dispatchStarted")
         if dispatch is False or result.result != "done":
             parts.append(
@@ -296,43 +293,6 @@ class UiClient:
     async def call(self, command: str, args: dict[str, Any]) -> Result:
         return await self.local.call(command, args, deadline=self.deadline)
 
-    async def action(self, command: str, args: dict[str, Any]) -> Result:
-        parameters = dict(args)
-        signature = None
-        if ref := parameters.get("ref"):
-            try:
-                binding = await self.local.bind(self.deadline)
-                signature = ref_source.load(
-                    ref,
-                    binding.device_id,
-                    self.context.session,
-                    self.context.workspace_root,
-                )
-            except Fault as error:
-                result = rejected(command, error)
-                result.data["attempts"] = 0
-                return result
-            if signature is not None:
-                parameters["sourceSignature"] = signature
-        result = await self.call(command, parameters)
-        result.data["attempts"] = 1
-        if (
-            signature is not None
-            and result.result == "not sent"
-            and result.data.get("dispatchStarted") is False
-            and result.error is not None
-            and result.error.code in {"staleRef", "selectionChanged", "identityUnknown"}
-            and time.monotonic() < self.deadline
-        ):
-            try:
-                result = await self.call(command, {**parameters, "repairRef": True})
-            except TransportFailure as error:
-                result = uncertain(command, error)
-            except Fault as error:
-                result = rejected(command, error)
-            result.data["attempts"] = 2
-        return result
-
     async def blob(self, capture: str, kind: str) -> tuple[bytes, dict[str, Any]]:
         data = bytearray()
         metadata: CaptureMetadata | None = None
@@ -488,12 +448,8 @@ def execute(
         tree, png = None, None
         try:
             try:
-                result = (
-                    await client.action(command, wire_args)
-                    if requested is not None
-                    else await client.call(
-                        "snapshot" if command == "find" else command, wire_args
-                    )
+                result = await client.call(
+                    "snapshot" if command == "find" else command, wire_args
                 )
             except TransportFailure as error:
                 result = uncertain(actual_command, error)
@@ -501,7 +457,6 @@ def execute(
                 result = rejected(actual_command, error)
             if requested is not None:
                 result.data["requested"] = requested
-                result.data.setdefault("attempts", 1)
             result.command = actual_command
             if client.local.connect_ms is not None:
                 result.data["localConnectMs"] = client.local.connect_ms
@@ -543,7 +498,6 @@ def execute(
         command=command,
         invocation=invocation,
         context=context,
-        binding=client.local.binding,
         paths=paths,
     )
     raise typer.Exit(result.exit_code())
@@ -559,11 +513,10 @@ def deliver(
     command: str,
     invocation: dict[str, Any],
     context: CliOptions,
-    binding: BoundDevice | None,
     paths: DeliveryPaths,
 ) -> None:
     started = time.monotonic()
-    body, provenance = None, None
+    body = None
     if tree is not None:
         rendered = render_observation(
             tree,
@@ -583,16 +536,11 @@ def deliver(
         )
         result.data.update(rendered.facts)
         body = rendered.body
-        if body is not None:
-            provenance = prepare_ref_source(
-                result, tree, rendered.public_refs, binding, context.session
-            )
     save_delivery(
         result,
         tree,
         png,
         body,
-        provenance,
         paths,
         deadline,
         workspace_root=context.workspace_root,
@@ -621,11 +569,8 @@ def render_observation(
     image: dict[str, Any] | None,
 ) -> RenderedObservation:
     body = None
-    public_refs: set[str] = set()
     facts: dict[str, Any] = {}
     try:
-        if view.raw:
-            public_refs = {node["ref"] for node in tree["nodes"]}
         if "connection" in tree:
             facts["snapshotConnection"] = tree["connection"]
         unavailable = [
@@ -667,50 +612,7 @@ def render_observation(
             body = json.dumps(tree, ensure_ascii=False, separators=(",", ":")) + "\n"
     except (Fault, KeyError, TypeError) as error:
         facts["snapshotError"] = str(error)
-    return RenderedObservation(body=body, public_refs=public_refs, facts=facts)
-
-
-def prepare_ref_source(
-    result: Result,
-    tree: dict[str, Any],
-    public_refs: set[str],
-    binding: BoundDevice | None,
-    session: str,
-) -> dict[str, Any] | None:
-    if binding is None:
-        result.data["historyError"] = (
-            "Ref source could not be prepared: device binding was not confirmed"
-        )
-        return None
-    try:
-        refs = set(public_refs)
-        targets = [result.data.get("resolved", {}).get("target")]
-        steps = [result.data]
-        steps.extend(
-            result.data[step].get("data", {})
-            for step, _ in FILL_STEPS
-            if isinstance(result.data.get(step), dict)
-        )
-        for facts in steps:
-            targets.extend(
-                (
-                    facts.get("selected", {}).get("target"),
-                    facts.get("verificationTarget"),
-                )
-            )
-        for target in targets:
-            if isinstance(target, dict) and target.get("ref"):
-                refs.add(target["ref"])
-        return ref_source.build(
-            tree,
-            refs,
-            device_id=binding.device_id,
-            session=session,
-            capture=result.data["capture"],
-        )
-    except (KeyError, TypeError) as error:
-        result.data["historyError"] = f"Ref source could not be prepared: {error}"
-        return None
+    return RenderedObservation(body=body, facts=facts)
 
 
 def save_delivery(
@@ -718,7 +620,6 @@ def save_delivery(
     tree: dict[str, Any] | None,
     png: bytes | None,
     body: str | None,
-    provenance: dict[str, Any] | None,
     paths: DeliveryPaths,
     deadline: float,
     *,
@@ -741,15 +642,7 @@ def save_delivery(
             result.data["snapshotError"] = str(error)
     history_body = body if paths.snapshot is None else None
     history_png = png if paths.image is None else None
-    source_body = (
-        compact(provenance)
-        if provenance is not None
-        and (paths.snapshot is None or "snapshotPath" in result.data)
-        else None
-    )
-    if tree is not None and (
-        history_body is not None or history_png is not None or source_body is not None
-    ):
+    if tree is not None and (history_body is not None or history_png is not None):
         try:
             app, title = ui_view.app_title(tree, ui_view.window(tree))
             saved = history.save(
@@ -760,7 +653,6 @@ def save_delivery(
                 title=title,
                 deadline=deadline,
                 suffix=".json" if raw else ".xml",
-                source_body=source_body,
             )
             if saved.snapshot_path is not None:
                 result.data["snapshotPath"] = str(saved.snapshot_path)

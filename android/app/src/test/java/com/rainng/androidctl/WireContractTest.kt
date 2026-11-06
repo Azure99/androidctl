@@ -587,14 +587,11 @@ class WireContractTest {
             copy(label)
                 .put("ref", "e7")
                 .put("sourceId", "old-label")
-                .put("sourceContext", "worker:3")
-                .put("sourceCapture", "worker:8")
-        UiRefRepair.requireSource(source, "e7", "worker:3")
         val repaired = UiRefRepair.select(source, tree)
         val selection = UiAdvice.suggestedRow(tree, repaired, UiAction.CHECK)!!
         val selectedRow = selection.row
         val verifiedControl = selection.verificationControl
-        val run = contractRun("check", json("ref" to "e7", "sourceSignature" to source, "repairRef" to true))
+        val run = contractRun("check", json("ref" to "e7"))
         run.resolve("signature", repaired)
         run.select("click", selectedRow)
         val data = json("verificationTarget" to json("ref" to verifiedControl.getString("ref")))

@@ -10,42 +10,43 @@ internal object UiRefRepair {
         val score: Int,
     )
 
-    fun resolve(
-        ui: UiBackend,
+    // At most one same-request repair, only after a definitely unsent first attempt rejects a changed target.
+    fun perform(
+        snapshots: UiSnapshot,
         run: UiRun,
-    ): UiTarget {
-        val requested = run.args.getString("ref")
-        val source = run.args.optJSONObject("sourceSignature")
-        if (source != null) requireSource(source, requested, ui.refContext(run))
-        val expected =
-            source?.let {
-                UiSemantics.identity(it)
-                    ?: throw Rejected("sourceUnavailable", "Original ref signature has incomplete identity")
+        capture: () -> JSONObject,
+        action: (UiTarget, String) -> JSONObject,
+    ): JSONObject {
+        val target =
+            run.measure("preWaitMs") {
+                snapshots.target(run.args.getString("ref"))
             }
-        if (run.args.optBoolean("repairRef")) {
-            val origin = source ?: throw Rejected("sourceUnavailable", "Ref repair requires the original observation signature")
-            val candidate = select(origin, ui.capture(run))
-            return ui.snapshots.target(candidate.getString("ref"))
+        val origin = target.facts
+        val first =
+            try {
+                action(target, "original")
+            } catch (error: Rejected) {
+                if (run.dispatchStarted) throw error
+                run.failure(error)
+            }
+        if (first.getString("result") != Outcome.NOT_SENT || !repairable(run, first.optJSONObject("error")?.text("code"))) {
+            return first
         }
-        val target = ui.snapshots.target(requested)
-        if (expected != null && expected != UiSemantics.identity(target.facts)) {
-            throw Rejected("selectionChanged", "Registered ref no longer has its original observation identity")
-        }
-        return target
+        run.remember(first)
+        val recovered =
+            run.measure("preWaitMs") {
+                snapshots.target(select(origin, capture()).getString("ref"))
+            }
+        run.clearUnsentAttempt()
+        return action(recovered, "signature")
     }
 
-    fun requireSource(
-        source: JSONObject,
-        requested: String,
-        context: String,
-    ) {
-        if (source.text("sourceContext") != context ||
-            source.text("sourceCapture").substringBefore(':') != context.substringBefore(':') ||
-            source.text("ref") != requested
-        ) {
-            throw Rejected("sourceUnavailable", "Ref source belongs to a different worker, lease or requested ref")
-        }
-    }
+    private val repairableCodes = setOf("staleRef", "selectionChanged", "identityUnknown")
+
+    private fun repairable(
+        run: UiRun,
+        code: String?,
+    ): Boolean = !run.dispatchStarted && code in repairableCodes && run.budget.remaining() != 0L
 
     fun select(
         source: JSONObject,

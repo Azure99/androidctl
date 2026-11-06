@@ -26,6 +26,7 @@ class SavedHistory(NamedTuple):
 
 def scan(root: Path) -> dict[tuple[int, str], dict[Path, int]]:
     groups: dict[tuple[int, str], dict[Path, int]] = {}
+    # Include old provenance files so history cleanup can reclaim their space.
     for folder, suffixes in (
         ("snapshots", {".xml", ".json", ".source"}),
         ("shots", {".png"}),
@@ -65,11 +66,9 @@ def save(
     title: str,
     deadline: float,
     suffix: str = ".xml",
-    source_body: str | None = None,
 ) -> SavedHistory:
     content = body.encode("utf-8") if body is not None else b""
-    source_content = source_body.encode("utf-8") if source_body is not None else b""
-    total = len(content) + len(png or b"") + len(source_content)
+    total = len(content) + len(png or b"")
     if total > MAX_BYTES:
         raise Fault("history", "Capture exceeds the history size limit")
     root = workspace_root / ".androidctl"
@@ -99,9 +98,7 @@ def save(
             create(root, ignore.name, b"*\n")
         groups = scan(root)
         sequence = max((key[0] for key in groups), default=0) + 1
-        needed = (
-            int(body is not None) + int(png is not None) + int(source_body is not None)
-        )
+        needed = int(body is not None) + int(png is not None)
         failures: list[str] = []
         for key in sorted(groups):
             if within_quota(groups, needed, total):
@@ -140,13 +137,6 @@ def save(
             if failures
             else None
         )
-        if source_body is not None:
-            try:
-                create(root / "snapshots", name + ".source", source_content)
-            except (Fault, OSError) as error:
-                warning = "; ".join(
-                    filter(None, (warning, f"Ref source was not saved: {error}"))
-                )
         return SavedHistory(snapshot_path, image_path, image_error, warning)
     finally:
         lock.close()

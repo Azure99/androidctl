@@ -84,6 +84,13 @@ internal class UiRun(
         fact = value.toString()
     }
 
+    // A selected replacement starts a new attempt within this request.
+    @Synchronized fun clearUnsentAttempt() {
+        fact = null
+        resolved = null
+        selected = null
+    }
+
     private fun missingFactOutcome(error: Exception? = null): String =
         when {
             dispatchStarted -> Outcome.UNKNOWN

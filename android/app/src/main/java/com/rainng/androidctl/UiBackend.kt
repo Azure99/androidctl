@@ -41,8 +41,6 @@ internal class UiBackend(
     @Volatile private var closeError: String? = null
     val cleanupFailure: String? get() = closeError
 
-    fun refContext(run: UiRun): String = "$workerId:${run.lease.id}"
-
     fun submitEnter(
         run: UiRun,
         data: JSONObject,
@@ -296,7 +294,6 @@ internal class UiBackend(
                         .collect()
                         .put("display", deviceFacts())
                         .put("connection", generation)
-                        .put("refContext", refContext(run))
                     val assembled = snapshots.assemble(collected)
                     sessions.withCurrentLease(run.lease) {
                         snapshots.install(assembled)

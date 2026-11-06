@@ -18,6 +18,66 @@ from connection_test_support import connections
 from ui_test_support import load_wire_contract, node, raw_read_data, tree, xml_metadata
 
 
+@pytest.mark.parametrize("command", ["snapshot", "click"])
+async def test_bad_tree_hash_preserves_received_main_result(
+    tmp_path, monkeypatch, command
+):
+    calls = []
+    main_facts = {"capture": "worker:8", "snapshotCached": False}
+    if command == "click":
+        target = {"ref": "e15", "role": "button", "name": "Pay & finish"}
+        main_facts.update(
+            {
+                "dispatchStarted": True,
+                "resolved": {"method": "original", "target": target},
+                "selected": {"action": "click", "target": target},
+                "platform": {"accepted": True, "callback": True},
+                "samples": 2,
+                "snapshotSequence": 8,
+                "settle": "stable",
+                "observedChange": True,
+            }
+        )
+
+    async def dispatch(method, args):
+        calls.append((method, args))
+        if method == command:
+            return completed(method, main_facts).wire()
+        assert method == "ui.read"
+        assert {key: args[key] for key in ("capture", "kind", "offset")} == {
+            "capture": "worker:8",
+            "kind": "tree",
+            "offset": 0,
+        }
+        attachment = raw_read_data(json.dumps(tree()).encode(), "worker:8")
+        attachment["sha256"] = "0" * 64
+        return completed(method, attachment).wire()
+
+    async with connections(tmp_path, dispatch) as (_, _, connect):
+        monkeypatch.setattr(local_call, "connect_local", connect)
+        output = await asyncio.to_thread(
+            CliRunner().invoke,
+            cli.app,
+            [
+                "--json",
+                "--workspace-root",
+                str(tmp_path),
+                command,
+                *(["e15"] if command == "click" else []),
+            ],
+        )
+
+    assert output.exit_code == (1 if command == "snapshot" else 0), output.output
+    result = json.loads(output.stdout)
+    assert result["command"] == command
+    assert result["result"] == ("failed" if command == "snapshot" else "done")
+    data = result["data"]
+    assert {key: data[key] for key in main_facts} == main_facts
+    assert data["snapshotError"] == "Attachment hash mismatch"
+    assert not {"snapshotPath", "snapshotCompleteness"} & data.keys()
+    assert [method for method, _ in calls] == [command, "ui.read"]
+
+
 async def test_wait_producer_result_survives_both_tls_hops(tmp_path, monkeypatch):
     fixture = load_wire_contract()
     case = next(
