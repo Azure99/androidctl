@@ -19,7 +19,7 @@ internal data class SnapshotAssembly(
 
 @Suppress("DEPRECATION")
 internal class UiSnapshot : Closeable {
-    private val refs = UiRefs()
+    private val refs = UiRefs(randomStart())
     private var sequence = 0L
     private var first = true
     private var collector: TreeCollector? = null

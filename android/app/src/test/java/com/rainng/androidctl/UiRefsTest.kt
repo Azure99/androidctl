@@ -109,6 +109,22 @@ class UiRefsTest {
         assertTrue(first.intersect(fresh).isEmpty())
     }
 
+    @Test fun bothNineDigitEndpointsRetainRefsAndContinueBeyondNineDigits() {
+        for (initial in listOf(100_000_000L, 999_999_999L)) {
+            val refs = UiRefs(initial)
+            val first = tree()
+            val previous = refs.replace(first, emptyMap()).values.associateBy { it.getString("ref") }
+            assertEquals("e$initial", first.getJSONArray("nodes").getJSONObject(0).getString("ref"))
+            val retained = tree()
+            refs.replace(retained, previous)
+            assertEquals("e$initial", retained.getJSONArray("nodes").getJSONObject(0).getString("ref"))
+            val nextLease = tree()
+            refs.replace(nextLease, emptyMap())
+            // Two incomplete nodes received new refs in the retained observation.
+            assertEquals("e${initial + 7}", nextLease.getJSONArray("nodes").getJSONObject(0).getString("ref"))
+        }
+    }
+
     private fun tree(): JSONObject {
         val fixture = javaClass.getResourceAsStream("/wire-contract.json")!!.bufferedReader().use { JSONObject(it.readText()) }
         return copy(fixture.getJSONObject("raw")).also {

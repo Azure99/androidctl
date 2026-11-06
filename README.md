@@ -15,8 +15,8 @@ commands.
 
 - **No root, no ADB for daily use.** The Android app runs through Shizuku and
   accepts connections over your network after a one-time pairing.
-- **Built for agents.** Snapshots carry refs such as `e6`, and every command
-  reports `done`, `failed`, `not sent` or `UNKNOWN`. Uncertain actions are never
+- **Built for agents.** Snapshots carry opaque refs such as `e583271406`. Commands
+  report `done`, `failed`, `not sent` or `UNKNOWN`. Uncertain actions are never
   resent automatically.
 - **Light on context.** Snapshots and screenshots are saved as files and each
   command prints a short result, so the agent reads only what it needs.
@@ -97,12 +97,15 @@ parallel and agents sharing a phone take turns.
 ```sh
 androidctl session open
 androidctl snapshot
-androidctl fill e3 "Groceries" --submit
-androidctl click e6
+androidctl fill e583271406 "Groceries" --submit
+androidctl click e583271419
 androidctl wait --contains "Saved"
 androidctl screenshot
 androidctl session close
 ```
+
+Replace example refs with those returned for the current targets. Their digits
+do not identify screen order, business objects or how long a ref remains valid.
 
 Run `androidctl COMMAND --help` for options, or read the skill for the complete
 workflow.

@@ -1,9 +1,15 @@
 package com.rainng.androidctl
 
 import org.json.JSONObject
+import java.security.SecureRandom
 
-internal class UiRefs {
-    private var next = 1L
+@Suppress("MagicNumber")
+internal fun randomStart(): Long = 100_000_000L + SecureRandom().nextInt(900_000_000)
+
+internal class UiRefs(
+    initial: Long = 1L,
+) {
+    private var next = initial
 
     @Suppress("CyclomaticComplexMethod") // Ref retention requires complete identities and unique sources without clipped expansion.
     fun replace(

@@ -28,7 +28,7 @@ internal class UiBackend(
     val snapshots = UiSnapshot()
     val delivery = UiDelivery(sessions, workerId)
 
-    private val visuals = VisualInput(this)
+    private val visuals = VisualInput(this, randomStart())
     val postAction = UiPostAction(this)
     private val actions = UiActions(this)
     private val system = SystemActions(context, this)

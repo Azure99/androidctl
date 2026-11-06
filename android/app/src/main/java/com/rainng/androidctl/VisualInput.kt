@@ -14,9 +14,10 @@ import java.lang.reflect.Method
 // Preserve input facts across platform, Binder, and image encoding failures.
 internal class VisualInput(
     private val backend: UiBackend,
+    initial: Long = 1L,
 ) {
     @Volatile private var image: JSONObject? = null
-    private var next = 1L
+    private var next = initial
 
     fun invalidate() {
         image = null
