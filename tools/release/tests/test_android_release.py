@@ -55,6 +55,7 @@ def test_stage_requires_the_gradle_release_apk(release_repo: Path) -> None:
 @pytest.mark.parametrize("change", ["apk", "digest", "filename"])
 def test_verify_rejects_broken_byte_chain(release_repo: Path, change: str) -> None:
     paths = android_release.build_release_paths(release_repo)
+    paths.apk_verify_log_path.write_text("previous verification succeeded")
     if change == "apk":
         paths.staged_apk_path.write_bytes(b"changed")
     elif change == "digest":
@@ -65,6 +66,7 @@ def test_verify_rejects_broken_byte_chain(release_repo: Path, change: str) -> No
         )
     with pytest.raises(SystemExit, match="SHA256SUMS"):
         android_release.verify_release(paths)
+    assert not paths.apk_verify_log_path.exists()
 
 
 @pytest.mark.parametrize("version_code", ["1002003", "7"])

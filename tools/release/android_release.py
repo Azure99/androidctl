@@ -179,6 +179,7 @@ def write_sha256sums(paths: ReleasePaths) -> None:
 
 
 def verify_release(paths: ReleasePaths) -> str:
+    paths.apk_verify_log_path.unlink(missing_ok=True)
     ensure_file(paths.staged_apk_path, "Staged release APK")
     digest = sha256_file(paths.staged_apk_path)
     ensure_file(paths.checksums_path, "Android SHA256SUMS")
