@@ -42,11 +42,15 @@ recovery](reference.md#connection-and-sessions).
 
 ## Read Observations
 
-Read the absolute `snapshotPath` with host file tools.
+When the next decision needs the observation, receive its body in the same host
+call: use `--print`, or, with global `--json` instead of `--print`, read
+`data.snapshotPath` when present, regardless of the CLI exit code, including
+failed, not sent and UNKNOWN results.
 Paths in text output are JSON-quoted; decode them as JSON strings before
 opening the files. XML is the default;
-`--raw` saves the tree as JSON. Global `--json` independently selects result JSON
-on stdout. See [XML defaults and gaps](reference.md#xml-defaults-and-gaps) and
+`snapshot/find --raw` saves the entire collected tree as JSON. Global `--json`
+independently selects result JSON on stdout. See
+[XML defaults and gaps](reference.md#xml-defaults-and-gaps) and
 [delivery options](reference.md#images-and-delivery).
 
 Real App JSON result excerpts follow. Paths and image IDs use symbolic values;
@@ -96,7 +100,9 @@ uniqueness. A complete sample does not establish business readiness.
 `snapshot` collects a new sample. `snapshot --cached [REF]`, `snapshot REF` and
 `find TEXT` reuse the previous sample; check sequence and age. These cached reads
 cannot request a new screenshot. Use a fresh snapshot with screenshot when both
-are needed. Scroll off-screen nodes into view and observe again before acting.
+are needed. Accessibility can report content visible when it has no visible
+pixels, or invisible while it is visible in the screen image. See
+[reported visibility](reference.md#observations-and-targets).
 
 For same-sample raw diagnostics of summarized gaps or image/tree differences,
 see [XML defaults and gaps](reference.md#xml-defaults-and-gaps).
@@ -114,9 +120,10 @@ with `--in PACKAGE` or `--window ID`. Repeat a non-active window's explicit
 toward ambiguity. `ref-unavailable` is not actionable.
 
 Replace symbolic refs with observed targets and check their business identity.
-The App may repair an old ref once only after the entire action was definitely
-not dispatched, within the same budget, using that ref's latest collected device
-facts at action entry. These can differ from your last received observation.
+The App may repair a ref still in the latest collected tree once only after the
+entire action was definitely not dispatched, within the same budget, using that
+ref's latest collected device facts at action entry. These can differ from your
+last received observation.
 Inspect changed requested/resolved/selected targets. Repair does not prove
 business identity, and dispatched or UNKNOWN
 actions are never automatically retried. See [ref and action rules](reference.md#observations-and-targets).
@@ -173,8 +180,10 @@ Use `--json` for the [complete result fields](reference.md#json-field-guide).
 
 Prefer positive business conditions, such as `wait --contains "Order confirmed"`
 or `wait --app PACKAGE`. Read the result area: an input echo alone is insufficient.
-`wait --gone --text "Saving"` requires complete evidence of absence. `wait --idle`
-requires complete stable samples, which can still precede business readiness.
+`wait --gone --text "Saving"` requires a complete sample with zero true or unknown
+selector matches among nodes reported visible; it does not prove pixel absence.
+`wait --idle` requires complete stable samples, which can still precede business
+readiness.
 `wait --screen-change` compares against the session's preceding complete published
 observation; retain its collection policy. Missing/partial baselines or changed
 scope are rejected. Use exactly one wait condition.
@@ -225,7 +234,7 @@ click: done; settle=unsettled; changed
 ```
 
 The click was accepted and the tree changed, but settling did not finish. Read
-the observation at the reported path to decide whether the business state is ready.
+the returned observation to decide whether the business state is ready.
 
 ## Use Images
 

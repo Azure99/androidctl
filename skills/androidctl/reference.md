@@ -397,8 +397,11 @@ it; completeness and collection policy remain separate facts.
 `snapshot` without REF or `--cached` collects a new sample, including when scope,
 boxes or global `--json` are specified. `snapshot --cached [REF]`, `snapshot REF`
 and `find` reuse the current sample.
-They save a new file, retaining sampling identity/sequence/age. `--all` may include
-off-screen nodes; observe them in view before acting. It changes the XML
+They save a new file, retaining sampling identity/sequence/age. Here, visibility
+means the Android accessibility report. A node reported visible may have no
+visible pixels, and one reported invisible may still be visible in the screen
+image. `--all` includes nodes reported invisible, marked `offscreen="true"`;
+the label does not establish location or occlusion. It changes the XML
 projection, not collection. `snapshot/find --raw` saves the device's collected,
 processed tree as JSON instead of projected XML. It changes representation,
 not permissions or completeness. Global `--json` independently
@@ -508,8 +511,9 @@ the same request budget. Repair requires retained entry facts and a complete new
 observation, then selects a clear best match using name/ID and supporting facts.
 Conflicting nonempty names or row labels reject. This is a bounded selection aid,
 not a guarantee of business identity. UNKNOWN or any known dispatch never triggers
-repair. On a failed repair, resolved/selected can still describe the first unsent
-attempt; they do not establish dispatch.
+repair. On a failed repair, error/reason can describe the repair failure while
+resolved/selected/verificationTarget still describe the first unsent attempt;
+these facts do not establish dispatch.
 `ref-unavailable` nodes have no usable ref. Filters (`--role`, `--name`, `--text`, `--id`) combine on one original
 node, with exact values and one XML-entity decode. Numeric entities decode only
 legal XML characters; literal candidates remain available. IDs accept full names or the
@@ -569,8 +573,8 @@ Fill/check/uncheck require the original ref and full identity before dispatch.
 Check/uncheck also retain the verified control's ref and identity. After an ordinary
 fill is dispatched, verification permits a name change on the same unique source while
 window, role, full row identity and identity completeness must still match, and
-the original field must remain visible in the post-write sample; if hidden,
-ordinary fill is UNKNOWN/unobservable.
+the original field must remain reported visible in the post-write sample; if
+reported invisible, ordinary fill is UNKNOWN/unobservable.
 This write-time exception does not revive expired refs for later requests.
 Losing the required identity ends UNKNOWN/unobservable even if another target
 shows the wanted value. Temporary collection failure can use the remaining
