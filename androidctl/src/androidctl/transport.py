@@ -535,7 +535,7 @@ class Peer:
         body: dict[str, Any] = {
             "id": uuid.uuid4().hex,
             "method": method,
-            "args": json.loads(json.dumps(args or {}, ensure_ascii=False)),
+            "args": dict(args or {}),
             "session": session,
         }
         return body
